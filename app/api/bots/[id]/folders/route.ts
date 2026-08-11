@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import sql from "@/lib/neon";
-import { Document } from "@/lib/db";
-import { getEmbedding } from "@/lib/embeddings";
+import { DocFolder } from "@/lib/db";
 import { randomUUID } from "crypto";
 
 async function getTenantId() {
@@ -25,10 +24,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 
   const rows = await sql`
-    SELECT id, bot_id, title, content, created_at
-    FROM documents WHERE bot_id = ${id} ORDER BY created_at DESC
+    SELECT id, bot_id, name, parent_id, created_at
+    FROM doc_folders WHERE bot_id = ${id} ORDER BY name ASC
   `;
-  return NextResponse.json(rows as unknown as Document[]);
+  return NextResponse.json(rows as unknown as DocFolder[]);
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -40,17 +39,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { title, content, folder_id } = await req.json();
-  if (!title || !content) {
-    return NextResponse.json({ error: "title and content are required" }, { status: 400 });
-  }
+  const { name, parent_id } = await req.json();
+  if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
-  const embedding = await getEmbedding(content.slice(0, 8000));
-  const docId = randomUUID();
+  const folderId = randomUUID();
   const rows = await sql`
-    INSERT INTO documents (id, bot_id, folder_id, title, content, embedding)
-    VALUES (${docId}, ${id}, ${folder_id ?? null}, ${title}, ${content}, ${JSON.stringify(embedding)})
-    RETURNING id, bot_id, folder_id, title, content, created_at
+    INSERT INTO doc_folders (id, bot_id, name, parent_id)
+    VALUES (${folderId}, ${id}, ${name}, ${parent_id ?? null})
+    RETURNING id, bot_id, name, parent_id, created_at
   `;
-  return NextResponse.json(rows[0] as unknown as Document, { status: 201 });
+  return NextResponse.json(rows[0] as unknown as DocFolder, { status: 201 });
 }

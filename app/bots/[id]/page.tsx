@@ -59,6 +59,12 @@ export default async function BotDetailPage({
             📄 문서
           </Link>
           <Link
+            href={`/bots/${bot.id}/test`}
+            className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            ▶ 테스트
+          </Link>
+          <Link
             href={`/bots/${bot.id}/logs`}
             className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
           >

@@ -37,15 +37,26 @@ export async function initSchema() {
     )
   `;
   await sql`
+    CREATE TABLE IF NOT EXISTS doc_folders (
+      id TEXT PRIMARY KEY,
+      bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      parent_id TEXT REFERENCES doc_folders(id) ON DELETE CASCADE,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS documents (
       id TEXT PRIMARY KEY,
       bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      folder_id TEXT REFERENCES doc_folders(id) ON DELETE SET NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       embedding TEXT,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
+  await sql`ALTER TABLE documents ADD COLUMN IF NOT EXISTS folder_id TEXT REFERENCES doc_folders(id) ON DELETE SET NULL`;
   await sql`
     CREATE TABLE IF NOT EXISTS qa_pairs (
       id TEXT PRIMARY KEY,
@@ -86,9 +97,18 @@ export type ChatLog = {
   created_at: number;
 };
 
+export type DocFolder = {
+  id: string;
+  bot_id: string;
+  name: string;
+  parent_id: string | null;
+  created_at: number;
+};
+
 export type Document = {
   id: string;
   bot_id: string;
+  folder_id: string | null;
   title: string;
   content: string;
   embedding: string | null;
