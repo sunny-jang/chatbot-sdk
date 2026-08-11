@@ -43,7 +43,7 @@ export default function DemoPage() {
       {/* Nav */}
       <nav className="flex items-center justify-between px-8 py-4 border-b border-white/10">
         <div className="flex items-center gap-2 font-bold text-lg">
-          <span>🤖</span> Chatbot SDK
+          <span>🤖</span> Ideal AI Chatbot SDK
         </div>
         <div className="flex items-center gap-5 text-sm text-white/60">
           <Link href="/guide.html" className="hover:text-white transition-colors">가이드</Link>

@@ -1,11 +1,15 @@
 (function () {
+  // Remove any pre-existing widget to prevent duplicate instances
+  const existing = document.getElementById("__chatbot-widget");
+  if (existing) existing.remove();
+
   const script = document.currentScript;
   const botId = script.getAttribute("data-bot-id");
   const endpoint = (script.getAttribute("data-endpoint") || "").replace(/\/$/, "");
   const theme = script.getAttribute("data-theme") || "light";
 
   if (!botId || !endpoint) {
-    console.error("[Chatbot SDK] data-bot-id and data-endpoint are required");
+    console.error("[Ideal AI Chatbot SDK] data-bot-id and data-endpoint are required");
     return;
   }
 
@@ -91,7 +95,7 @@
   panel.id = "__chatbot-panel";
   panel.innerHTML = `
     <div id="__chatbot-header">
-      <span class="title">💬 챗봇</span>
+      <span class="title">💬 Ideal AI</span>
       <button class="close" aria-label="닫기">✕</button>
     </div>
     <div id="__chatbot-messages"></div>

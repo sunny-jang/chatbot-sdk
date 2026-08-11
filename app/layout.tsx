@@ -6,8 +6,8 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Chatbot Admin",
-  description: "Chatbot SDK Admin Panel",
+  title: "Ideal AI Chatbot SDK",
+  description: "Ideal AI Chatbot SDK Admin Panel",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="flex min-h-screen">
           <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
             <div className="p-5 border-b border-gray-200">
-              <h1 className="text-lg font-bold text-gray-900">Chatbot SDK</h1>
+              <h1 className="text-lg font-bold text-gray-900">Ideal AI Chatbot SDK</h1>
               <p className="text-xs text-gray-500 mt-0.5">Admin Panel</p>
             </div>
             <nav className="flex-1 p-4 space-y-1">
