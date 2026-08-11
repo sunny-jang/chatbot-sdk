@@ -3,14 +3,14 @@ import Link from "next/link";
 const PLANS = [
   {
     name: "스타터",
-    price: "49,000",
+    price: "147,000",
     desc: "소규모 서비스에 적합",
     features: ["챗봇 1개", "Q&A 봇 지원", "월 1,000건 대화", "위젯 임베드"],
     highlight: false,
   },
   {
     name: "프로",
-    price: "129,000",
+    price: "387,000",
     desc: "성장하는 비즈니스를 위해",
     features: ["챗봇 5개", "AI 봇 + RAG 문서 검색", "월 10,000건 대화", "위젯 커스터마이징", "대화 기록 열람"],
     highlight: true,

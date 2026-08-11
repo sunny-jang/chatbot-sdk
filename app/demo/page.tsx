@@ -143,16 +143,16 @@ export default function DemoPage() {
           </div>
 
           {bots.length === 0 ? (
-            <div className="text-center py-10">
+            <div className="text-center py-4">
               <p className="text-white/40 text-sm mb-4">
                 관리자 패널에 로그인하면 내 봇을 여기서 바로 테스트할 수 있어요
               </p>
-              <Link
-                href="/"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
+              <button
+                onClick={() => setShowModal(true)}
+                className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-900/40"
               >
-                관리자 패널로 이동 →
-              </Link>
+                시작하기 →
+              </button>
             </div>
           ) : (
             <>
@@ -188,16 +188,6 @@ export default function DemoPage() {
               </div>
             </>
           )}
-        </div>
-
-        {/* 시작하기 버튼 */}
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => setShowModal(true)}
-            className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-900/40"
-          >
-            시작하기 →
-          </button>
         </div>
 
         {/* Embed code */}

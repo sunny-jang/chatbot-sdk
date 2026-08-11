@@ -64,10 +64,11 @@ export default function GuidePanel({
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — starts after sidebar (w-56 = 224px) */}
       <div
-        className="fixed inset-0 z-40"
+        className="fixed top-0 right-0 bottom-0 z-40"
         style={{
+          left: "224px",
           backgroundColor: "rgba(0,0,0,0.18)",
           opacity: visible ? 1 : 0,
           transition: "opacity 0.25s",
