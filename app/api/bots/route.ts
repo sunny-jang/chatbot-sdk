@@ -1,26 +1,25 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { sql } from "@vercel/postgres";
+import { initSchema } from "@/lib/db";
 import { randomUUID } from "crypto";
 
 export async function GET() {
-  const db = getDb();
-  const bots = db.prepare("SELECT * FROM bots ORDER BY created_at DESC").all();
-  return NextResponse.json(bots);
+  await initSchema();
+  const { rows } = await sql`SELECT * FROM bots ORDER BY created_at DESC`;
+  return NextResponse.json(rows);
 }
 
 export async function POST(req: Request) {
   const { name, type, system_prompt, model } = await req.json();
-
   if (!name || !type) {
     return NextResponse.json({ error: "name and type are required" }, { status: 400 });
   }
-
-  const db = getDb();
+  await initSchema();
   const id = randomUUID();
-  db.prepare(
-    "INSERT INTO bots (id, name, type, system_prompt, model) VALUES (?, ?, ?, ?, ?)"
-  ).run(id, name, type, system_prompt ?? null, model ?? "gpt-4o-mini");
-
-  const bot = db.prepare("SELECT * FROM bots WHERE id = ?").get(id);
-  return NextResponse.json(bot, { status: 201 });
+  const { rows } = await sql`
+    INSERT INTO bots (id, name, type, system_prompt, model)
+    VALUES (${id}, ${name}, ${type}, ${system_prompt ?? null}, ${model ?? "gpt-4o-mini"})
+    RETURNING *
+  `;
+  return NextResponse.json(rows[0], { status: 201 });
 }

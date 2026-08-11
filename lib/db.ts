@@ -1,39 +1,26 @@
-import Database from "better-sqlite3";
-import path from "path";
+import { sql } from "@vercel/postgres";
 
-const DB_PATH = path.join(process.cwd(), "chatbot.db");
-
-let db: Database.Database;
-
-export function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
-    initSchema(db);
-  }
-  return db;
-}
-
-function initSchema(db: Database.Database) {
-  db.exec(`
+export async function initSchema() {
+  await sql`
     CREATE TABLE IF NOT EXISTS bots (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('qa', 'ai')),
       system_prompt TEXT,
       model TEXT DEFAULT 'gpt-4o-mini',
-      created_at INTEGER DEFAULT (unixepoch())
-    );
-
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS qa_pairs (
       id TEXT PRIMARY KEY,
       bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
       question TEXT NOT NULL,
       answer TEXT NOT NULL,
       embedding TEXT,
-      created_at INTEGER DEFAULT (unixepoch())
-    );
-  `);
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
 }
 
 export type Bot = {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { sql } from "@vercel/postgres";
 import { getEmbedding } from "@/lib/embeddings";
 
 export async function PUT(
@@ -8,26 +8,22 @@ export async function PUT(
 ) {
   const { qaId } = await params;
   const { question, answer } = await req.json();
-  const db = getDb();
 
-  let embedding: string | undefined;
+  let embeddingJson: string | null = null;
   if (question) {
     const vec = await getEmbedding(question);
-    embedding = JSON.stringify(vec);
+    embeddingJson = JSON.stringify(vec);
   }
 
-  db.prepare(
-    `UPDATE qa_pairs SET
-      question = COALESCE(?, question),
-      answer = COALESCE(?, answer),
-      embedding = COALESCE(?, embedding)
-     WHERE id = ?`
-  ).run(question ?? null, answer ?? null, embedding ?? null, qaId);
-
-  const pair = db
-    .prepare("SELECT id, bot_id, question, answer, created_at FROM qa_pairs WHERE id = ?")
-    .get(qaId);
-  return NextResponse.json(pair);
+  const { rows } = await sql`
+    UPDATE qa_pairs SET
+      question = COALESCE(${question ?? null}, question),
+      answer   = COALESCE(${answer ?? null}, answer),
+      embedding = COALESCE(${embeddingJson}, embedding)
+    WHERE id = ${qaId}
+    RETURNING id, bot_id, question, answer, created_at
+  `;
+  return NextResponse.json(rows[0]);
 }
 
 export async function DELETE(
@@ -35,7 +31,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; qaId: string }> }
 ) {
   const { qaId } = await params;
-  const db = getDb();
-  db.prepare("DELETE FROM qa_pairs WHERE id = ?").run(qaId);
+  await sql`DELETE FROM qa_pairs WHERE id = ${qaId}`;
   return NextResponse.json({ ok: true });
 }
