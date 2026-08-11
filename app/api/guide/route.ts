@@ -48,10 +48,10 @@ function copyCode(btn) {
 window.addEventListener('message', (e) => {
   if (e.data?.type === 'scrollTo') {
     if (e.data.id === 'overview') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0 });
     } else {
       const el = document.getElementById(e.data.id);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (el) el.scrollIntoView({ block: 'start' });
     }
   }
 });

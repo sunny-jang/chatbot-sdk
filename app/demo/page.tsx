@@ -72,20 +72,6 @@ export default function DemoPage() {
         <p className="text-white/60 text-lg max-w-xl mx-auto mb-8">
           Q&A 봇부터 GPT 기반 AI 봇까지, 관리자 패널에서 만들고 한 줄로 임베드합니다.
         </p>
-        <div className="flex items-center justify-center gap-3">
-          <Link
-            href="/"
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold text-sm transition-colors"
-          >
-            관리자 패널 열기
-          </Link>
-          <Link
-            href="/guide.html"
-            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl font-semibold text-sm transition-colors"
-          >
-            가이드 보기
-          </Link>
-        </div>
       </section>
 
       {/* Features */}

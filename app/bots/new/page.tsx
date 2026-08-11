@@ -9,7 +9,25 @@ export default function NewBotPage() {
   const [name, setName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [model, setModel] = useState("gpt-4o-mini");
+  const [serviceDesc, setServiceDesc] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  async function handleGenerate() {
+    if (!serviceDesc.trim()) return;
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/generate-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: serviceDesc }),
+      });
+      const data = await res.json();
+      if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,6 +98,36 @@ export default function NewBotPage() {
         {/* AI 봇 전용 설정 */}
         {type === "ai" && (
           <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">서비스 설명</label>
+              <div className="flex gap-2">
+                <textarea
+                  value={serviceDesc}
+                  onChange={(e) => setServiceDesc(e.target.value)}
+                  rows={2}
+                  placeholder="예) 강남구 소재 피부과 클리닉 챗봇입니다. 진료 예약, 시술 안내, 가격 문의에 응대합니다."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={generating || !serviceDesc.trim()}
+                  className="shrink-0 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg disabled:opacity-40 transition-colors leading-tight"
+                >
+                  {generating ? (
+                    <span className="flex flex-col items-center gap-0.5">
+                      <span>생성 중</span>
+                      <span>...</span>
+                    </span>
+                  ) : (
+                    <span className="flex flex-col items-center gap-0.5">
+                      <span>✨ 프롬프트</span>
+                      <span>생성</span>
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 시스템 프롬프트

@@ -35,6 +35,9 @@ export function middleware(req: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (pathname === "/") {
+      return NextResponse.redirect(new URL("/demo", req.url));
+    }
     return NextResponse.redirect(new URL("/login", req.url));
   }
 

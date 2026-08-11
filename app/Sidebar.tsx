@@ -38,7 +38,7 @@ export default function Sidebar({ tenantName, bots }: { tenantName: string; bots
     ? bots.find((b) => b.id === currentBotId)
     : null;
 
-  const navLink = (href: string, icon: string, label: string) => {
+  const navLink = (href: string, icon: string, label: string, redDot?: boolean) => {
     const active = pathname === href;
     return (
       <Link
@@ -52,6 +52,7 @@ export default function Sidebar({ tenantName, bots }: { tenantName: string; bots
       >
         <span>{icon}</span>
         {label}
+        {redDot && <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: "#ef4444", flexShrink: 0 }} />}
       </Link>
     );
   };
@@ -105,7 +106,7 @@ export default function Sidebar({ tenantName, bots }: { tenantName: string; bots
         </div>
 
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {navLink("/", "🤖", "챗봇")}
+          {navLink("/", "🤖", "챗봇", true)}
           {navLink("/bots/new", "➕", "새 챗봇 만들기")}
           {navLink("/settings", "⚙️", "설정")}
 
