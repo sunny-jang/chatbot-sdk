@@ -1,4 +1,4 @@
-import { sql } from "@vercel/postgres";
+import sql from "./neon";
 
 export async function initSchema() {
   await sql`

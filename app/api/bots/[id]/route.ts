@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
-import { sql } from "@vercel/postgres";
+import sql from "@/lib/neon";
+import { Bot } from "@/lib/db";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { rows } = await sql`SELECT * FROM bots WHERE id = ${id}`;
+  const rows = await sql`SELECT * FROM bots WHERE id = ${id}`;
   if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(rows[0]);
+  return NextResponse.json(rows[0] as Bot);
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { name, system_prompt, model } = await req.json();
-  const { rows } = await sql`
+  const rows = await sql`
     UPDATE bots SET
       name = COALESCE(${name ?? null}, name),
       system_prompt = COALESCE(${system_prompt ?? null}, system_prompt),
@@ -19,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     WHERE id = ${id}
     RETURNING *
   `;
-  return NextResponse.json(rows[0]);
+  return NextResponse.json(rows[0] as Bot);
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
