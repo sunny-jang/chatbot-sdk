@@ -1,20 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/demo"];
-const PUBLIC_PREFIXES = ["/api/auth/", "/api/chat/", "/api/tenants"];
+const TENANT_PUBLIC_PATHS = ["/login", "/demo"];
+const TENANT_PUBLIC_PREFIXES = ["/api/auth/", "/api/chat/", "/api/tenants"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Super-admin routes: /admin/* and /api/admin/*
+  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+    if (pathname === "/admin/login" || pathname === "/api/admin/login" || pathname === "/api/admin/logout") {
+      return NextResponse.next();
+    }
+    const masterSession = req.cookies.get("master_session")?.value;
+    if (!masterSession) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL("/admin/login", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  // Tenant public routes
   if (
-    PUBLIC_PATHS.includes(pathname) ||
-    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
+    TENANT_PUBLIC_PATHS.includes(pathname) ||
+    TENANT_PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
   ) {
     return NextResponse.next();
   }
 
+  // Tenant protected routes
   const tenantId = req.cookies.get("tenant_id")?.value;
-
   if (!tenantId) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
