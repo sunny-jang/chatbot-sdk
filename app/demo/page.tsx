@@ -2,12 +2,15 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type Bot = { id: string; name: string; type: "qa" | "ai" };
 
 export default function DemoPage() {
+  const router = useRouter();
   const [bots, setBots] = useState<Bot[]>([]);
   const [selectedBotId, setSelectedBotId] = useState<string>("");
+  const [showModal, setShowModal] = useState(false);
   const scriptRef = useRef<HTMLScriptElement | null>(null);
 
   useEffect(() => {
@@ -42,11 +45,53 @@ export default function DemoPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white">
 
+      {/* Modal */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="bg-slate-800 border border-white/10 rounded-2xl p-8 w-full max-w-sm mx-4 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-3xl mb-3">🔑</div>
+            <h3 className="text-xl font-bold mb-2">시작하기</h3>
+            <p className="text-white/50 text-sm mb-8">발급받은 액세스 키가 있으신가요?</p>
+            <div className="space-y-3">
+              <button
+                onClick={() => router.push("/login")}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold text-sm transition-colors"
+              >
+                네, 키가 있어요 →
+              </button>
+              <button
+                onClick={() => router.push("/plan")}
+                className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl font-semibold text-sm transition-colors text-white/80"
+              >
+                아니요, 플랜 보기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Nav */}
       <nav className="flex items-center justify-between px-8 py-4 border-b border-white/10">
-        <div className="flex items-center gap-2 font-bold text-lg">
-          <span>🤖</span> Ideal AI Chatbot SDK
-        </div>
+        <Link href="/demo" className="flex items-center gap-2.5">
+          <div style={{
+            display: "grid", placeItems: "center", color: "white",
+            width: "34px", height: "34px", borderRadius: "10px 10px 6px 6px",
+            fontSize: "13px", fontWeight: 800, letterSpacing: "-1px",
+            transform: "skew(-6deg)",
+            background: "linear-gradient(145deg, #f054c1, #6949f4 64%, #2f7bf4)",
+            flexShrink: 0,
+          }}>iA</div>
+          <span className="font-bold text-lg">
+            <span className="text-white">Ideal </span>
+            <span style={{ color: "#6949f4" }}>AI</span>
+          </span>
+        </Link>
         <div className="flex items-center gap-5 text-sm text-white/60">
           <Link href="/guide.html" className="hover:text-white transition-colors">가이드</Link>
           <Link href="/" className="hover:text-white transition-colors">관리자</Link>
@@ -143,6 +188,16 @@ export default function DemoPage() {
               </div>
             </>
           )}
+        </div>
+
+        {/* 시작하기 버튼 */}
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-900/40"
+          >
+            시작하기 →
+          </button>
         </div>
 
         {/* Embed code */}
