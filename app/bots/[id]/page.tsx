@@ -43,14 +43,22 @@ export default async function BotDetailPage({
             {bot.type === "qa" ? "Q&A 봇" : "AI 봇"}
           </span>
         </div>
-        {bot.type === "qa" && (
+        <div className="flex items-center gap-2">
+          {bot.type === "qa" && (
+            <Link
+              href={`/bots/${bot.id}/qa`}
+              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Q&A 관리 →
+            </Link>
+          )}
           <Link
-            href={`/bots/${bot.id}/qa`}
-            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+            href={`/bots/${bot.id}/docs`}
+            className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
           >
-            Q&A 관리 →
+            📄 문서 관리
           </Link>
-        )}
+        </div>
       </div>
 
       <BotSettings bot={bot} />

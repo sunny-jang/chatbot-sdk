@@ -22,6 +22,16 @@ export async function initSchema() {
   `;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS tenant_id TEXT REFERENCES tenants(id)`;
   await sql`
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      embedding TEXT,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS qa_pairs (
       id TEXT PRIMARY KEY,
       bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
@@ -47,6 +57,15 @@ export type Bot = {
   type: "qa" | "ai";
   system_prompt: string | null;
   model: string;
+  created_at: number;
+};
+
+export type Document = {
+  id: string;
+  bot_id: string;
+  title: string;
+  content: string;
+  embedding: string | null;
   created_at: number;
 };
 
