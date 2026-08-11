@@ -1,17 +1,10 @@
 import Link from "next/link";
-import { Bot } from "@/lib/db";
-
-async function getBots(): Promise<Bot[]> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/bots`,
-    { cache: "no-store" }
-  );
-  if (!res.ok) return [];
-  return res.json();
-}
+import sql from "@/lib/neon";
+import { initSchema, Bot } from "@/lib/db";
 
 export default async function HomePage() {
-  const bots = await getBots();
+  await initSchema();
+  const bots = (await sql`SELECT * FROM bots ORDER BY created_at DESC`) as unknown as Bot[];
 
   return (
     <div>
@@ -67,7 +60,7 @@ export default async function HomePage() {
                 <p className="mt-3 text-xs text-gray-500 line-clamp-2">{bot.system_prompt}</p>
               )}
               <p className="mt-3 text-xs text-gray-400">
-                {new Date(bot.created_at * 1000).toLocaleDateString("ko-KR")} 생성
+                {new Date(Number(bot.created_at) * 1000).toLocaleDateString("ko-KR")} 생성
               </p>
             </Link>
           ))}

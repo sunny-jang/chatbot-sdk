@@ -24,7 +24,7 @@ export async function PUT(
     WHERE id = ${qaId}
     RETURNING id, bot_id, question, answer, created_at
   `;
-  return NextResponse.json(rows[0] as QaPair);
+  return NextResponse.json(rows[0] as unknown as QaPair);
 }
 
 export async function DELETE(

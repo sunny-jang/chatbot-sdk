@@ -1,4 +1,8 @@
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 
-const sql = neon(process.env.POSTGRES_URL!);
+const sql = postgres(process.env.POSTGRES_URL!, {
+  ssl: "require",
+  prepare: false, // required for Supabase pgbouncer
+});
+
 export default sql;

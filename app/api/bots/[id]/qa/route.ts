@@ -10,7 +10,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     SELECT id, bot_id, question, answer, created_at
     FROM qa_pairs WHERE bot_id = ${id} ORDER BY created_at DESC
   `;
-  return NextResponse.json(rows as QaPair[]);
+  return NextResponse.json(rows as unknown as QaPair[]);
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -26,5 +26,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     VALUES (${qaId}, ${id}, ${question}, ${answer}, ${JSON.stringify(embedding)})
     RETURNING id, bot_id, question, answer, created_at
   `;
-  return NextResponse.json(rows[0] as QaPair, { status: 201 });
+  return NextResponse.json(rows[0] as unknown as QaPair, { status: 201 });
 }

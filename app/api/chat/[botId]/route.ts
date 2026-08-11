@@ -18,14 +18,14 @@ export async function POST(
   }
 
   const botRows = await sql`SELECT * FROM bots WHERE id = ${botId}`;
-  const bot = botRows[0] as Bot | undefined;
+  const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) return NextResponse.json({ error: "Bot not found" }, { status: 404 });
 
   if (bot.type === "qa") {
     const pairRows = await sql`
       SELECT id, answer, embedding FROM qa_pairs WHERE bot_id = ${botId}
     `;
-    const match = await findBestMatch(message, pairRows as Pick<QaPair, "id" | "answer" | "embedding">[]);
+    const match = await findBestMatch(message, pairRows as unknown as Pick<QaPair, "id" | "answer" | "embedding">[]);
     if (match) return NextResponse.json({ reply: match.answer });
     return NextResponse.json({ reply: "죄송합니다. 해당 질문에 대한 답변을 찾지 못했습니다." });
   }

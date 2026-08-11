@@ -1,17 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import sql from "@/lib/neon";
 import { Bot } from "@/lib/db";
 import BotSettings from "./BotSettings";
 import CopyButton from "./CopyButton";
-
-async function getBot(id: string): Promise<Bot | null> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/bots/${id}`,
-    { cache: "no-store" }
-  );
-  if (!res.ok) return null;
-  return res.json();
-}
 
 export default async function BotDetailPage({
   params,
@@ -19,7 +11,8 @@ export default async function BotDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const bot = await getBot(id);
+  const rows = await sql`SELECT * FROM bots WHERE id = ${id}`;
+  const bot = rows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
@@ -34,19 +27,17 @@ export default async function BotDetailPage({
       </div>
 
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-gray-900">{bot.name}</h2>
-            <span
-              className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                bot.type === "qa"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-purple-100 text-purple-700"
-              }`}
-            >
-              {bot.type === "qa" ? "Q&A 봇" : "AI 봇"}
-            </span>
-          </div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-gray-900">{bot.name}</h2>
+          <span
+            className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+              bot.type === "qa"
+                ? "bg-green-100 text-green-700"
+                : "bg-purple-100 text-purple-700"
+            }`}
+          >
+            {bot.type === "qa" ? "Q&A 봇" : "AI 봇"}
+          </span>
         </div>
         {bot.type === "qa" && (
           <Link
@@ -58,17 +49,15 @@ export default async function BotDetailPage({
         )}
       </div>
 
-      {/* 설정 편집 */}
       <BotSettings bot={bot} />
 
-      {/* 임베드 코드 */}
       <div className="mt-6 bg-white border border-gray-200 rounded-xl p-5">
         <h3 className="font-semibold text-gray-900 mb-1">임베드 코드</h3>
         <p className="text-sm text-gray-500 mb-3">
           웹사이트 <code className="bg-gray-100 px-1 rounded text-xs">&lt;/body&gt;</code> 태그 바로 위에 붙여넣으세요
         </p>
         <div className="relative">
-          <pre className="bg-gray-900 text-green-400 text-xs p-4 rounded-lg overflow-x-auto">
+          <pre className="bg-gray-900 text-green-400 text-xs p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">
             {embedCode}
           </pre>
           <CopyButton text={embedCode} />
@@ -77,4 +66,3 @@ export default async function BotDetailPage({
     </div>
   );
 }
-

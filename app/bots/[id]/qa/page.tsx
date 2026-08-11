@@ -1,24 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import sql from "@/lib/neon";
+import { Bot, QaPair } from "@/lib/db";
 import QaManager from "./QaManager";
-
-async function getBot(id: string) {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/bots/${id}`,
-    { cache: "no-store" }
-  );
-  if (!res.ok) return null;
-  return res.json();
-}
-
-async function getQaPairs(botId: string) {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/bots/${botId}/qa`,
-    { cache: "no-store" }
-  );
-  if (!res.ok) return [];
-  return res.json();
-}
 
 export default async function QaPage({
   params,
@@ -26,8 +10,14 @@ export default async function QaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [bot, pairs] = await Promise.all([getBot(id), getQaPairs(id)]);
+  const botRows = await sql`SELECT * FROM bots WHERE id = ${id}`;
+  const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
+
+  const pairs = (await sql`
+    SELECT id, bot_id, question, answer, created_at
+    FROM qa_pairs WHERE bot_id = ${id} ORDER BY created_at DESC
+  `) as unknown as QaPair[];
 
   return (
     <div className="max-w-3xl">
@@ -39,13 +29,11 @@ export default async function QaPage({
         <span className="text-gray-900">Q&A 관리</span>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Q&A 관리</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            질문과 답변을 등록하면 AI가 시맨틱 매칭으로 응답합니다
-          </p>
-        </div>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">Q&A 관리</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          질문과 답변을 등록하면 AI가 시맨틱 매칭으로 응답합니다
+        </p>
       </div>
 
       <QaManager botId={id} initialPairs={pairs} />

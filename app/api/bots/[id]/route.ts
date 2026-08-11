@@ -6,7 +6,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const { id } = await params;
   const rows = await sql`SELECT * FROM bots WHERE id = ${id}`;
   if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(rows[0] as Bot);
+  return NextResponse.json(rows[0] as unknown as Bot);
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -20,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     WHERE id = ${id}
     RETURNING *
   `;
-  return NextResponse.json(rows[0] as Bot);
+  return NextResponse.json(rows[0] as unknown as Bot);
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
