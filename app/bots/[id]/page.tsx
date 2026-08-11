@@ -49,14 +49,20 @@ export default async function BotDetailPage({
               href={`/bots/${bot.id}/qa`}
               className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
             >
-              Q&A 관리 →
+              Q&A 관리
             </Link>
           )}
           <Link
             href={`/bots/${bot.id}/docs`}
             className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
           >
-            📄 문서 관리
+            📄 문서
+          </Link>
+          <Link
+            href={`/bots/${bot.id}/logs`}
+            className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            💬 대화 기록
           </Link>
         </div>
       </div>

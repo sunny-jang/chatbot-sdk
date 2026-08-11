@@ -17,10 +17,25 @@ export async function initSchema() {
       type TEXT NOT NULL CHECK(type IN ('qa', 'ai')),
       system_prompt TEXT,
       model TEXT DEFAULT 'gpt-4o-mini',
+      widget_title TEXT,
+      widget_color TEXT DEFAULT '#2563eb',
+      greeting_message TEXT,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS tenant_id TEXT REFERENCES tenants(id)`;
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS widget_title TEXT`;
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS widget_color TEXT DEFAULT '#2563eb'`;
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS greeting_message TEXT`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS chat_logs (
+      id TEXT PRIMARY KEY,
+      bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      user_message TEXT NOT NULL,
+      bot_reply TEXT NOT NULL,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
   await sql`
     CREATE TABLE IF NOT EXISTS documents (
       id TEXT PRIMARY KEY,
@@ -57,6 +72,17 @@ export type Bot = {
   type: "qa" | "ai";
   system_prompt: string | null;
   model: string;
+  widget_title: string | null;
+  widget_color: string | null;
+  greeting_message: string | null;
+  created_at: number;
+};
+
+export type ChatLog = {
+  id: string;
+  bot_id: string;
+  user_message: string;
+  bot_reply: string;
   created_at: number;
 };
 

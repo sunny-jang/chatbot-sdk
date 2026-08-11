@@ -26,12 +26,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const check = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   if (!check[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { name, system_prompt, model } = await req.json();
+  const { name, system_prompt, model, widget_title, widget_color, greeting_message } = await req.json();
   const rows = await sql`
     UPDATE bots SET
       name = COALESCE(${name ?? null}, name),
       system_prompt = COALESCE(${system_prompt ?? null}, system_prompt),
-      model = COALESCE(${model ?? null}, model)
+      model = COALESCE(${model ?? null}, model),
+      widget_title = ${widget_title ?? null},
+      widget_color = COALESCE(${widget_color ?? null}, widget_color),
+      greeting_message = ${greeting_message ?? null}
     WHERE id = ${id}
     RETURNING *
   `;

@@ -3,8 +3,20 @@ import sql from "@/lib/neon";
 import { Bot, QaPair } from "@/lib/db";
 import { findBestMatch, getEmbedding, cosineSimilarity } from "@/lib/embeddings";
 import OpenAI from "openai";
+import { randomUUID } from "crypto";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+async function saveLog(botId: string, userMessage: string, botReply: string) {
+  try {
+    await sql`
+      INSERT INTO chat_logs (id, bot_id, user_message, bot_reply)
+      VALUES (${randomUUID()}, ${botId}, ${userMessage}, ${botReply})
+    `;
+  } catch {
+    // non-critical: don't fail the chat response if logging fails
+  }
+}
 
 const DOC_THRESHOLD = 0.5;
 const DOC_TOP_K = 3;
@@ -53,8 +65,9 @@ export async function POST(
       message,
       pairRows as unknown as Pick<QaPair, "id" | "answer" | "embedding">[]
     );
-    if (match) return NextResponse.json({ reply: match.answer });
-    return NextResponse.json({ reply: "죄송합니다. 해당 질문에 대한 답변을 찾지 못했습니다." });
+    const reply = match?.answer ?? "죄송합니다. 해당 질문에 대한 답변을 찾지 못했습니다.";
+    await saveLog(botId, message, reply);
+    return NextResponse.json({ reply });
   }
 
   // AI bot — build messages with optional RAG context
@@ -77,5 +90,7 @@ export async function POST(
     model: bot.model || "gpt-4o-mini",
     messages,
   });
-  return NextResponse.json({ reply: completion.choices[0].message.content ?? "" });
+  const reply = completion.choices[0].message.content ?? "";
+  await saveLog(botId, message, reply);
+  return NextResponse.json({ reply });
 }
