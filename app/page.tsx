@@ -1,12 +1,16 @@
 import Link from "next/link";
 import sql from "@/lib/neon";
 import { initSchema, Bot } from "@/lib/db";
+import { getTenantId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   await initSchema();
-  const bots = (await sql`SELECT * FROM bots ORDER BY created_at DESC`) as unknown as Bot[];
+  const tenantId = await getTenantId();
+  const bots = (await sql`
+    SELECT * FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC
+  `) as unknown as Bot[];
 
   return (
     <div>

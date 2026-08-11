@@ -2,8 +2,17 @@ import sql from "./neon";
 
 export async function initSchema() {
   await sql`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      api_key TEXT UNIQUE NOT NULL,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS bots (
       id TEXT PRIMARY KEY,
+      tenant_id TEXT REFERENCES tenants(id),
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('qa', 'ai')),
       system_prompt TEXT,
@@ -11,6 +20,7 @@ export async function initSchema() {
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS tenant_id TEXT REFERENCES tenants(id)`;
   await sql`
     CREATE TABLE IF NOT EXISTS qa_pairs (
       id TEXT PRIMARY KEY,
@@ -23,8 +33,16 @@ export async function initSchema() {
   `;
 }
 
+export type Tenant = {
+  id: string;
+  name: string;
+  api_key: string;
+  created_at: number;
+};
+
 export type Bot = {
   id: string;
+  tenant_id: string;
   name: string;
   type: "qa" | "ai";
   system_prompt: string | null;

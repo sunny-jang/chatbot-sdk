@@ -2,8 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
 import { Bot } from "@/lib/db";
+import { getTenantId } from "@/lib/auth";
 import BotSettings from "./BotSettings";
 import CopyButton from "./CopyButton";
+
+export const dynamic = "force-dynamic";
 
 export default async function BotDetailPage({
   params,
@@ -11,7 +14,8 @@ export default async function BotDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const rows = await sql`SELECT * FROM bots WHERE id = ${id}`;
+  const tenantId = await getTenantId();
+  const rows = await sql`SELECT * FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   const bot = rows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
 

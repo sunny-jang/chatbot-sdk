@@ -12,10 +12,12 @@ export default function DemoPage() {
 
   useEffect(() => {
     fetch("/api/bots")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : []))
       .then((data: Bot[]) => {
-        setBots(data);
-        if (data.length > 0) setSelectedBotId(data[0].id);
+        if (Array.isArray(data)) {
+          setBots(data);
+          if (data.length > 0) setSelectedBotId(data[0].id);
+        }
       });
   }, []);
 
@@ -111,12 +113,14 @@ export default function DemoPage() {
 
           {bots.length === 0 ? (
             <div className="text-center py-10">
-              <p className="text-white/40 text-sm mb-4">아직 생성된 봇이 없어요</p>
+              <p className="text-white/40 text-sm mb-4">
+                관리자 패널에 로그인하면 내 봇을 여기서 바로 테스트할 수 있어요
+              </p>
               <Link
-                href="/bots/new"
+                href="/"
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
               >
-                첫 봇 만들기 →
+                관리자 패널로 이동 →
               </Link>
             </div>
           ) : (

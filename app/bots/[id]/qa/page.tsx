@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
 import { Bot, QaPair } from "@/lib/db";
+import { getTenantId } from "@/lib/auth";
 import QaManager from "./QaManager";
+
+export const dynamic = "force-dynamic";
 
 export default async function QaPage({
   params,
@@ -10,7 +13,8 @@ export default async function QaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const botRows = await sql`SELECT * FROM bots WHERE id = ${id}`;
+  const tenantId = await getTenantId();
+  const botRows = await sql`SELECT * FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
 
