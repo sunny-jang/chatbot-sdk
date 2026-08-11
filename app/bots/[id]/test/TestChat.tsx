@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 
-type Message = { role: "user" | "bot"; text: string };
+type UsedDoc = { title: string; score: number };
+type Message = { role: "user" | "bot"; text: string; usedDocs?: UsedDoc[] };
 
 export default function TestChat({ botId, endpoint }: { botId: string; endpoint: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -10,6 +12,7 @@ export default function TestChat({ botId, endpoint }: { botId: string; endpoint:
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const history = useRef<{ role: string; content: string }[]>([]);
+  const sessionId = useRef<string>(crypto.randomUUID());
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -26,11 +29,11 @@ export default function TestChat({ botId, endpoint }: { botId: string; endpoint:
       const res = await fetch(`${endpoint}/api/chat/${botId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history: history.current }),
+        body: JSON.stringify({ message: text, history: history.current, sessionId: sessionId.current }),
       });
       const data = await res.json();
       const reply = data.reply || "오류가 발생했습니다.";
-      setMessages((prev) => [...prev, { role: "bot", text: reply }]);
+      setMessages((prev) => [...prev, { role: "bot", text: reply, usedDocs: data.usedDocs }]);
       history.current = [
         ...history.current,
         { role: "user", content: text },
@@ -50,6 +53,7 @@ export default function TestChat({ botId, endpoint }: { botId: string; endpoint:
   function reset() {
     setMessages([]);
     history.current = [];
+    sessionId.current = crypto.randomUUID();
   }
 
   return (
@@ -79,17 +83,32 @@ export default function TestChat({ botId, endpoint }: { botId: string; endpoint:
         {messages.map((msg, i) => (
           <div
             key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
           >
             <div
-              className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+              className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-blue-600 text-white rounded-br-sm"
+                  ? "bg-blue-600 text-white rounded-br-sm whitespace-pre-wrap"
                   : "bg-gray-100 text-gray-800 rounded-bl-sm"
               }`}
             >
-              {msg.text}
+              {msg.role === "user" ? msg.text : (
+                <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-strong:font-semibold prose-code:bg-gray-200 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-200 prose-pre:p-2 prose-pre:rounded">
+                  <ReactMarkdown>{msg.text}</ReactMarkdown>
+                </div>
+              )}
             </div>
+            {msg.usedDocs && msg.usedDocs.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1 max-w-[75%]">
+                {msg.usedDocs.map((d, j) => (
+                  <span key={j} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full border border-blue-100">
+                    <span>📄</span>
+                    <span>{d.title}</span>
+                    <span className="text-blue-300">{d.score}%</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
         {loading && (

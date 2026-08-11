@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { QaPair } from "@/lib/db";
 import { getEmbedding } from "@/lib/embeddings";
+import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 
 async function getTenantId() {
   const jar = await cookies();
@@ -30,7 +31,8 @@ export async function PUT(
 
   let embeddingJson: string | null = null;
   if (question) {
-    const vec = await getEmbedding(question);
+    const apiKey = await getTenantApiKeyByTenantId(tenantId!);
+    const vec = await getEmbedding(question, apiKey);
     embeddingJson = JSON.stringify(vec);
   }
 

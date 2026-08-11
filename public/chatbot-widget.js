@@ -128,6 +128,7 @@
     const closeBtn = panel.querySelector(".close");
     let open = false;
     let history = [];
+    let sessionId = crypto.randomUUID();
 
     if (greeting) addMessage(greeting, "bot");
 
@@ -135,7 +136,15 @@
       open = !open;
       fab.innerHTML = open ? "✕" : "💬";
       panel.classList.toggle("open", open);
-      if (open) inputEl.focus();
+      if (open) {
+        inputEl.focus();
+      } else {
+        // New session when widget is closed and reopened
+        history = [];
+        sessionId = crypto.randomUUID();
+        messagesEl.innerHTML = "";
+        if (greeting) addMessage(greeting, "bot");
+      }
     }
 
     function addMessage(text, role) {
@@ -160,7 +169,7 @@
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, history }),
+          body: JSON.stringify({ message: text, history, sessionId }),
         });
         const data = await res.json();
         typingEl.textContent = data.reply || "오류가 발생했습니다.";

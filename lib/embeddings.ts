@@ -1,9 +1,11 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getClient(apiKey?: string | null) {
+  return new OpenAI({ apiKey: apiKey ?? process.env.OPENAI_API_KEY });
+}
 
-export async function getEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+export async function getEmbedding(text: string, apiKey?: string | null): Promise<number[]> {
+  const response = await getClient(apiKey).embeddings.create({
     model: "text-embedding-3-small",
     input: text,
   });
@@ -25,9 +27,10 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 export async function findBestMatch(
   query: string,
   pairs: { id: string; answer: string; embedding: string | null }[],
-  threshold = 0.75
+  threshold = 0.75,
+  apiKey?: string | null
 ): Promise<{ answer: string; score: number } | null> {
-  const queryEmbedding = await getEmbedding(query);
+  const queryEmbedding = await getEmbedding(query, apiKey);
 
   let best: { answer: string; score: number } | null = null;
 

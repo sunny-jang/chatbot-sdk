@@ -126,14 +126,14 @@ export default function DemoPage() {
           ) : (
             <>
               <div className="flex items-center gap-3 mb-4">
-                <label className="text-sm text-white/60 whitespace-nowrap">봇 선택</label>
+                <label className="text-sm text-white whitespace-nowrap font-medium">봇 선택</label>
                 <select
                   value={selectedBotId}
                   onChange={(e) => setSelectedBotId(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-sm focus:outline-none focus:border-blue-400 text-white"
+                  className="flex-1 px-3 py-2 bg-white/20 border border-white/40 rounded-lg text-sm focus:outline-none focus:border-blue-400 text-white font-medium"
                 >
                   {bots.map((b) => (
-                    <option key={b.id} value={b.id} className="bg-slate-800">
+                    <option key={b.id} value={b.id} className="bg-slate-800 text-white">
                       {b.type === "qa" ? "📚" : "✨"} {b.name}
                     </option>
                   ))}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>챗봇 위젯 테스트</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 800px;
+      margin: 60px auto;
+      padding: 0 24px;
+      color: #111;
+      line-height: 1.7;
+    }
+    h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    p { color: #555; font-size: 15px; margin-bottom: 16px; }
+    .card {
+      background: #f9f9f9;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>챗봇 위젯 테스트 페이지</h1>
+  <p>우측 하단의 💬 버튼을 눌러 챗봇을 테스트해보세요.</p>
+
+  <div class="card">
+    <h2>샘플 콘텐츠</h2>
+    <p>이 페이지는 챗봇 위젯이 일반 웹사이트에 임베드되었을 때 어떻게 보이는지 확인하기 위한 테스트 페이지입니다.</p>
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+  </div>
+
+  <div class="card">
+    <h2>두 번째 섹션</h2>
+    <p>위젯은 페이지 스크롤과 무관하게 항상 우측 하단에 고정됩니다.</p>
+  </div>
+
+  <script
+    src="http://localhost:3000/chatbot-widget.js"
+    data-bot-id="e2633f88-1945-4a78-8704-7d31f42dbc8a"
+    data-endpoint="http://localhost:3000">
+  </script>
+</body>
+</html>

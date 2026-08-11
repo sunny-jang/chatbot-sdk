@@ -1,14 +1,26 @@
 import sql from "./neon";
 
+let _initialized = false;
+let _initPromise: Promise<void> | null = null;
+
 export async function initSchema() {
+  if (_initialized) return;
+  if (_initPromise) return _initPromise;
+  _initPromise = _runInit().then(() => { _initialized = true; });
+  return _initPromise;
+}
+
+async function _runInit() {
   await sql`
     CREATE TABLE IF NOT EXISTS tenants (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       api_key TEXT UNIQUE NOT NULL,
+      openai_api_key TEXT,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS openai_api_key TEXT`;
   await sql`
     CREATE TABLE IF NOT EXISTS bots (
       id TEXT PRIMARY KEY,
@@ -31,11 +43,13 @@ export async function initSchema() {
     CREATE TABLE IF NOT EXISTS chat_logs (
       id TEXT PRIMARY KEY,
       bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL DEFAULT 'legacy',
       user_message TEXT NOT NULL,
       bot_reply TEXT NOT NULL,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`
     CREATE TABLE IF NOT EXISTS doc_folders (
       id TEXT PRIMARY KEY,
@@ -73,6 +87,7 @@ export type Tenant = {
   id: string;
   name: string;
   api_key: string;
+  openai_api_key: string | null;
   created_at: number;
 };
 
@@ -92,6 +107,7 @@ export type Bot = {
 export type ChatLog = {
   id: string;
   bot_id: string;
+  session_id: string;
   user_message: string;
   bot_reply: string;
   created_at: number;

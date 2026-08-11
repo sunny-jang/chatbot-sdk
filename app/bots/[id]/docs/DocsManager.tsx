@@ -33,6 +33,34 @@ export default function DocsManager({
 
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
 
+  // ZIP upload
+  const [zipUploading, setZipUploading] = useState(false);
+  const [zipResult, setZipResult] = useState<{ created: number; skipped: string[] } | null>(null);
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>, folderMode = false) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setZipUploading(true);
+    setZipResult(null);
+    try {
+      const form = new FormData();
+      for (const file of Array.from(files)) {
+        form.append("files", file);
+        if (folderMode) {
+          form.append("paths", (file as File & { webkitRelativePath: string }).webkitRelativePath || file.name);
+        }
+      }
+      if (selectedFolder) form.append("folder_id", selectedFolder);
+      const res = await fetch(`/api/bots/${botId}/docs/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      setDocs((prev) => [...data.created, ...prev]);
+      setZipResult({ created: data.created.length, skipped: data.skipped });
+    } finally {
+      setZipUploading(false);
+      e.target.value = "";
+    }
+  }
+
   // Build tree
   const rootFolders = folders.filter((f) => !f.parent_id);
   const childFolders = (parentId: string) => folders.filter((f) => f.parent_id === parentId);
@@ -243,17 +271,56 @@ export default function DocsManager({
         >
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900 text-sm">문서 추가</h3>
-            <select
-              value={docFolder}
-              onChange={(e) => setDocFolder(e.target.value)}
-              className="px-2 py-1 border border-gray-200 rounded-lg text-xs bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">📁 폴더 없음</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>📁 {f.name}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <label className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg cursor-pointer transition-colors ${
+                zipUploading ? "bg-gray-100 text-gray-400" : "bg-orange-50 text-orange-600 hover:bg-orange-100"
+              }`}>
+                <span>📄</span>
+                {zipUploading ? "처리 중..." : "파일 업로드"}
+                <input
+                  type="file"
+                  accept=".zip,.pdf,.docx,.hwp,.hwpx,.html,.htm,.txt,.md,.csv"
+                  multiple
+                  className="hidden"
+                  disabled={zipUploading}
+                  onChange={(e) => handleFileUpload(e, false)}
+                />
+              </label>
+              <label className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg cursor-pointer transition-colors ${
+                zipUploading ? "bg-gray-100 text-gray-400" : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+              }`}>
+                <span>📂</span>
+                폴더 업로드
+                <input
+                  type="file"
+                  className="hidden"
+                  disabled={zipUploading}
+                  // @ts-expect-error webkitdirectory is non-standard
+                  webkitdirectory=""
+                  onChange={(e) => handleFileUpload(e, true)}
+                />
+              </label>
+              <select
+                value={docFolder}
+                onChange={(e) => setDocFolder(e.target.value)}
+                className="px-2 py-1 border border-gray-200 rounded-lg text-xs bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">📁 폴더 없음</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>📁 {f.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          {zipResult && (
+            <div className={`text-xs rounded-lg px-3 py-2 ${zipResult.created > 0 ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-500"}`}>
+              ✅ {zipResult.created}개 문서 추가됨
+              {zipResult.skipped.length > 0 && (
+                <span className="text-gray-400 ml-2">· {zipResult.skipped.length}개 건너뜀 ({zipResult.skipped.join(", ")})</span>
+              )}
+            </div>
+          )}
           <input
             type="text"
             value={title}

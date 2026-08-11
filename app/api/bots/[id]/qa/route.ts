@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { QaPair } from "@/lib/db";
 import { getEmbedding } from "@/lib/embeddings";
+import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import { randomUUID } from "crypto";
 
 async function getTenantId() {
@@ -44,7 +45,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!question || !answer) {
     return NextResponse.json({ error: "question and answer are required" }, { status: 400 });
   }
-  const embedding = await getEmbedding(question);
+  const apiKey = await getTenantApiKeyByTenantId(tenantId);
+  const embedding = await getEmbedding(question, apiKey);
   const qaId = randomUUID();
   const rows = await sql`
     INSERT INTO qa_pairs (id, bot_id, question, answer, embedding)
