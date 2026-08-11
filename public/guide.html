@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chatbot SDK — 가이드</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #2563eb;
+      --blue-light: #eff6ff;
+      --green: #16a34a;
+      --green-light: #f0fdf4;
+      --purple: #7c3aed;
+      --purple-light: #f5f3ff;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-500: #6b7280;
+      --gray-700: #374151;
+      --gray-900: #111827;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      line-height: 1.6;
+    }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: 100vh; }
+
+    .sidebar {
+      width: 240px; flex-shrink: 0;
+      background: #fff; border-right: 1px solid var(--gray-200);
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+      padding: 28px 16px;
+    }
+
+    .sidebar-logo {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 8px 20px; border-bottom: 1px solid var(--gray-200);
+      margin-bottom: 16px;
+    }
+    .sidebar-logo-icon { font-size: 22px; }
+    .sidebar-logo-text { font-weight: 700; font-size: 15px; color: var(--gray-900); }
+    .sidebar-logo-sub { font-size: 11px; color: var(--gray-500); }
+
+    .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+    .sidebar a {
+      display: block; padding: 7px 10px; border-radius: 8px;
+      font-size: 13px; color: var(--gray-700); text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+    .sidebar a:hover { background: var(--gray-100); color: var(--gray-900); }
+    .sidebar a.active { background: var(--blue-light); color: var(--blue); font-weight: 600; }
+    .sidebar-section {
+      font-size: 10px; font-weight: 700; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 12px 10px 4px; margin-top: 8px;
+    }
+
+    .content {
+      flex: 1; max-width: 780px; margin: 0 auto;
+      padding: 48px 40px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #1e40af 0%, #7c3aed 100%);
+      color: white; border-radius: 16px; padding: 40px 36px;
+      margin-bottom: 40px;
+    }
+    .hero-badge {
+      display: inline-block; background: rgba(255,255,255,0.2);
+      font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+      padding: 3px 10px; border-radius: 20px; margin-bottom: 14px;
+    }
+    .hero h1 { font-size: 28px; font-weight: 800; line-height: 1.2; margin-bottom: 10px; }
+    .hero p { font-size: 15px; opacity: 0.85; max-width: 480px; }
+
+    .hero-embed {
+      margin-top: 20px; background: rgba(0,0,0,0.25);
+      border-radius: 10px; padding: 14px 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12.5px; color: #86efac; overflow-x: auto;
+    }
+
+    /* ── Sections ── */
+    .section { margin-bottom: 48px; }
+    .section-title {
+      font-size: 20px; font-weight: 700; color: var(--gray-900);
+      margin-bottom: 8px; padding-bottom: 10px;
+      border-bottom: 2px solid var(--gray-200);
+    }
+    .section-subtitle { font-size: 14px; color: var(--gray-500); margin-bottom: 20px; }
+
+    h3 { font-size: 15px; font-weight: 700; color: var(--gray-900); margin: 20px 0 8px; }
+
+    p { font-size: 14px; color: var(--gray-700); margin-bottom: 12px; }
+
+    /* ── Cards ── */
+    .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+    .card {
+      background: #fff; border: 1.5px solid var(--gray-200);
+      border-radius: 12px; padding: 18px;
+    }
+    .card.qa { border-color: #bbf7d0; background: var(--green-light); }
+    .card.ai { border-color: #ddd6fe; background: var(--purple-light); }
+    .card-icon { font-size: 24px; margin-bottom: 8px; }
+    .card-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .card.qa .card-title { color: var(--green); }
+    .card.ai .card-title { color: var(--purple); }
+    .card-desc { font-size: 12px; color: var(--gray-500); line-height: 1.5; }
+    .card-list { margin-top: 8px; padding-left: 14px; }
+    .card-list li { font-size: 12px; color: var(--gray-700); margin-bottom: 3px; }
+
+    /* ── Code ── */
+    pre, code {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+    code {
+      background: var(--gray-100); color: #dc2626;
+      padding: 1px 5px; border-radius: 4px; font-size: 12.5px;
+    }
+    .code-block {
+      background: #0f172a; border-radius: 10px; overflow: hidden;
+      margin: 12px 0 20px;
+    }
+    .code-block-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 14px; background: #1e293b;
+      font-size: 11px; color: #94a3b8; font-weight: 500;
+    }
+    .code-block-header .dots { display: flex; gap: 5px; }
+    .code-block-header .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-green { background: #22c55e; }
+    .copy-btn {
+      background: #334155; color: #94a3b8; border: none; cursor: pointer;
+      padding: 3px 10px; border-radius: 5px; font-size: 11px; font-family: inherit;
+      transition: background 0.15s;
+    }
+    .copy-btn:hover { background: #475569; color: #e2e8f0; }
+    pre {
+      padding: 16px; overflow-x: auto;
+      font-size: 13px; line-height: 1.6; color: #e2e8f0;
+    }
+    .token-tag { color: #7dd3fc; }
+    .token-attr { color: #a5f3fc; }
+    .token-val { color: #86efac; }
+    .token-comment { color: #64748b; font-style: italic; }
+    .token-key { color: #f9a8d4; }
+    .token-str { color: #86efac; }
+
+    /* ── Steps ── */
+    .steps { display: flex; flex-direction: column; gap: 0; margin-bottom: 20px; }
+    .step { display: flex; gap: 14px; position: relative; padding-bottom: 24px; }
+    .step:last-child { padding-bottom: 0; }
+    .step:not(:last-child)::before {
+      content: ''; position: absolute; left: 16px; top: 34px;
+      width: 2px; height: calc(100% - 10px);
+      background: var(--gray-200);
+    }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--blue); color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; flex-shrink: 0; z-index: 1;
+    }
+    .step-body { flex: 1; padding-top: 4px; }
+    .step-title { font-size: 14px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; }
+    .step-desc { font-size: 13px; color: var(--gray-500); }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0 20px; }
+    th {
+      background: var(--gray-100); font-weight: 600; text-align: left;
+      padding: 9px 12px; border: 1px solid var(--gray-200);
+    }
+    td { padding: 9px 12px; border: 1px solid var(--gray-200); vertical-align: top; }
+    td code { font-size: 11.5px; }
+    tr:hover td { background: var(--gray-50); }
+
+    /* ── Callout ── */
+    .callout {
+      display: flex; gap: 10px; padding: 12px 14px;
+      border-radius: 10px; margin: 12px 0 20px; font-size: 13px;
+    }
+    .callout.tip { background: var(--blue-light); border: 1px solid #bfdbfe; }
+    .callout.warn { background: #fffbeb; border: 1px solid #fde68a; }
+    .callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .callout-text { color: var(--gray-700); line-height: 1.5; }
+    .callout-text strong { display: block; margin-bottom: 2px; color: var(--gray-900); }
+
+    /* ── Flow ── */
+    .flow {
+      display: flex; align-items: center; gap: 8px;
+      flex-wrap: wrap; margin: 12px 0 20px;
+    }
+    .flow-step {
+      background: #fff; border: 1.5px solid var(--gray-200);
+      border-radius: 8px; padding: 8px 14px;
+      font-size: 12px; font-weight: 600; color: var(--gray-700);
+      text-align: center;
+    }
+    .flow-arrow { color: var(--gray-500); font-size: 16px; }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 20px; vertical-align: middle;
+    }
+    .badge.green { background: var(--green-light); color: var(--green); border: 1px solid #bbf7d0; }
+    .badge.purple { background: var(--purple-light); color: var(--purple); border: 1px solid #ddd6fe; }
+    .badge.blue { background: var(--blue-light); color: var(--blue); border: 1px solid #bfdbfe; }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="sidebar-logo-icon">🤖</span>
+      <div>
+        <div class="sidebar-logo-text">Chatbot SDK</div>
+        <div class="sidebar-logo-sub">가이드 문서</div>
+      </div>
+    </div>
+    <nav>
+      <div class="sidebar-section">시작하기</div>
+      <a href="#overview">개요</a>
+      <a href="#quickstart">빠른 시작</a>
+      <a href="#admin">관리자 패널</a>
+
+      <div class="sidebar-section">챗봇 유형</div>
+      <a href="#qa-bot">Q&A 봇</a>
+      <a href="#ai-bot">AI 봇</a>
+
+      <div class="sidebar-section">임베드 SDK</div>
+      <a href="#embed">위젯 임베드</a>
+      <a href="#options">설정 옵션</a>
+      <a href="#api">채팅 API</a>
+
+      <div class="sidebar-section">플랫폼 가이드</div>
+      <a href="#gnuboard">그누보드 설치</a>
+
+      <div class="sidebar-section">참고</div>
+      <a href="#env">환경변수</a>
+      <a href="#structure">폴더 구조</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="content">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-badge">📖 DOCUMENTATION</div>
+      <h1>Chatbot SDK<br>가이드</h1>
+      <p>script 태그 하나로 어느 웹사이트에나 AI 챗봇을 붙이는 방법</p>
+      <div class="hero-embed">&lt;script src="https://your-server.com/chatbot-widget.js"
+  data-bot-id="<span style="color:#fde68a">봇-ID</span>"
+  data-endpoint="https://your-server.com"&gt;
+&lt;/script&gt;</div>
+    </div>
+
+    <!-- 개요 -->
+    <div class="section" id="overview">
+      <div class="section-title">🗺️ 개요</div>
+      <p>이 SDK는 세 가지 파트로 구성됩니다.</p>
+      <div class="flow">
+        <div class="flow-step">🖥️<br>관리자 패널<br><span style="font-weight:400;color:#9ca3af">봇 생성/관리</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">⚙️<br>API 서버<br><span style="font-weight:400;color:#9ca3af">채팅 처리</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">🌐<br>임베드 위젯<br><span style="font-weight:400;color:#9ca3af">고객 사이트</span></div>
+      </div>
+      <div class="card-grid">
+        <div class="card qa">
+          <div class="card-icon">📚</div>
+          <div class="card-title">Q&A 봇</div>
+          <div class="card-desc">관리자가 미리 등록한 Q&A 세트를 AI 시맨틱 매칭으로 응답합니다.</div>
+        </div>
+        <div class="card ai">
+          <div class="card-icon">✨</div>
+          <div class="card-title">AI 봇</div>
+          <div class="card-desc">OpenAI GPT 모델이 시스템 프롬프트 기반으로 자유롭게 대화합니다.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 빠른 시작 -->
+    <div class="section" id="quickstart">
+      <div class="section-title">🚀 빠른 시작</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">환경변수 설정</div>
+            <div class="step-desc"><code>.env.local</code> 파일에 OpenAI API 키를 입력합니다.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">서버 실행</div>
+            <div class="step-desc"><code>npm run dev</code> 로 개발 서버를 시작합니다.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">관리자에서 봇 생성</div>
+            <div class="step-desc"><code>http://localhost:3000</code> 접속 후 봇을 만듭니다.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">임베드 코드 복사</div>
+            <div class="step-desc">봇 설정 페이지에서 script 태그를 복사해 웹사이트에 붙여넣습니다.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 관리자 패널 -->
+    <div class="section" id="admin">
+      <div class="section-title">🖥️ 관리자 패널</div>
+      <p><code>http://localhost:3000</code> 에서 접속합니다.</p>
+
+      <h3>페이지 구성</h3>
+      <table>
+        <thead>
+          <tr><th>URL</th><th>기능</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>/</code></td><td>생성된 챗봇 목록 보기</td></tr>
+          <tr><td><code>/bots/new</code></td><td>새 챗봇 만들기 (유형, 이름, 프롬프트 설정)</td></tr>
+          <tr><td><code>/bots/[id]</code></td><td>봇 설정 수정 + 임베드 코드 확인</td></tr>
+          <tr><td><code>/bots/[id]/qa</code></td><td>Q&A 봇의 질문/답변 세트 관리</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Q&A 봇 -->
+    <div class="section" id="qa-bot">
+      <div class="section-title">📚 Q&A 봇 <span class="badge green">Q&A Bot</span></div>
+      <p>관리자가 미리 등록한 Q&A 페어를 기반으로 응답합니다. 사용자의 질문을 OpenAI 임베딩으로 벡터화한 뒤 코사인 유사도로 가장 가까운 답변을 찾습니다.</p>
+
+      <h3>동작 방식</h3>
+      <div class="flow">
+        <div class="flow-step">사용자 질문</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">임베딩 생성<br><span style="font-size:11px;color:#9ca3af">text-embedding-3-small</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">코사인 유사도<br><span style="font-size:11px;color:#9ca3af">임계값 0.75</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">답변 반환</div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text">
+          <strong>매칭 임계값</strong>
+          유사도가 0.75 미만이면 "해당 질문에 대한 답변을 찾지 못했습니다."를 반환합니다. <code>lib/embeddings.ts</code>의 <code>threshold</code> 값으로 조정 가능합니다.
+        </div>
+      </div>
+
+      <h3>Q&A 등록 방법</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">봇 상세 페이지에서 "Q&A 관리 →" 클릭</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">질문과 답변 입력 후 "Q&A 추가" 클릭</div>
+            <div class="step-desc">추가 시 질문을 자동으로 임베딩해 저장합니다 (OpenAI 호출 발생)</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">수정/삭제도 가능</div>
+            <div class="step-desc">질문 수정 시 임베딩이 자동으로 재생성됩니다</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 봇 -->
+    <div class="section" id="ai-bot">
+      <div class="section-title">✨ AI 봇 <span class="badge purple">AI Bot</span></div>
+      <p>OpenAI Chat Completion API를 사용해 자유롭게 대화합니다. 시스템 프롬프트로 봇의 역할과 말투를 정의할 수 있습니다.</p>
+
+      <h3>시스템 프롬프트 예시</h3>
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>시스템 프롬프트 예시</span>
+          <button class="copy-btn" onclick="copyCode(this)">복사</button>
+        </div>
+        <pre>당신은 [회사명]의 친절한 고객지원 상담원입니다.
+- 항상 공손하고 간결하게 답변해주세요.
+- 모르는 내용은 솔직하게 모른다고 말하세요.
+- 제품 관련 질문에 집중하고, 관계없는 주제는 정중히 거절하세요.
+- 한국어로만 응답하세요.</pre>
+      </div>
+
+      <h3>지원 모델</h3>
+      <table>
+        <thead><tr><th>모델</th><th>특징</th><th>추천 용도</th></tr></thead>
+        <tbody>
+          <tr><td><code>gpt-4o-mini</code></td><td>빠름, 저렴</td><td>일반 고객지원, 간단한 Q&A</td></tr>
+          <tr><td><code>gpt-4o</code></td><td>고성능</td><td>복잡한 분석, 긴 대화 맥락</td></tr>
+          <tr><td><code>gpt-4.1</code></td><td>최신</td><td>최고 성능이 필요한 경우</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text">
+          <strong>대화 히스토리</strong>
+          AI 봇은 최근 20개 메시지의 대화 맥락을 유지합니다. 위젯이 자동으로 관리합니다.
+        </div>
+      </div>
+    </div>
+
+    <!-- 임베드 -->
+    <div class="section" id="embed">
+      <div class="section-title">🌐 위젯 임베드</div>
+      <p>웹사이트의 <code>&lt;/body&gt;</code> 태그 바로 위에 아래 코드를 붙여넣으세요.</p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>기본 임베드</span>
+          <button class="copy-btn" onclick="copyCode(this)">복사</button>
+        </div>
+        <pre><span class="token-tag">&lt;script</span> <span class="token-attr">src</span>=<span class="token-val">"https://your-server.com/chatbot-widget.js"</span>
+        <span class="token-attr">data-bot-id</span>=<span class="token-val">"여기에-봇-ID"</span>
+        <span class="token-attr">data-endpoint</span>=<span class="token-val">"https://your-server.com"</span><span class="token-tag">&gt;&lt;/script&gt;</span></pre>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-text">
+          <strong>CORS 설정 필요</strong>
+          위젯이 다른 도메인에서 로드될 경우 Next.js 서버에서 CORS를 허용해야 합니다. 개발 환경에서는 같은 origin이면 문제없습니다.
+        </div>
+      </div>
+
+      <h3>실제 사용 예시</h3>
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>index.html</span>
+          <button class="copy-btn" onclick="copyCode(this)">복사</button>
+        </div>
+        <pre><span class="token-tag">&lt;!DOCTYPE html&gt;</span>
+<span class="token-tag">&lt;html</span> <span class="token-attr">lang</span>=<span class="token-val">"ko"</span><span class="token-tag">&gt;</span>
+<span class="token-tag">&lt;head&gt;</span>
+  <span class="token-tag">&lt;title&gt;</span>내 웹사이트<span class="token-tag">&lt;/title&gt;</span>
+<span class="token-tag">&lt;/head&gt;</span>
+<span class="token-tag">&lt;body&gt;</span>
+
+  <span class="token-comment">&lt;!-- 웹사이트 콘텐츠 --&gt;</span>
+  <span class="token-tag">&lt;h1&gt;</span>환영합니다<span class="token-tag">&lt;/h1&gt;</span>
+
+  <span class="token-comment">&lt;!-- 챗봇 위젯 (body 끝 바로 위) --&gt;</span>
+  <span class="token-tag">&lt;script</span> <span class="token-attr">src</span>=<span class="token-val">"https://your-server.com/chatbot-widget.js"</span>
+          <span class="token-attr">data-bot-id</span>=<span class="token-val">"abc-123"</span>
+          <span class="token-attr">data-endpoint</span>=<span class="token-val">"https://your-server.com"</span><span class="token-tag">&gt;&lt;/script&gt;</span>
+
+<span class="token-tag">&lt;/body&gt;</span>
+<span class="token-tag">&lt;/html&gt;</span></pre>
+      </div>
+    </div>
+
+    <!-- 설정 옵션 -->
+    <div class="section" id="options">
+      <div class="section-title">⚙️ 설정 옵션</div>
+      <p>script 태그의 <code>data-*</code> 속성으로 위젯을 설정합니다.</p>
+      <table>
+        <thead><tr><th>속성</th><th>필수</th><th>기본값</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>data-bot-id</code></td>
+            <td><span class="badge blue">필수</span></td>
+            <td>—</td>
+            <td>관리자 패널에서 생성한 봇의 ID</td>
+          </tr>
+          <tr>
+            <td><code>data-endpoint</code></td>
+            <td><span class="badge blue">필수</span></td>
+            <td>—</td>
+            <td>챗봇 서버 URL (슬래시 없이)</td>
+          </tr>
+          <tr>
+            <td><code>data-theme</code></td>
+            <td>선택</td>
+            <td><code>light</code></td>
+            <td>위젯 테마 (<code>light</code> / <code>dark</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 채팅 API -->
+    <div class="section" id="api">
+      <div class="section-title">🔌 채팅 API</div>
+      <p>위젯이 내부적으로 사용하는 API입니다. 직접 호출해 커스텀 UI를 만들 수도 있습니다.</p>
+
+      <h3>POST /api/chat/:botId</h3>
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>요청 (Request)</span>
+          <button class="copy-btn" onclick="copyCode(this)">복사</button>
+        </div>
+        <pre>{
+  <span class="token-key">"message"</span>: <span class="token-str">"배송은 얼마나 걸리나요?"</span>,
+  <span class="token-key">"history"</span>: [              <span class="token-comment">// AI 봇에서만 사용, 선택사항</span>
+    { <span class="token-key">"role"</span>: <span class="token-str">"user"</span>, <span class="token-key">"content"</span>: <span class="token-str">"안녕하세요"</span> },
+    { <span class="token-key">"role"</span>: <span class="token-str">"assistant"</span>, <span class="token-key">"content"</span>: <span class="token-str">"안녕하세요!"</span> }
+  ]
+}</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>응답 (Response)</span>
+          <button class="copy-btn" onclick="copyCode(this)">복사</button>
+        </div>
+        <pre>{
+  <span class="token-key">"reply"</span>: <span class="token-str">"주문 후 평균 2~3 영업일 내에 배송됩니다."</span>
+}</pre>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text">
+          <strong>커스텀 UI 연동</strong>
+          이 API를 React, Vue 등 어떤 프레임워크에서도 직접 호출해 자체 채팅 UI를 만들 수 있습니다.
+        </div>
+      </div>
+    </div>
+
+    <!-- 그누보드 설치 -->
+    <div class="section" id="gnuboard">
+      <div class="section-title">🐘 그누보드에 설치하기</div>
+      <p>그누보드는 PHP 기반이지만 위젯은 순수 JS이므로 HTML에 script 태그만 추가하면 됩니다. 방법은 두 가지입니다.</p>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text">
+          <strong>구조 이해</strong>
+          챗봇 서버(Next.js)는 별도로 운영되고, 그누보드 사이트는 위젯 JS만 불러옵니다. 그누보드 서버에는 아무것도 설치하지 않아도 됩니다.
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="flow-step">그누보드 사이트<br><span style="font-size:11px;color:#9ca3af">PHP 서버</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">chatbot-widget.js 로드<br><span style="font-size:11px;color:#9ca3af">script 태그</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">챗봇 API 서버<br><span style="font-size:11px;color:#9ca3af">Next.js</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">OpenAI<br><span style="font-size:11px;color:#9ca3af">응답 생성</span></div>
+      </div>
+
+      <!-- 방법 1 -->
+      <h3>방법 1 — tail.php 수정 (전체 페이지에 적용) <span class="badge green">권장</span></h3>
+      <p>그누보드는 모든 페이지 하단에서 <code>tail.php</code>를 공통으로 불러옵니다. 여기에 추가하면 사이트 전체에 챗봇이 붙습니다.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">파일 열기</div>
+            <div class="step-desc">그누보드 루트의 <code>tail.php</code> 파일을 FTP나 파일 관리자로 엽니다.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">스크립트 추가</div>
+            <div class="step-desc"><code>&lt;/body&gt;</code> 태그 바로 위에 아래 코드를 붙여넣습니다.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">저장 후 확인</div>
+            <div class="step-desc">그누보드 사이트의 아무 페이지나 열어보면 우측 하단에 챗봇 버튼이 나타납니다.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>tail.php — &lt;/body&gt; 바로 위에 추가</span>
+          <button class="copy-btn" onclick="copyCode(this)">복사</button>
+        </div>
+        <pre><span class="token-comment">&lt;?php /* tail.php 파일 끝 부분 */ ?&gt;</span>
+
+<span class="token-comment">&lt;!-- 챗봇 위젯 시작 --&gt;</span>
+<span class="token-tag">&lt;script</span> <span class="token-attr">src</span>=<span class="token-val">"https://your-chatbot-server.com/chatbot-widget.js"</span>
+        <span class="token-attr">data-bot-id</span>=<span class="token-val">"여기에-봇-ID"</span>
+        <span class="token-attr">data-endpoint</span>=<span class="token-val">"https://your-chatbot-server.com"</span><span class="token-tag">&gt;&lt;/script&gt;</span>
+<span class="token-comment">&lt;!-- 챗봇 위젯 끝 --&gt;</span>
+
+<span class="token-tag">&lt;/body&gt;</span>
+<span class="token-tag">&lt;/html&gt;</span></pre>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-text">
+          <strong>tail.php 파일 위치</strong>
+          그누보드 버전에 따라 위치가 다를 수 있습니다. 보통 <code>/tail.php</code>(루트) 또는 스킨 폴더 안에 있습니다. 그누보드5는 루트의 <code>tail.php</code>가 공통 파일입니다.
+        </div>
+      </div>
+
+      <!-- 방법 2 -->
+      <h3>방법 2 — 스킨 파일 수정 (특정 페이지만 적용)</h3>
+      <p>특정 게시판이나 페이지에만 챗봇을 넣고 싶다면 해당 스킨의 <code>skin.php</code> 또는 <code>list.skin.php</code> 등을 직접 수정합니다.</p>
+
+      <table>
+        <thead><tr><th>적용 범위</th><th>수정할 파일</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>사이트 전체</td>
+            <td><code>/tail.php</code></td>
+          </tr>
+          <tr>
+            <td>특정 게시판만</td>
+            <td><code>/skin/board/스킨명/list.skin.php</code> 등</td>
+          </tr>
+          <tr>
+            <td>메인 페이지만</td>
+            <td><code>/skin/main/스킨명/index.skin.php</code></td>
+          </tr>
+          <tr>
+            <td>회원 관련 페이지만</td>
+            <td><code>/skin/member/스킨명/*.skin.php</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 방법 3: PHP 조건 분기 -->
+      <h3>방법 3 — PHP 조건으로 특정 페이지에만 표시</h3>
+      <p><code>tail.php</code>에 PHP 조건을 추가해 원하는 페이지에만 챗봇을 띄울 수 있습니다.</p>
+
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>tail.php — 조건부 표시 예시</span>
+          <button class="copy-btn" onclick="copyCode(this)">복사</button>
+        </div>
+        <pre><span class="token-comment">&lt;?php
+// 예시 1: 로그인한 회원에게만 표시
+if (is_member()) { ?&gt;</span>
+  <span class="token-tag">&lt;script</span> <span class="token-attr">src</span>=<span class="token-val">"https://your-chatbot-server.com/chatbot-widget.js"</span>
+          <span class="token-attr">data-bot-id</span>=<span class="token-val">"봇-ID"</span>
+          <span class="token-attr">data-endpoint</span>=<span class="token-val">"https://your-chatbot-server.com"</span><span class="token-tag">&gt;&lt;/script&gt;</span>
+<span class="token-comment">&lt;?php } ?&gt;</span>
+
+<span class="token-comment">&lt;?php
+// 예시 2: 특정 게시판 페이지에서만 표시
+if ($bo_table == 'notice') { ?&gt;</span>
+  <span class="token-tag">&lt;script</span> <span class="token-attr">src</span>=<span class="token-val">"https://your-chatbot-server.com/chatbot-widget.js"</span>
+          <span class="token-attr">data-bot-id</span>=<span class="token-val">"봇-ID"</span>
+          <span class="token-attr">data-endpoint</span>=<span class="token-val">"https://your-chatbot-server.com"</span><span class="token-tag">&gt;&lt;/script&gt;</span>
+<span class="token-comment">&lt;?php } ?&gt;</span>
+
+<span class="token-comment">&lt;?php
+// 예시 3: 관리자에게는 숨기기
+if (!is_admin()) { ?&gt;</span>
+  <span class="token-tag">&lt;script</span> <span class="token-attr">src</span>=<span class="token-val">"https://your-chatbot-server.com/chatbot-widget.js"</span>
+          <span class="token-attr">data-bot-id</span>=<span class="token-val">"봇-ID"</span>
+          <span class="token-attr">data-endpoint</span>=<span class="token-val">"https://your-chatbot-server.com"</span><span class="token-tag">&gt;&lt;/script&gt;</span>
+<span class="token-comment">&lt;?php } ?&gt;</span></pre>
+      </div>
+
+      <!-- 자주 쓰는 그누보드 변수 -->
+      <h3>자주 쓰는 그누보드 PHP 변수</h3>
+      <table>
+        <thead><tr><th>변수 / 함수</th><th>의미</th><th>활용 예시</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>is_member()</code></td>
+            <td>로그인 여부</td>
+            <td>회원에게만 챗봇 표시</td>
+          </tr>
+          <tr>
+            <td><code>is_admin()</code></td>
+            <td>관리자 여부</td>
+            <td>관리자에겐 숨기기</td>
+          </tr>
+          <tr>
+            <td><code>$bo_table</code></td>
+            <td>현재 게시판 테이블명</td>
+            <td>특정 게시판에서만 표시</td>
+          </tr>
+          <tr>
+            <td><code>$_SERVER['REQUEST_URI']</code></td>
+            <td>현재 페이지 URL</td>
+            <td>특정 URL 패턴 매칭</td>
+          </tr>
+          <tr>
+            <td><code>$member['mb_id']</code></td>
+            <td>로그인한 회원 ID</td>
+            <td>회원별 맞춤 봇 ID 지정</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-text">
+          <strong>그누보드 관리자 페이지에서도 설정 가능</strong>
+          그누보드 관리자 → 환경설정 → 기본환경설정 → <strong>"공통 하단 스크립트"</strong> 항목에 script 태그를 붙여넣으면 파일을 직접 수정하지 않아도 됩니다. (버전마다 위치가 다를 수 있음)
+        </div>
+      </div>
+    </div>
+
+    <!-- 환경변수 -->
+    <div class="section" id="env">
+      <div class="section-title">🔑 환경변수</div>
+      <p><code>.env.local</code> 파일을 프로젝트 루트에 생성합니다.</p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>.env.local</span>
+          <button class="copy-btn" onclick="copyCode(this)">복사</button>
+        </div>
+        <pre><span class="token-comment"># OpenAI API 키 (필수)</span>
+OPENAI_API_KEY=sk-proj-...
+
+<span class="token-comment"># 서버 URL (임베드 코드 생성에 사용)</span>
+NEXT_PUBLIC_BASE_URL=http://localhost:3000</pre>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-text">
+          <strong>보안 주의</strong>
+          <code>OPENAI_API_KEY</code>는 절대 클라이언트에 노출되면 안 됩니다. <code>NEXT_PUBLIC_</code> 접두사를 붙이지 마세요. 모든 OpenAI 호출은 서버(API Routes)에서만 발생합니다.
+        </div>
+      </div>
+    </div>
+
+    <!-- 폴더 구조 -->
+    <div class="section" id="structure">
+      <div class="section-title">📁 폴더 구조</div>
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+          <span>프로젝트 구조</span>
+        </div>
+        <pre>chatbot/
+├── app/
+│   ├── page.tsx                      <span class="token-comment"># 봇 목록</span>
+│   ├── layout.tsx                    <span class="token-comment"># 사이드바 레이아웃</span>
+│   ├── bots/
+│   │   ├── new/page.tsx              <span class="token-comment"># 봇 생성</span>
+│   │   └── [id]/
+│   │       ├── page.tsx              <span class="token-comment"># 봇 설정 + 임베드 코드</span>
+│   │       ├── BotSettings.tsx       <span class="token-comment"># 설정 편집 폼</span>
+│   │       ├── CopyButton.tsx        <span class="token-comment"># 코드 복사 버튼</span>
+│   │       └── qa/
+│   │           ├── page.tsx          <span class="token-comment"># Q&A 관리 페이지</span>
+│   │           └── QaManager.tsx     <span class="token-comment"># Q&A CRUD UI</span>
+│   └── api/
+│       ├── bots/route.ts             <span class="token-comment"># GET 목록, POST 생성</span>
+│       ├── bots/[id]/route.ts        <span class="token-comment"># GET, PUT, DELETE</span>
+│       ├── bots/[id]/qa/route.ts     <span class="token-comment"># Q&A 목록/추가</span>
+│       ├── bots/[id]/qa/[qaId]/route.ts  <span class="token-comment"># Q&A 수정/삭제</span>
+│       └── chat/[botId]/route.ts     <span class="token-comment"># 채팅 엔드포인트</span>
+├── lib/
+│   ├── db.ts                         <span class="token-comment"># SQLite 연결 + 스키마</span>
+│   └── embeddings.ts                 <span class="token-comment"># 임베딩 생성 + 유사도 계산</span>
+├── public/
+│   ├── chatbot-widget.js             <span class="token-comment"># 임베드 위젯</span>
+│   └── guide.html                    <span class="token-comment"># 이 문서</span>
+└── .env.local                        <span class="token-comment"># 환경변수</span></pre>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Copy button
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    navigator.clipboard.writeText(pre.innerText).then(() => {
+      btn.textContent = '✓ 복사됨';
+      setTimeout(() => btn.textContent = '복사', 2000);
+    });
+  }
+
+  // Active sidebar link on scroll
+  const sections = document.querySelectorAll('.section');
+  const links = document.querySelectorAll('.sidebar a');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const id = entry.target.id;
+        const active = document.querySelector(`.sidebar a[href="#${id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.3 });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

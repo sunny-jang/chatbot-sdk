@@ -1,69 +1,78 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Bot } from "@/lib/db";
 
-export default function Home() {
+async function getBots(): Promise<Bot[]> {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/bots`,
+    { cache: "no-store" }
+  );
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export default async function HomePage() {
+  const bots = await getBots();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">챗봇 목록</h2>
+          <p className="text-sm text-gray-500 mt-1">생성된 챗봇을 관리하세요</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <Link
+          href="/bots/new"
+          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          + 새 챗봇
+        </Link>
+      </div>
+
+      {bots.length === 0 ? (
+        <div className="text-center py-20 text-gray-400">
+          <div className="text-5xl mb-4">🤖</div>
+          <p className="text-lg font-medium">아직 챗봇이 없어요</p>
+          <p className="text-sm mt-1">새 챗봇을 만들어보세요</p>
+          <Link
+            href="/bots/new"
+            className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            첫 챗봇 만들기
+          </Link>
         </div>
-      </main>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {bots.map((bot) => (
+            <Link
+              key={bot.id}
+              href={`/bots/${bot.id}`}
+              className="bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{bot.name}</h3>
+                  <span
+                    className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                      bot.type === "qa"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-purple-100 text-purple-700"
+                    }`}
+                  >
+                    {bot.type === "qa" ? "Q&A 봇" : "AI 봇"}
+                  </span>
+                </div>
+                <span className="text-2xl">{bot.type === "qa" ? "📚" : "✨"}</span>
+              </div>
+              {bot.system_prompt && (
+                <p className="mt-3 text-xs text-gray-500 line-clamp-2">{bot.system_prompt}</p>
+              )}
+              <p className="mt-3 text-xs text-gray-400">
+                {new Date(bot.created_at * 1000).toLocaleDateString("ko-KR")} 생성
+              </p>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
