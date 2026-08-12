@@ -1,46 +1,38 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-type Bot = { id: string; name: string; type: "qa" | "ai" };
+const DEMO_BOT_ID = process.env.NEXT_PUBLIC_DEMO_BOT_ID;
 
 export default function DemoPage() {
   const router = useRouter();
-  const [bots, setBots] = useState<Bot[]>([]);
-  const [selectedBotId, setSelectedBotId] = useState<string>("");
   const [showModal, setShowModal] = useState(false);
+  const [widgetReady, setWidgetReady] = useState(false);
   const scriptRef = useRef<HTMLScriptElement | null>(null);
 
   useEffect(() => {
-    fetch("/api/bots")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: Bot[]) => {
-        if (Array.isArray(data)) {
-          setBots(data);
-          if (data.length > 0) setSelectedBotId(data[0].id);
-        }
-      });
-  }, []);
+    if (!DEMO_BOT_ID) return;
 
-  useEffect(() => {
-    // 이전 위젯 제거
     const prev = document.getElementById("__chatbot-widget");
     if (prev) prev.remove();
     if (scriptRef.current) scriptRef.current.remove();
 
-    if (!selectedBotId) return;
-
     const s = document.createElement("script");
     s.src = "/chatbot-widget.js";
-    s.setAttribute("data-bot-id", selectedBotId);
+    s.setAttribute("data-bot-id", DEMO_BOT_ID);
     s.setAttribute("data-endpoint", window.location.origin);
+    s.onload = () => setWidgetReady(true);
     document.body.appendChild(s);
     scriptRef.current = s;
-  }, [selectedBotId]);
 
-  const selectedBot = bots.find((b) => b.id === selectedBotId);
+    return () => {
+      const widget = document.getElementById("__chatbot-widget");
+      if (widget) widget.remove();
+      scriptRef.current?.remove();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white">
@@ -94,7 +86,7 @@ export default function DemoPage() {
         </Link>
         <div className="flex items-center gap-5 text-sm text-white/60">
           <Link href="/guide.html" className="hover:text-white transition-colors">가이드</Link>
-          <Link href="/" className="hover:text-white transition-colors">관리자</Link>
+          <Link href="/login" className="hover:text-white transition-colors">관리자</Link>
           <a
             href="https://github.com/sunny-jang/chatbot-sdk"
             target="_blank"
@@ -139,13 +131,32 @@ export default function DemoPage() {
         <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
           <div className="text-center mb-6">
             <h2 className="text-2xl font-bold mb-2">🎮 라이브 데모</h2>
-            <p className="text-white/50 text-sm">관리자에서 만든 봇을 선택해 지금 바로 대화해보세요</p>
+            <p className="text-white/50 text-sm">지금 바로 AI 챗봇과 대화해보세요</p>
           </div>
 
-          {bots.length === 0 ? (
+          {DEMO_BOT_ID ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 p-4 bg-blue-500/10 border border-blue-400/20 rounded-xl text-sm text-blue-300">
+                <span className={`w-2 h-2 rounded-full ${widgetReady ? "bg-green-400" : "bg-yellow-400 animate-pulse"}`} />
+                <span>
+                  {widgetReady
+                    ? "챗봇이 준비됐어요! 우측 하단 버튼을 클릭해 대화를 시작하세요 💬"
+                    : "챗봇 로딩 중..."}
+                </span>
+              </div>
+              <div className="text-center pt-2">
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-900/40"
+                >
+                  나도 만들고 싶어요 →
+                </button>
+              </div>
+            </div>
+          ) : (
             <div className="text-center py-4">
               <p className="text-white/40 text-sm mb-4">
-                관리자 패널에 로그인하면 내 봇을 여기서 바로 테스트할 수 있어요
+                데모 봇을 설정하려면 <code className="text-blue-400 bg-white/5 px-1.5 py-0.5 rounded">NEXT_PUBLIC_DEMO_BOT_ID</code> 환경변수를 설정하세요
               </p>
               <button
                 onClick={() => setShowModal(true)}
@@ -154,39 +165,6 @@ export default function DemoPage() {
                 시작하기 →
               </button>
             </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-3 mb-4">
-                <label className="text-sm text-white whitespace-nowrap font-medium">봇 선택</label>
-                <select
-                  value={selectedBotId}
-                  onChange={(e) => setSelectedBotId(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-white/20 border border-white/40 rounded-lg text-sm focus:outline-none focus:border-blue-400 text-white font-medium"
-                >
-                  {bots.map((b) => (
-                    <option key={b.id} value={b.id} className="bg-slate-800 text-white">
-                      {b.type === "qa" ? "📚" : "✨"} {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedBot && (
-                <div className="mb-6 p-3 bg-white/5 rounded-xl text-xs text-white/40 font-mono">
-                  <span className="text-blue-400">data-bot-id</span>=
-                  <span className="text-green-400">"{selectedBot.id}"</span>
-                  {"  "}
-                  <span className="text-white/30">
-                    [{selectedBot.type === "qa" ? "Q&A 봇" : "AI 봇"}]
-                  </span>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 p-4 bg-blue-500/10 border border-blue-400/20 rounded-xl text-sm text-blue-300">
-                <span>💬</span>
-                <span>우측 하단의 챗봇 버튼을 클릭해 대화를 시작하세요</span>
-              </div>
-            </>
           )}
         </div>
 
@@ -195,7 +173,7 @@ export default function DemoPage() {
           <h3 className="font-semibold mb-3 text-sm text-white/70">임베드 코드</h3>
           <div className="bg-black/40 rounded-xl p-4 font-mono text-xs text-green-400 leading-relaxed">
             &lt;script src="https://your-server.com/chatbot-widget.js"<br />
-            {"        "}data-bot-id="<span className="text-yellow-300">{selectedBotId || "봇-ID"}</span>"<br />
+            {"        "}data-bot-id="<span className="text-yellow-300">{DEMO_BOT_ID || "봇-ID"}</span>"<br />
             {"        "}data-endpoint="https://your-server.com"&gt;&lt;/script&gt;
           </div>
         </div>

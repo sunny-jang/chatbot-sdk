@@ -18,12 +18,10 @@ export default async function TestPage({
   const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-
   return (
     <div className="max-w-2xl">
       <BotHeader bot={bot} current="테스트" />
-      <TestChat botId={id} endpoint={baseUrl} />
+      <TestChat botId={id} />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 type UsedDoc = { title: string; score: number };
 type Message = { role: "user" | "bot"; text: string; usedDocs?: UsedDoc[] };
 
-export default function TestChat({ botId, endpoint }: { botId: string; endpoint: string }) {
+export default function TestChat({ botId }: { botId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,7 +26,7 @@ export default function TestChat({ botId, endpoint }: { botId: string; endpoint:
     setLoading(true);
 
     try {
-      const res = await fetch(`${endpoint}/api/chat/${botId}`, {
+      const res = await fetch(`/api/chat/${botId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, history: history.current, sessionId: sessionId.current }),
