@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import LogoutButton from "./LogoutButton";
@@ -81,28 +82,8 @@ export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: str
     <>
       <aside className="w-56 flex flex-col border-r" style={{ backgroundColor: "#f8f7ff", borderColor: "#e8e6ff" }}>
         <div className="px-4 pt-5 pb-4 border-b" style={{ borderColor: "#e8e6ff" }}>
-          <Link href="/" className="flex items-center gap-2.5">
-            <div style={{
-              display: "grid",
-              placeItems: "center",
-              color: "white",
-              width: "42px",
-              height: "42px",
-              borderRadius: "13px 13px 8px 8px",
-              fontSize: "17px",
-              fontWeight: 800,
-              letterSpacing: "-1px",
-              transform: "skew(-6deg)",
-              background: "linear-gradient(145deg, #f054c1, #6949f4 64%, #2f7bf4)",
-              boxShadow: "0 10px 24px rgba(111, 69, 244, 0.22)",
-              flexShrink: 0,
-            }}>
-              iA
-            </div>
-            <span style={{ fontSize: "20px", fontWeight: 700, letterSpacing: "-0.5px", lineHeight: 1 }}>
-              <span style={{ color: "#1a1040" }}>Ideal </span>
-              <span style={{ color: "#6949f4" }}>AI</span>
-            </span>
+          <Link href="/">
+            <Image src="/logo.png" alt="Ideal AI" width={120} height={36} priority style={{ height: 36, width: "auto" }} />
           </Link>
           <p className="text-xs mt-2.5 truncate" style={{ color: "#9b8fc0" }}>{tenantName}</p>
         </div>
