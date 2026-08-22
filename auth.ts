@@ -1,7 +1,5 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import Kakao from "next-auth/providers/kakao";
-import type { OAuthConfig } from "next-auth/providers";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { randomUUID } from "crypto";
@@ -12,35 +10,12 @@ declare module "next-auth" {
   }
 }
 
-const Naver: OAuthConfig<{ response: { id: string; email?: string; name: string } }> = {
-  id: "naver",
-  name: "Naver",
-  type: "oauth",
-  clientId: process.env.NAVER_CLIENT_ID,
-  clientSecret: process.env.NAVER_CLIENT_SECRET,
-  authorization: "https://nid.naver.com/oauth2.0/authorize",
-  token: "https://nid.naver.com/oauth2.0/token",
-  userinfo: "https://openapi.naver.com/v1/nid/me",
-  profile(profile) {
-    return {
-      id: profile.response.id,
-      name: profile.response.name,
-      email: profile.response.email ?? null,
-    };
-  },
-};
-
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    Kakao({
-      clientId: process.env.KAKAO_CLIENT_ID!,
-      clientSecret: process.env.KAKAO_CLIENT_SECRET!,
-    }),
-    Naver,
   ],
   callbacks: {
     async signIn({ user, account }) {
