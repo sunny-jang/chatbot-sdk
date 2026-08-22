@@ -118,7 +118,7 @@ export default function Sidebar({ tenantName, bots }: { tenantName: string; bots
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "#edeaff"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
           >
-            <span className="flex items-center gap-2"><span>📖</span> 개발자 가이드</span>
+            <span className="flex items-center gap-2"><span>📖</span> 가이드</span>
             <span style={{ fontSize: "10px", color: "#9b8fc0" }}>{guideOpen ? "▲" : "▼"}</span>
           </button>
 
