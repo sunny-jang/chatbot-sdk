@@ -21,6 +21,9 @@ async function _runInit() {
     )
   `;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS openai_api_key TEXT`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS email TEXT`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS password_hash TEXT`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS tenants_email_idx ON tenants (email) WHERE email IS NOT NULL`;
   await sql`
     CREATE TABLE IF NOT EXISTS bots (
       id TEXT PRIMARY KEY,
@@ -88,6 +91,8 @@ export type Tenant = {
   name: string;
   api_key: string;
   openai_api_key: string | null;
+  email: string | null;
+  password_hash: string | null;
   created_at: number;
 };
 

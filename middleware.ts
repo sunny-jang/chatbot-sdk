@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const TENANT_PUBLIC_PATHS = ["/login", "/demo", "/plan"];
+const TENANT_PUBLIC_PATHS = ["/login", "/signup", "/demo", "/plan"];
 const TENANT_PUBLIC_PREFIXES = ["/api/auth/", "/api/chat/", "/api/widget/", "/api/tenants", "/api/guide"];
 
 export function middleware(req: NextRequest) {
