@@ -83,7 +83,7 @@ export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: str
       <aside className="w-56 flex flex-col border-r" style={{ backgroundColor: "#f8f7ff", borderColor: "#e8e6ff" }}>
         <div className="px-4 pt-5 pb-4 border-b" style={{ borderColor: "#e8e6ff" }}>
           <Link href="/" className="flex flex-col gap-1">
-            <Image src="/logo.png" alt="Ideal AI" width={90} height={27} priority style={{ height: 27, width: "auto" }} />
+            <Image src="/logo.png" alt="Ideal AI" width={90} height={27} priority style={{ width: 90, height: "auto" }} />
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "#1a1040" }}>CHATBOT SDK</span>
           </Link>
           <p className="text-xs mt-2.5 truncate" style={{ color: "#9b8fc0" }}>{tenantName}</p>
