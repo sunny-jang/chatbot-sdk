@@ -4,6 +4,7 @@ import { hash } from "bcryptjs";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { randomUUID } from "crypto";
+import { isAdminEmail, COOKIE_OPTS } from "@/lib/admin";
 
 export async function POST(req: Request) {
   const { name, email, password, phone } = await req.json();
@@ -24,21 +25,19 @@ export async function POST(req: Request) {
   const id = randomUUID();
   const apiKey = `iai-${randomUUID().replace(/-/g, "")}`;
   const passwordHash = await hash(password, 12);
-
   const normalizedPhone = phone.replace(/-/g, "");
+  const admin = isAdminEmail(email);
+
   await sql`
-    INSERT INTO tenants (id, name, api_key, email, password_hash, phone)
-    VALUES (${id}, ${name}, ${apiKey}, ${email}, ${passwordHash}, ${normalizedPhone})
+    INSERT INTO tenants (id, name, api_key, email, password_hash, phone, is_admin)
+    VALUES (${id}, ${name}, ${apiKey}, ${email}, ${passwordHash}, ${normalizedPhone}, ${admin})
   `;
 
   const jar = await cookies();
-  jar.set("tenant_id", id, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
-    path: "/",
-  });
+  jar.set("tenant_id", id, COOKIE_OPTS());
+  if (admin) {
+    jar.set("is_admin", "1", COOKIE_OPTS());
+  }
 
   return NextResponse.json({ ok: true, name }, { status: 201 });
 }

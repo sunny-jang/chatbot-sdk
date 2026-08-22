@@ -4,5 +4,6 @@ import { cookies } from "next/headers";
 export async function POST() {
   const jar = await cookies();
   jar.delete("tenant_id");
+  jar.delete("is_admin");
   return NextResponse.json({ ok: true });
 }

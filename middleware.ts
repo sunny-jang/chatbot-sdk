@@ -9,19 +9,13 @@ export default auth((req) => {
 
   // Super-admin routes
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
-    if (
-      pathname === "/admin/login" ||
-      pathname === "/api/admin/login" ||
-      pathname === "/api/admin/logout"
-    ) {
-      return NextResponse.next();
-    }
-    const masterSession = req.cookies.get("master_session")?.value;
-    if (!masterSession) {
+    const isAdminCookie = req.cookies.get("is_admin")?.value === "1";
+    const isAdminSession = req.auth?.is_admin === true;
+    if (!isAdminCookie && !isAdminSession) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      return NextResponse.redirect(new URL("/admin/login", req.url));
+      return NextResponse.redirect(new URL("/login", req.url));
     }
     return NextResponse.next();
   }
@@ -46,16 +40,20 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // OAuth 로그인 후 tenant_id 쿠키가 없으면 세션에서 동기화
+  // OAuth 로그인 후 쿠키가 없으면 세션에서 동기화
   if (!cookieTenantId && sessionTenantId) {
     const res = NextResponse.next();
-    res.cookies.set("tenant_id", sessionTenantId, {
+    const cookieOpts = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "lax" as const,
       maxAge: 60 * 60 * 24 * 30,
       path: "/",
-    });
+    };
+    res.cookies.set("tenant_id", sessionTenantId, cookieOpts);
+    if (req.auth?.is_admin) {
+      res.cookies.set("is_admin", "1", cookieOpts);
+    }
     return res;
   }
 

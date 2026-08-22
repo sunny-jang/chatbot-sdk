@@ -3,10 +3,12 @@ import Google from "next-auth/providers/google";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { randomUUID } from "crypto";
+import { isAdminEmail } from "@/lib/admin";
 
 declare module "next-auth" {
   interface Session {
     tenant_id: string | null;
+    is_admin: boolean;
   }
 }
 
@@ -35,9 +37,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         rows = await sql`SELECT id FROM tenants WHERE email = ${email}`;
       }
 
+      const admin = isAdminEmail(email ?? "");
       if (rows.length > 0) {
         await sql`
-          UPDATE tenants SET oauth_provider = ${provider}, oauth_sub = ${sub}
+          UPDATE tenants SET oauth_provider = ${provider}, oauth_sub = ${sub}, is_admin = ${admin}
           WHERE id = ${rows[0].id as string}
         `;
         user.id = rows[0].id as string;
@@ -45,19 +48,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const id = randomUUID();
         const apiKey = `iai-${randomUUID().replace(/-/g, "")}`;
         await sql`
-          INSERT INTO tenants (id, name, api_key, email, oauth_provider, oauth_sub)
-          VALUES (${id}, ${name}, ${apiKey}, ${email}, ${provider}, ${sub})
+          INSERT INTO tenants (id, name, api_key, email, oauth_provider, oauth_sub, is_admin)
+          VALUES (${id}, ${name}, ${apiKey}, ${email}, ${provider}, ${sub}, ${admin})
         `;
         user.id = id;
       }
       return true;
     },
     async jwt({ token, user }) {
-      if (user?.id) token.tenant_id = user.id;
+      if (user?.id) {
+        token.tenant_id = user.id;
+        token.is_admin = isAdminEmail(user.email ?? "");
+      }
       return token;
     },
     async session({ session, token }) {
       session.tenant_id = (token.tenant_id as string) ?? null;
+      session.is_admin = (token.is_admin as boolean) ?? false;
       return session;
     },
   },

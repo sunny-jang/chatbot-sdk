@@ -26,6 +26,12 @@ async function _runInit() {
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS oauth_provider TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS oauth_sub TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS phone TEXT`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE`;
+  // 어드민 이메일 목록에서 is_admin 자동 갱신
+  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e: string) => e.trim()).filter(Boolean);
+  if (adminEmails.length > 0) {
+    await sql`UPDATE tenants SET is_admin = TRUE WHERE email = ANY(${adminEmails})`;
+  }
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS tenants_email_idx ON tenants (email) WHERE email IS NOT NULL`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS tenants_oauth_idx ON tenants (oauth_provider, oauth_sub) WHERE oauth_provider IS NOT NULL`;
   await sql`
@@ -104,6 +110,8 @@ export type Tenant = {
   openai_api_key: string | null;
   email: string | null;
   password_hash: string | null;
+  phone: string | null;
+  is_admin: boolean;
   created_at: number;
 };
 
