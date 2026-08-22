@@ -6,8 +6,8 @@ import { initSchema } from "@/lib/db";
 import { randomUUID } from "crypto";
 
 export async function POST(req: Request) {
-  const { name, email, password } = await req.json();
-  if (!name || !email || !password) {
+  const { name, email, password, phone } = await req.json();
+  if (!name || !email || !password || !phone) {
     return NextResponse.json({ error: "모든 항목을 입력해주세요." }, { status: 400 });
   }
   if (password.length < 8) {
@@ -25,9 +25,10 @@ export async function POST(req: Request) {
   const apiKey = `iai-${randomUUID().replace(/-/g, "")}`;
   const passwordHash = await hash(password, 12);
 
+  const normalizedPhone = phone.replace(/-/g, "");
   await sql`
-    INSERT INTO tenants (id, name, api_key, email, password_hash)
-    VALUES (${id}, ${name}, ${apiKey}, ${email}, ${passwordHash})
+    INSERT INTO tenants (id, name, api_key, email, password_hash, phone)
+    VALUES (${id}, ${name}, ${apiKey}, ${email}, ${passwordHash}, ${normalizedPhone})
   `;
 
   const jar = await cookies();

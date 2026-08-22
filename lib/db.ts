@@ -25,6 +25,7 @@ async function _runInit() {
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS password_hash TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS oauth_provider TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS oauth_sub TEXT`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS phone TEXT`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS tenants_email_idx ON tenants (email) WHERE email IS NOT NULL`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS tenants_oauth_idx ON tenants (oauth_provider, oauth_sub) WHERE oauth_provider IS NOT NULL`;
   await sql`
@@ -85,6 +86,13 @@ async function _runInit() {
       answer TEXT NOT NULL,
       embedding TEXT,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS phone_otps (
+      phone TEXT PRIMARY KEY,
+      code TEXT NOT NULL,
+      expires_at BIGINT NOT NULL
     )
   `;
 }
