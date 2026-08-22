@@ -23,7 +23,10 @@ async function _runInit() {
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS openai_api_key TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS email TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS password_hash TEXT`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS oauth_provider TEXT`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS oauth_sub TEXT`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS tenants_email_idx ON tenants (email) WHERE email IS NOT NULL`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS tenants_oauth_idx ON tenants (oauth_provider, oauth_sub) WHERE oauth_provider IS NOT NULL`;
   await sql`
     CREATE TABLE IF NOT EXISTS bots (
       id TEXT PRIMARY KEY,
