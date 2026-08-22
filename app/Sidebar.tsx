@@ -27,7 +27,7 @@ const GUIDE_SECTIONS = [
   { label: "폴더 구조", id: "structure" },
 ];
 
-export default function Sidebar({ tenantName, bots }: { tenantName: string; bots: Bot[] }) {
+export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: string; bots: Bot[]; isAdmin?: boolean }) {
   const pathname = usePathname();
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideSection, setGuideSection] = useState<string | null>(null);
@@ -109,6 +109,7 @@ export default function Sidebar({ tenantName, bots }: { tenantName: string; bots
           {navLink("/", "🤖", "챗봇", true)}
           {navLink("/bots/new", "➕", "새 챗봇 만들기")}
           {navLink("/settings", "⚙️", "설정")}
+          {isAdmin && navLink("/admin", "🛠️", "어드민")}
 
           {/* Guide accordion */}
           <button

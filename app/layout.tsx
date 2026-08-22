@@ -15,6 +15,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const jar = await cookies();
   const tenantId = jar.get("tenant_id")?.value;
+  const isAdmin = jar.get("is_admin")?.value === "1";
 
   let tenantName: string | null = null;
   let bots: { id: string; name: string; type: string }[] = [];
@@ -35,7 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen" style={{ backgroundColor: "#f8f7ff" }}>
         {tenantName ? (
           <div className="flex min-h-screen">
-            <Sidebar tenantName={tenantName} bots={bots} />
+            <Sidebar tenantName={tenantName} bots={bots} isAdmin={isAdmin} />
             <main className="flex-1 p-8">{children}</main>
           </div>
         ) : (
