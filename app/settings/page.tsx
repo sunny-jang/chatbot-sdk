@@ -1,6 +1,28 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import HelpButton from "@/app/HelpButton";
+
+const HELP = {
+  title: "설정 사용방법",
+  sections: [
+    {
+      heading: "OpenAI API 키",
+      items: [
+        "직접 발급받은 OpenAI API 키를 등록하면 해당 키로 챗봇이 동작합니다.",
+        "등록하지 않으면 서비스 기본 키가 사용됩니다.",
+        "키는 platform.openai.com → API Keys에서 발급받을 수 있습니다.",
+      ],
+    },
+    {
+      heading: "보안",
+      items: [
+        "API 키는 AES-256으로 암호화되어 저장됩니다.",
+        "키의 앞 8자만 화면에 표시되며 전체 키는 다시 볼 수 없습니다.",
+      ],
+    },
+  ],
+};
 
 export default function SettingsPage() {
   const [hasKey, setHasKey] = useState(false);
@@ -65,9 +87,12 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900">설정</h2>
-        <p className="text-sm text-gray-500 mt-1">워크스페이스 환경을 관리하세요</p>
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">설정</h2>
+          <p className="text-sm text-gray-500 mt-1">워크스페이스 환경을 관리하세요</p>
+        </div>
+        <HelpButton content={HELP} />
       </div>
 
       <div className="bg-white border border-gray-200 rounded-2xl p-6">

@@ -2,6 +2,33 @@ import Link from "next/link";
 import sql from "@/lib/neon";
 import { initSchema, Bot } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
+import HelpButton from "./HelpButton";
+
+const HELP = {
+  title: "챗봇 목록 사용방법",
+  sections: [
+    {
+      heading: "챗봇 종류",
+      items: [
+        "📚 Q&A 봇 — 질문·답변을 직접 등록해 정확히 일치하는 답변을 제공합니다.",
+        "✨ AI 봇 — 업로드한 문서를 기반으로 AI가 자유롭게 답변을 생성합니다.",
+      ],
+    },
+    {
+      heading: "시작하기",
+      items: [
+        "'새 챗봇 만들기' 버튼으로 챗봇을 생성합니다.",
+        "카드를 클릭하면 설정, 문서, 테스트 등 세부 관리 화면으로 이동합니다.",
+      ],
+    },
+    {
+      heading: "빠른 이동",
+      items: [
+        "카드 하단의 단축 버튼(설정·문서·Q&A·테스트·기록)으로 바로 이동할 수 있습니다.",
+      ],
+    },
+  ],
+};
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +46,15 @@ export default async function HomePage() {
           <h2 className="text-2xl font-bold text-gray-900">내 챗봇</h2>
           <p className="text-sm text-gray-500 mt-1">챗봇을 선택해 관리하세요</p>
         </div>
-        <Link
-          href="/bots/new"
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + 새 챗봇 만들기
-        </Link>
+        <div className="flex items-center gap-3">
+          <HelpButton content={HELP} />
+          <Link
+            href="/bots/new"
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            + 새 챗봇 만들기
+          </Link>
+        </div>
       </div>
 
       {bots.length === 0 ? (
