@@ -32,6 +32,8 @@ export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: str
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideSection, setGuideSection] = useState<string | null>(null);
 
+  const [masterOpen, setMasterOpen] = useState(false);
+
   const botMatch = pathname.match(/^\/bots\/([^/]+)/);
   const currentBotId = botMatch?.[1];
   const currentBot = currentBotId && currentBotId !== "new"
@@ -109,7 +111,26 @@ export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: str
           {navLink("/", "🤖", "챗봇", true)}
           {navLink("/bots/new", "➕", "새 챗봇 만들기")}
           {navLink("/settings", "⚙️", "설정")}
-          {isAdmin && navLink("/admin", "🛠️", "어드민")}
+
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => setMasterOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors"
+                style={{ color: "#4b4075" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "#edeaff"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
+              >
+                <span className="flex items-center gap-2"><span>🛠️</span> 마스터 도구</span>
+                <span style={{ fontSize: "10px", color: "#9b8fc0" }}>{masterOpen ? "▲" : "▼"}</span>
+              </button>
+              {masterOpen && (
+                <div className="space-y-0.5 ml-2">
+                  {subLink("/admin", "👥", "계정 관리")}
+                </div>
+              )}
+            </>
+          )}
 
           {/* Guide accordion */}
           <button
