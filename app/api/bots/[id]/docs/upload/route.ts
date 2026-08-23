@@ -29,10 +29,10 @@ function stripHtml(html: string) {
 async function extractText(filename: string, buffer: ArrayBuffer): Promise<string> {
   const ext = getExtension(filename);
   if (ext === ".pdf") {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (buf: Buffer) => Promise<{ text: string }>;
-    const result = await pdfParse(Buffer.from(buffer));
-    return result.text.trim();
+    const { getDocumentProxy, extractText } = await import("unpdf");
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const { text } = await extractText(pdf, { mergePages: true });
+    return text.replace(/\x00/g, "").trim();
   }
   if (ext === ".docx") {
     const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
@@ -81,8 +81,9 @@ async function saveDoc(
 ): Promise<SaveResult> {
   let stage = "텍스트 추출";
   try {
-    const content = await extractText(filename, buffer);
-    if (!content) return { error: "PDF에서 텍스트를 추출할 수 없습니다 (이미지 PDF일 수 있습니다)" };
+    const raw = await extractText(filename, buffer);
+    const content = raw.replace(/\x00/g, "").trim();
+    if (!content) return { error: "텍스트를 추출할 수 없습니다 (이미지 PDF이거나 빈 문서일 수 있습니다)" };
     const title = filename.replace(/\.[^.]+$/, "");
     stage = "임베딩 생성";
     const embedding = await getEmbedding(content.slice(0, 8000), apiKey);
