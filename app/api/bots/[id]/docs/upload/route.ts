@@ -74,7 +74,7 @@ async function extractText(filename: string, buffer: ArrayBuffer): Promise<strin
   return new TextDecoder().decode(buffer).trim();
 }
 
-type SaveResult = { doc: Document } | { error: string } | { skipped: true };
+type SaveResult = { doc: Document; updated?: boolean } | { error: string } | { skipped: true };
 
 async function saveDoc(
   botId: string, folderId: string | null, filename: string, buffer: ArrayBuffer, apiKey?: string | null
@@ -82,11 +82,25 @@ async function saveDoc(
   let stage = "텍스트 추출";
   try {
     const title = filename.replace(/\.[^.]+$/, "");
-    const existing = await sql`SELECT id FROM documents WHERE bot_id = ${botId} AND title = ${title} LIMIT 1`;
-    if (existing.length > 0) return { skipped: true };
     const raw = await extractText(filename, buffer);
     const content = raw.replace(/\x00/g, "").trim();
     if (!content) return { error: "텍스트를 추출할 수 없습니다 (이미지 PDF이거나 빈 문서일 수 있습니다)" };
+
+    const existing = await sql`SELECT id, content FROM documents WHERE bot_id = ${botId} AND title = ${title} LIMIT 1`;
+    if (existing.length > 0) {
+      if ((existing[0].content as string).trim() === content) return { skipped: true };
+      // 내용이 바뀐 경우 재임베딩 후 업데이트
+      stage = "임베딩 생성";
+      const embedding = await getEmbedding(content.slice(0, 8000), apiKey);
+      stage = "DB 저장";
+      const rows = await sql`
+        UPDATE documents SET content = ${content}, embedding = ${JSON.stringify(embedding)}, folder_id = ${folderId ?? null}
+        WHERE id = ${existing[0].id as string}
+        RETURNING id, bot_id, folder_id, title, content, created_at
+      `;
+      return { doc: rows[0] as unknown as Document, updated: true };
+    }
+
     stage = "임베딩 생성";
     const embedding = await getEmbedding(content.slice(0, 8000), apiKey);
     stage = "DB 저장";
@@ -109,6 +123,7 @@ async function processBatch(
   botId: string,
   apiKey: string | null,
   created: Document[],
+  updated: Document[],
   failed: { filename: string; error: string }[],
   skippedCount: { n: number }
 ) {
@@ -119,9 +134,14 @@ async function processBatch(
     );
     for (let j = 0; j < results.length; j++) {
       const result = results[j];
-      if ("doc" in result) created.push(result.doc);
-      else if ("skipped" in result) skippedCount.n++;
-      else failed.push({ filename: batch[j].filename, error: result.error });
+      if ("doc" in result) {
+        if (result.updated) updated.push(result.doc);
+        else created.push(result.doc);
+      } else if ("skipped" in result) {
+        skippedCount.n++;
+      } else {
+        failed.push({ filename: batch[j].filename, error: result.error });
+      }
     }
   }
 }
@@ -154,6 +174,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!files.length) return NextResponse.json({ error: "파일을 선택해주세요" }, { status: 400 });
 
   const created: Document[] = [];
+  const updated: Document[] = [];
   const unsupported: string[] = [];
   const failed: { filename: string; error: string }[] = [];
   const skippedCount = { n: 0 };
@@ -208,8 +229,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       tasks.push({ filename, buffer: await file.arrayBuffer(), folderId });
     }
 
-    await processBatch(tasks, id, apiKey, created, failed, skippedCount);
-    return NextResponse.json({ created, failed, unsupported, skipped: skippedCount.n }, { status: 201 });
+    await processBatch(tasks, id, apiKey, created, updated, failed, skippedCount);
+    return NextResponse.json({ created, updated, failed, unsupported, skipped: skippedCount.n }, { status: 201 });
   }
 
   // ── File upload mode ──────────────────────────────────────────────────
@@ -236,6 +257,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  await processBatch(tasks, id, apiKey, created, failed, skippedCount);
-  return NextResponse.json({ created, failed, unsupported, skipped: skippedCount.n }, { status: 201 });
+  await processBatch(tasks, id, apiKey, created, updated, failed, skippedCount);
+  return NextResponse.json({ created, updated, failed, unsupported, skipped: skippedCount.n }, { status: 201 });
 }

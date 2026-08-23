@@ -35,7 +35,7 @@ export default function DocsManager({
 
   // ZIP upload
   const [zipUploading, setZipUploading] = useState(false);
-  const [zipResult, setZipResult] = useState<{ created: number; skipped: number; failed: { filename: string; error: string }[]; unsupported: string[] } | null>(null);
+  const [zipResult, setZipResult] = useState<{ created: number; updated: number; skipped: number; failed: { filename: string; error: string }[]; unsupported: string[] } | null>(null);
   const [zipError, setZipError] = useState<string | null>(null);
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>, folderMode = false) {
@@ -54,7 +54,7 @@ export default function DocsManager({
       }
       if (selectedFolder) form.append("folder_id", selectedFolder);
       const res = await fetch(`/api/bots/${botId}/docs/upload`, { method: "POST", body: form });
-      let data: { created?: unknown[]; skipped?: number; failed?: { filename: string; error: string }[]; unsupported?: string[]; error?: string } = {};
+      let data: { created?: unknown[]; updated?: unknown[]; skipped?: number; failed?: { filename: string; error: string }[]; unsupported?: string[]; error?: string } = {};
       try {
         data = await res.json();
       } catch {
@@ -65,8 +65,12 @@ export default function DocsManager({
         setZipError(data.error || `업로드 실패 (${res.status})`);
         return;
       }
-      setDocs((prev) => [...(data.created as typeof prev), ...prev]);
-      setZipResult({ created: (data.created ?? []).length, skipped: data.skipped ?? 0, failed: data.failed ?? [], unsupported: data.unsupported ?? [] });
+      const newDocs = [...(data.updated as typeof docs ?? []), ...(data.created as typeof docs ?? [])];
+      setDocs((prev) => {
+        const updatedIds = new Set((data.updated as { id: string }[] ?? []).map(d => d.id));
+        return [...newDocs, ...prev.filter(d => !updatedIds.has(d.id))];
+      });
+      setZipResult({ created: (data.created ?? []).length, updated: (data.updated ?? []).length, skipped: data.skipped ?? 0, failed: data.failed ?? [], unsupported: data.unsupported ?? [] });
     } catch (err) {
       setZipError(err instanceof Error ? err.message : "업로드 중 오류가 발생했습니다.");
     } finally {
@@ -344,9 +348,13 @@ export default function DocsManager({
           {zipResult && (
             <div className="space-y-1.5">
               <div className={`text-xs rounded-lg px-3 py-2 ${zipResult.created > 0 ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"}`}>
-                {zipResult.created > 0 ? "✅" : "⚠️"} {zipResult.created}개 문서 추가됨
+                {(zipResult.created > 0 || zipResult.updated > 0) ? "✅" : "⚠️"}{" "}
+              {zipResult.created > 0 && `${zipResult.created}개 추가`}
+              {zipResult.created > 0 && zipResult.updated > 0 && " · "}
+              {zipResult.updated > 0 && `${zipResult.updated}개 업데이트`}
+              {zipResult.created === 0 && zipResult.updated === 0 && "변경 없음"}
                 {zipResult.skipped > 0 && (
-                  <span className="ml-2 opacity-60">· {zipResult.skipped}개 이미 존재해서 건너뜀</span>
+                  <span className="ml-2 opacity-60">· {zipResult.skipped}개 동일 내용 건너뜀</span>
                 )}
                 {zipResult.unsupported.length > 0 && (
                   <span className="ml-2 opacity-60">· {zipResult.unsupported.length}개 미지원 형식</span>
