@@ -1,5 +1,3 @@
-export const maxDuration = 120;
-
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import JSZip from "jszip";
@@ -10,8 +8,7 @@ import { getEmbedding } from "@/lib/embeddings";
 import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import { randomUUID } from "crypto";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+export const maxDuration = 120;
 
 const SUPPORTED_EXTENSIONS = new Set([
   ".txt", ".md", ".markdown", ".csv", ".json", ".xml",
@@ -32,6 +29,8 @@ function stripHtml(html: string) {
 async function extractText(filename: string, buffer: ArrayBuffer): Promise<string> {
   const ext = getExtension(filename);
   if (ext === ".pdf") {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
     const result = await pdfParse(Buffer.from(buffer));
     return result.text.trim();
   }
