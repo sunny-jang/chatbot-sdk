@@ -1,3 +1,5 @@
+export const maxDuration = 120;
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import JSZip from "jszip";

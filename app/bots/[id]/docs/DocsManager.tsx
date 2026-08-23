@@ -54,13 +54,19 @@ export default function DocsManager({
       }
       if (selectedFolder) form.append("folder_id", selectedFolder);
       const res = await fetch(`/api/bots/${botId}/docs/upload`, { method: "POST", body: form });
-      const data = await res.json();
+      let data: { created?: unknown[]; skipped?: string[]; error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        setZipError("서버 응답 오류가 발생했습니다. 파일 수가 많으면 나눠서 업로드해보세요.");
+        return;
+      }
       if (!res.ok) {
         setZipError(data.error || `업로드 실패 (${res.status})`);
         return;
       }
-      setDocs((prev) => [...data.created, ...prev]);
-      setZipResult({ created: data.created.length, skipped: data.skipped });
+      setDocs((prev) => [...(data.created as typeof prev), ...prev]);
+      setZipResult({ created: (data.created ?? []).length, skipped: data.skipped ?? [] });
     } catch (err) {
       setZipError(err instanceof Error ? err.message : "업로드 중 오류가 발생했습니다.");
     } finally {
