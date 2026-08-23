@@ -35,7 +35,7 @@ export default function DocsManager({
 
   // ZIP upload
   const [zipUploading, setZipUploading] = useState(false);
-  const [zipResult, setZipResult] = useState<{ created: number; skipped: string[] } | null>(null);
+  const [zipResult, setZipResult] = useState<{ created: number; failed: { filename: string; error: string }[]; unsupported: string[] } | null>(null);
   const [zipError, setZipError] = useState<string | null>(null);
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>, folderMode = false) {
@@ -66,7 +66,7 @@ export default function DocsManager({
         return;
       }
       setDocs((prev) => [...(data.created as typeof prev), ...prev]);
-      setZipResult({ created: (data.created ?? []).length, skipped: data.skipped ?? [] });
+      setZipResult({ created: (data.created ?? []).length, failed: data.failed ?? [], unsupported: data.unsupported ?? [] });
     } catch (err) {
       setZipError(err instanceof Error ? err.message : "업로드 중 오류가 발생했습니다.");
     } finally {
@@ -342,14 +342,18 @@ export default function DocsManager({
             </div>
           )}
           {zipResult && (
-            <div className={`text-xs rounded-lg px-3 py-2 ${zipResult.created > 0 ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"}`}>
-              {zipResult.created > 0 ? "✅" : "⚠️"} {zipResult.created}개 문서 추가됨
-              {zipResult.skipped.length > 0 && (
-                <span className="ml-2 opacity-70">
-                  · {zipResult.skipped.length}개 처리 실패: {zipResult.skipped.join(", ")}
-                  {zipResult.created === 0 && " (OpenAI API 키 또는 파일 형식을 확인해주세요)"}
-                </span>
-              )}
+            <div className="space-y-1.5">
+              <div className={`text-xs rounded-lg px-3 py-2 ${zipResult.created > 0 ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"}`}>
+                {zipResult.created > 0 ? "✅" : "⚠️"} {zipResult.created}개 문서 추가됨
+                {zipResult.unsupported.length > 0 && (
+                  <span className="ml-2 opacity-60">· {zipResult.unsupported.length}개 미지원 형식 건너뜀</span>
+                )}
+              </div>
+              {zipResult.failed.map((f) => (
+                <div key={f.filename} className="text-xs rounded-lg px-3 py-2 bg-red-50 text-red-700 border border-red-200">
+                  ❌ <span className="font-medium">{f.filename}</span> — {f.error}
+                </div>
+              ))}
             </div>
           )}
           <input

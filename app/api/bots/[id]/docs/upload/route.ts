@@ -74,24 +74,30 @@ async function extractText(filename: string, buffer: ArrayBuffer): Promise<strin
   return new TextDecoder().decode(buffer).trim();
 }
 
+type SaveResult = { doc: Document } | { error: string };
+
 async function saveDoc(
   botId: string, folderId: string | null, filename: string, buffer: ArrayBuffer, apiKey?: string | null
-): Promise<Document | null> {
+): Promise<SaveResult> {
+  let stage = "텍스트 추출";
   try {
     const content = await extractText(filename, buffer);
-    if (!content) return null;
+    if (!content) return { error: "PDF에서 텍스트를 추출할 수 없습니다 (이미지 PDF일 수 있습니다)" };
     const title = filename.replace(/\.[^.]+$/, "");
+    stage = "임베딩 생성";
     const embedding = await getEmbedding(content.slice(0, 8000), apiKey);
+    stage = "DB 저장";
     const docId = randomUUID();
     const rows = await sql`
       INSERT INTO documents (id, bot_id, folder_id, title, content, embedding)
       VALUES (${docId}, ${botId}, ${folderId ?? null}, ${title}, ${content}, ${JSON.stringify(embedding)})
       RETURNING id, bot_id, folder_id, title, content, created_at
     `;
-    return rows[0] as unknown as Document;
+    return { doc: rows[0] as unknown as Document };
   } catch (err) {
-    console.error("[docs/upload] saveDoc failed:", filename, err);
-    return null;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[docs/upload] ${stage} 실패: ${filename}`, err);
+    return { error: `${stage} 실패: ${msg}` };
   }
 }
 
@@ -100,7 +106,7 @@ async function processBatch(
   botId: string,
   apiKey: string | null,
   created: Document[],
-  skipped: string[]
+  failed: { filename: string; error: string }[]
 ) {
   for (let i = 0; i < tasks.length; i += CONCURRENCY) {
     const batch = tasks.slice(i, i + CONCURRENCY);
@@ -108,9 +114,9 @@ async function processBatch(
       batch.map((t) => saveDoc(botId, t.folderId, t.filename, t.buffer, apiKey))
     );
     for (let j = 0; j < results.length; j++) {
-      const doc = results[j];
-      if (doc) created.push(doc);
-      else skipped.push(batch[j].filename);
+      const result = results[j];
+      if ("doc" in result) created.push(result.doc);
+      else failed.push({ filename: batch[j].filename, error: result.error });
     }
   }
 }
@@ -143,11 +149,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!files.length) return NextResponse.json({ error: "파일을 선택해주세요" }, { status: 400 });
 
   const created: Document[] = [];
-  const skipped: string[] = [];
+  const unsupported: string[] = [];
+  const failed: { filename: string; error: string }[] = [];
 
   // ── Folder upload mode (paths provided) ──────────────────────────────
   if (paths.length === files.length && paths.some((p) => p.includes("/"))) {
-    // Build dir → folder_id map, creating folders top-down
     const dirToId = new Map<string, string>();
 
     const allDirs = new Set<string>();
@@ -185,7 +191,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const ext = getExtension(filename);
 
       if (filename.startsWith(".") || filename.startsWith("__") || !SUPPORTED_EXTENSIONS.has(ext)) {
-        skipped.push(relPath);
+        unsupported.push(relPath);
         continue;
       }
 
@@ -196,8 +202,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       tasks.push({ filename, buffer: await file.arrayBuffer(), folderId });
     }
 
-    await processBatch(tasks, id, apiKey, created, skipped);
-    return NextResponse.json({ created, skipped }, { status: 201 });
+    await processBatch(tasks, id, apiKey, created, failed);
+    return NextResponse.json({ created, failed, unsupported }, { status: 201 });
   }
 
   // ── File upload mode ──────────────────────────────────────────────────
@@ -214,16 +220,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (zipEntry.dir) continue;
         const innerName = relativePath.split("/").pop() ?? relativePath;
         if (innerName.startsWith(".") || innerName.startsWith("__")) continue;
-        if (!SUPPORTED_EXTENSIONS.has(getExtension(innerName))) { skipped.push(innerName); continue; }
+        if (!SUPPORTED_EXTENSIONS.has(getExtension(innerName))) { unsupported.push(innerName); continue; }
         tasks.push({ filename: innerName, buffer: await zipEntry.async("arraybuffer"), folderId: rootFolderId });
       }
     } else if (SUPPORTED_EXTENSIONS.has(ext)) {
       tasks.push({ filename, buffer, folderId: rootFolderId });
     } else {
-      skipped.push(filename);
+      unsupported.push(filename);
     }
   }
 
-  await processBatch(tasks, id, apiKey, created, skipped);
-  return NextResponse.json({ created, skipped }, { status: 201 });
+  await processBatch(tasks, id, apiKey, created, failed);
+  return NextResponse.json({ created, failed, unsupported }, { status: 201 });
 }
