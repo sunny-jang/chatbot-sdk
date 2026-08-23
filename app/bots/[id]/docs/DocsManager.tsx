@@ -36,12 +36,14 @@ export default function DocsManager({
   // ZIP upload
   const [zipUploading, setZipUploading] = useState(false);
   const [zipResult, setZipResult] = useState<{ created: number; skipped: string[] } | null>(null);
+  const [zipError, setZipError] = useState<string | null>(null);
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>, folderMode = false) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setZipUploading(true);
     setZipResult(null);
+    setZipError(null);
     try {
       const form = new FormData();
       for (const file of Array.from(files)) {
@@ -53,8 +55,14 @@ export default function DocsManager({
       if (selectedFolder) form.append("folder_id", selectedFolder);
       const res = await fetch(`/api/bots/${botId}/docs/upload`, { method: "POST", body: form });
       const data = await res.json();
+      if (!res.ok) {
+        setZipError(data.error || `업로드 실패 (${res.status})`);
+        return;
+      }
       setDocs((prev) => [...data.created, ...prev]);
       setZipResult({ created: data.created.length, skipped: data.skipped });
+    } catch (err) {
+      setZipError(err instanceof Error ? err.message : "업로드 중 오류가 발생했습니다.");
     } finally {
       setZipUploading(false);
       e.target.value = "";
@@ -313,11 +321,19 @@ export default function DocsManager({
             </div>
           </div>
 
+          {zipError && (
+            <div className="text-xs rounded-lg px-3 py-2 bg-red-50 text-red-700 border border-red-200">
+              ❌ {zipError}
+            </div>
+          )}
           {zipResult && (
-            <div className={`text-xs rounded-lg px-3 py-2 ${zipResult.created > 0 ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-500"}`}>
-              ✅ {zipResult.created}개 문서 추가됨
+            <div className={`text-xs rounded-lg px-3 py-2 ${zipResult.created > 0 ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"}`}>
+              {zipResult.created > 0 ? "✅" : "⚠️"} {zipResult.created}개 문서 추가됨
               {zipResult.skipped.length > 0 && (
-                <span className="text-gray-400 ml-2">· {zipResult.skipped.length}개 건너뜀 ({zipResult.skipped.join(", ")})</span>
+                <span className="ml-2 opacity-70">
+                  · {zipResult.skipped.length}개 처리 실패: {zipResult.skipped.join(", ")}
+                  {zipResult.created === 0 && " (OpenAI API 키 또는 파일 형식을 확인해주세요)"}
+                </span>
               )}
             </div>
           )}

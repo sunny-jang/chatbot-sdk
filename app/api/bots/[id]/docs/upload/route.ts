@@ -86,7 +86,8 @@ async function saveDoc(
       RETURNING id, bot_id, folder_id, title, content, created_at
     `;
     return rows[0] as unknown as Document;
-  } catch {
+  } catch (err) {
+    console.error("[docs/upload] saveDoc failed:", filename, err);
     return null;
   }
 }
