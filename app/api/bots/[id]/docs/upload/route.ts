@@ -16,6 +16,8 @@ const SUPPORTED_EXTENSIONS = new Set([
   ".html", ".htm", ".pdf", ".docx", ".hwp", ".hwpx",
 ]);
 
+const CONCURRENCY = 5;
+
 function getExtension(name: string) {
   const dot = name.lastIndexOf(".");
   return dot >= 0 ? name.slice(dot).toLowerCase() : "";
@@ -92,6 +94,26 @@ async function saveDoc(
   }
 }
 
+async function processBatch(
+  tasks: { filename: string; buffer: ArrayBuffer; folderId: string | null }[],
+  botId: string,
+  apiKey: string | null,
+  created: Document[],
+  skipped: string[]
+) {
+  for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+    const batch = tasks.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map((t) => saveDoc(botId, t.folderId, t.filename, t.buffer, apiKey))
+    );
+    for (let j = 0; j < results.length; j++) {
+      const doc = results[j];
+      if (doc) created.push(doc);
+      else skipped.push(batch[j].filename);
+    }
+  }
+}
+
 async function getTenantId() {
   const jar = await cookies();
   return jar.get("tenant_id")?.value ?? null;
@@ -153,6 +175,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       dirToId.set(dirPath, fId);
     }
 
+    const tasks: { filename: string; buffer: ArrayBuffer; folderId: string | null }[] = [];
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const relPath = paths[i];
@@ -168,15 +192,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const dirPath = parts.slice(0, -1).join("/");
       const folderId = dirPath ? (dirToId.get(dirPath) ?? rootFolderId) : rootFolderId;
 
-      const doc = await saveDoc(id, folderId, filename, await file.arrayBuffer(), apiKey);
-      if (doc) created.push(doc);
-      else skipped.push(filename);
+      tasks.push({ filename, buffer: await file.arrayBuffer(), folderId });
     }
 
+    await processBatch(tasks, id, apiKey, created, skipped);
     return NextResponse.json({ created, skipped }, { status: 201 });
   }
 
   // ── File upload mode ──────────────────────────────────────────────────
+  const tasks: { filename: string; buffer: ArrayBuffer; folderId: string | null }[] = [];
+
   for (const file of files) {
     const filename = file.name;
     const ext = getExtension(filename);
@@ -189,18 +214,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const innerName = relativePath.split("/").pop() ?? relativePath;
         if (innerName.startsWith(".") || innerName.startsWith("__")) continue;
         if (!SUPPORTED_EXTENSIONS.has(getExtension(innerName))) { skipped.push(innerName); continue; }
-        const doc = await saveDoc(id, rootFolderId, innerName, await zipEntry.async("arraybuffer"), apiKey);
-        if (doc) created.push(doc);
-        else skipped.push(innerName);
+        tasks.push({ filename: innerName, buffer: await zipEntry.async("arraybuffer"), folderId: rootFolderId });
       }
     } else if (SUPPORTED_EXTENSIONS.has(ext)) {
-      const doc = await saveDoc(id, rootFolderId, filename, buffer, apiKey);
-      if (doc) created.push(doc);
-      else skipped.push(filename);
+      tasks.push({ filename, buffer, folderId: rootFolderId });
     } else {
       skipped.push(filename);
     }
   }
 
+  await processBatch(tasks, id, apiKey, created, skipped);
   return NextResponse.json({ created, skipped }, { status: 201 });
 }
