@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import sql from "@/lib/neon";
 import { Bot } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
@@ -47,7 +48,10 @@ export default async function BotDetailPage({
   const bot = rows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+  const headersList = await headers();
+  const host = headersList.get("host") ?? "localhost:3000";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+  const baseUrl = `${proto}://${host}`;
   const embedCode = `<script src="${baseUrl}/chatbot-widget.js" data-bot-id="${bot.id}" data-endpoint="${baseUrl}"></script>`;
 
   return (
