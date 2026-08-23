@@ -54,7 +54,7 @@ export default function DocsManager({
       }
       if (selectedFolder) form.append("folder_id", selectedFolder);
       const res = await fetch(`/api/bots/${botId}/docs/upload`, { method: "POST", body: form });
-      let data: { created?: unknown[]; skipped?: string[]; error?: string } = {};
+      let data: { created?: unknown[]; failed?: { filename: string; error: string }[]; unsupported?: string[]; error?: string } = {};
       try {
         data = await res.json();
       } catch {

@@ -2,7 +2,6 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
-import { randomUUID } from "crypto";
 import { isAdminEmail } from "@/lib/admin";
 
 declare module "next-auth" {
@@ -45,8 +44,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         `;
         user.id = rows[0].id as string;
       } else {
-        const id = randomUUID();
-        const apiKey = `iai-${randomUUID().replace(/-/g, "")}`;
+        const id = crypto.randomUUID();
+        const apiKey = `iai-${crypto.randomUUID().replace(/-/g, "")}`;
         await sql`
           INSERT INTO tenants (id, name, api_key, email, oauth_provider, oauth_sub, is_admin)
           VALUES (${id}, ${name}, ${apiKey}, ${email}, ${provider}, ${sub}, ${admin})
