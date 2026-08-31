@@ -38,35 +38,17 @@ async function extractText(filename: string, buffer: ArrayBuffer): Promise<strin
     const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
     return result.value.trim();
   }
-  if (ext === ".hwpx") {
-    const hwpxZip = await JSZip.loadAsync(buffer);
-    const texts: string[] = [];
-    for (const [path, entry] of Object.entries(hwpxZip.files)) {
-      if (entry.dir || !path.startsWith("Contents/") || !path.endsWith(".xml")) continue;
-      const xml = await entry.async("text");
-      const matches = xml.match(/<hp:t[^>]*>([^<]*)<\/hp:t>/g) ?? [];
-      for (const m of matches) {
-        const t = m.replace(/<[^>]+>/g, "").trim();
-        if (t) texts.push(t);
+  if (ext === ".hwp" || ext === ".hwpx") {
+    const { toMarkdown } = await import("@mdgate/hwp");
+    try {
+      return (await toMarkdown(new Uint8Array(buffer), { path: filename })).trim();
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      if (message.includes("encrypted") || message.includes("password")) {
+        throw new Error("암호화되거나 배포용으로 잠긴 HWP 문서는 업로드할 수 없습니다.");
       }
+      throw new Error("HWP 문서 본문을 읽을 수 없습니다. 파일이 손상되었거나 지원하지 않는 형식일 수 있습니다.");
     }
-    return texts.join("\n").trim();
-  }
-  if (ext === ".hwp") {
-    const bytes = new Uint8Array(buffer);
-    const chunks: string[] = [];
-    let i = 0;
-    while (i < bytes.length - 1) {
-      const cp = bytes[i] | (bytes[i + 1] << 8);
-      if ((cp >= 0x0020 && cp <= 0x007e) || (cp >= 0xac00 && cp <= 0xd7a3) ||
-          (cp >= 0x3131 && cp <= 0x318e) || cp === 0x000a || cp === 0x000d) {
-        chunks.push(String.fromCharCode(cp));
-      } else if (chunks.length > 0 && chunks[chunks.length - 1] !== "\n") {
-        chunks.push("\n");
-      }
-      i += 2;
-    }
-    return chunks.join("").replace(/\n{3,}/g, "\n\n").trim();
   }
   if (ext === ".html" || ext === ".htm") {
     return stripHtml(new TextDecoder().decode(buffer));

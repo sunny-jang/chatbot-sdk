@@ -3,17 +3,22 @@ import { SolapiMessageService } from "solapi";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 
-const solapi = new SolapiMessageService(
-  process.env.SOLAPI_API_KEY!,
-  process.env.SOLAPI_API_SECRET!
-);
-
 function generateOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 // POST /api/auth/phone-verify — OTP 발송
 export async function POST(req: Request) {
+  const apiKey = process.env.SOLAPI_API_KEY;
+  const apiSecret = process.env.SOLAPI_API_SECRET;
+  const smsFrom = process.env.SOLAPI_SMS_FROM;
+  if (!apiKey || !apiSecret || !smsFrom) {
+    return NextResponse.json(
+      { error: "문자 인증 서비스가 아직 설정되지 않았습니다. 관리자에게 문의해주세요." },
+      { status: 503 },
+    );
+  }
+
   const { phone } = await req.json();
   if (!phone || !/^01[0-9]{8,9}$/.test(phone.replace(/-/g, ""))) {
     return NextResponse.json({ error: "올바른 휴대폰 번호를 입력해주세요." }, { status: 400 });
@@ -30,9 +35,10 @@ export async function POST(req: Request) {
     ON CONFLICT (phone) DO UPDATE SET code = ${code}, expires_at = ${expiresAt}
   `;
 
+  const solapi = new SolapiMessageService(apiKey, apiSecret);
   await solapi.send({
     to: normalized,
-    from: process.env.SOLAPI_SMS_FROM!,
+    from: smsFrom,
     text: `[Ideal AI] 인증번호: ${code} (3분 내 입력)`,
   });
 

@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [testLoading, setTestLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
@@ -33,6 +34,25 @@ export default function LoginPage() {
       setError("오류가 발생했습니다. 다시 시도해주세요.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleTestLogin() {
+    setTestLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/dev-login", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "테스트 로그인에 실패했습니다.");
+        return;
+      }
+      router.push("/analytics");
+      router.refresh();
+    } catch {
+      setError("테스트 로그인 중 오류가 발생했습니다.");
+    } finally {
+      setTestLoading(false);
     }
   }
 
@@ -112,6 +132,22 @@ export default function LoginPage() {
             회원가입
           </Link>
         </p>
+
+        {process.env.NODE_ENV === "development" && (
+          <div className="mt-6 pt-5 border-t border-dashed border-gray-200">
+            <button
+              type="button"
+              onClick={handleTestLogin}
+              disabled={testLoading || loading}
+              className="w-full py-2.5 border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium rounded-lg hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {testLoading ? "테스트 환경 준비 중..." : "테스트로 넘어가기 →"}
+            </button>
+            <p className="mt-2 text-center text-xs text-gray-400">
+              로컬 개발 환경에서만 표시됩니다
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

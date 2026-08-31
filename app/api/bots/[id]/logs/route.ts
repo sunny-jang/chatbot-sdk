@@ -20,7 +20,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
 
   const rows = await sql`
-    SELECT id, bot_id, user_message, bot_reply, created_at
+    SELECT id, bot_id, session_id, user_message, bot_reply, created_at,
+           intent, refused, refusal_reason, model, input_tokens, output_tokens,
+           latency_ms, api_success, estimated_cost_usd, tool_name, tool_success
     FROM chat_logs WHERE bot_id = ${id}
     ORDER BY created_at DESC LIMIT ${limit}
   `;

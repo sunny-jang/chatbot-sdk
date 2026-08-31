@@ -25,7 +25,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 
   const rows = await sql`
-    SELECT id, bot_id, title, content, created_at
+    SELECT id, bot_id, folder_id, title, content, created_at
     FROM documents WHERE bot_id = ${id} ORDER BY created_at DESC
   `;
   return NextResponse.json(rows as unknown as Document[]);

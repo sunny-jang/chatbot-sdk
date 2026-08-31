@@ -9,17 +9,24 @@ const PLANS = [
     highlight: false,
   },
   {
+    name: "그로스",
+    price: "247,000",
+    desc: "여러 업무 봇을 운영하는 팀",
+    features: ["챗봇 3개", "AI 봇 + RAG 문서 검색", "월 5,000건 대화", "다중 문서 폴더", "대화 분석"],
+    highlight: true,
+  },
+  {
     name: "프로",
     price: "387,000",
     desc: "성장하는 비즈니스를 위해",
     features: ["챗봇 5개", "AI 봇 + RAG 문서 검색", "월 10,000건 대화", "위젯 커스터마이징", "대화 기록 열람"],
-    highlight: true,
+    highlight: false,
   },
   {
     name: "엔터프라이즈",
     price: "문의",
     desc: "대용량·전용 인프라 필요 시",
-    features: ["챗봇 무제한", "전용 서버 구성", "무제한 대화", "전담 기술 지원", "온프레미스 가능"],
+    features: ["챗봇 수 협의", "전용 서버 구성", "대화량 협의", "전담 기술 지원", "온프레미스 가능"],
     highlight: false,
   },
 ];
@@ -27,7 +34,7 @@ const PLANS = [
 export default function PlanPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white px-6 py-20">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="text-center mb-14">
           <div className="inline-block px-3 py-1 bg-blue-500/20 border border-blue-400/30 rounded-full text-blue-300 text-xs font-semibold mb-5 tracking-wide">
             PRICING
@@ -36,7 +43,7 @@ export default function PlanPage() {
           <p className="text-white/50 text-lg">서비스 규모에 맞는 플랜을 선택하세요</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-14">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-14">
           {PLANS.map((plan) => (
             <div
               key={plan.name}

@@ -2,6 +2,8 @@
   // Remove any pre-existing widget to prevent duplicate instances
   const existing = document.getElementById("__chatbot-widget");
   if (existing) existing.remove();
+  const existingStyle = document.getElementById("__chatbot-widget-style");
+  if (existingStyle) existingStyle.remove();
 
   const script = document.currentScript;
   const botId = script.getAttribute("data-bot-id");
@@ -87,6 +89,7 @@
     `;
 
     const styleEl = document.createElement("style");
+    styleEl.id = "__chatbot-widget-style";
     styleEl.textContent = css;
     document.head.appendChild(styleEl);
 

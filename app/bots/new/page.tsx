@@ -1,7 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+
+type PlanUsage = {
+  plan_name: string;
+  subscription_status: string;
+  bot_count: number;
+  bot_limit: number | null;
+};
 
 export default function NewBotPage() {
   const router = useRouter();
@@ -12,6 +20,15 @@ export default function NewBotPage() {
   const [serviceDesc, setServiceDesc] = useState("");
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [usage, setUsage] = useState<PlanUsage | null>(null);
+
+  useEffect(() => {
+    fetch("/api/tenant/plan")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => setUsage(data))
+      .catch(() => setUsage(null));
+  }, []);
 
   async function handleGenerate() {
     if (!serviceDesc.trim()) return;
@@ -32,6 +49,7 @@ export default function NewBotPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/bots", {
         method: "POST",
@@ -39,6 +57,10 @@ export default function NewBotPage() {
         body: JSON.stringify({ name, type, system_prompt: systemPrompt, model }),
       });
       const bot = await res.json();
+      if (!res.ok) {
+        setError(bot.error || "챗봇을 생성하지 못했습니다.");
+        return;
+      }
       router.push(`/bots/${bot.id}`);
     } finally {
       setLoading(false);
@@ -49,6 +71,24 @@ export default function NewBotPage() {
     <div className="max-w-xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-1">새 챗봇 만들기</h2>
       <p className="text-sm text-gray-500 mb-6">챗봇 유형과 기본 설정을 입력하세요</p>
+
+      {usage && (
+        <div className="mb-5 flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm">
+          <div>
+            <span className="font-semibold text-violet-900">{usage.plan_name} 플랜</span>
+            <span className="ml-2 text-violet-600">
+              챗봇 {usage.bot_count} / {usage.bot_limit ?? "한도 설정 필요"}
+            </span>
+          </div>
+          <Link href="/plan" className="font-medium text-violet-700 hover:text-violet-900">플랜 보기</Link>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error} <Link href="/plan" className="font-semibold underline">플랜 확인하기</Link>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* 타입 선택 */}
@@ -157,7 +197,7 @@ export default function NewBotPage() {
 
         <button
           type="submit"
-          disabled={loading || !name}
+          disabled={loading || !name || Boolean(usage && (usage.subscription_status !== "active" || usage.bot_limit === null || usage.bot_count >= usage.bot_limit))}
           className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? "생성 중..." : "챗봇 생성"}

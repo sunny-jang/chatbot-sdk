@@ -91,6 +91,7 @@ export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: str
 
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {navLink("/", "🤖", "챗봇", true)}
+          {navLink("/analytics", "◫", "분석 대시보드")}
           {navLink("/bots/new", "➕", "새 챗봇 만들기")}
           {navLink("/settings", "⚙️", "설정")}
 

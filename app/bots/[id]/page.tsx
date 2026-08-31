@@ -53,6 +53,13 @@ export default async function BotDetailPage({
   const proto = host.startsWith("localhost") ? "http" : "https";
   const baseUrl = `${proto}://${host}`;
   const embedCode = `<script src="${baseUrl}/chatbot-widget.js" data-bot-id="${bot.id}" data-endpoint="${baseUrl}"></script>`;
+  const npmInstallCode = "npm install ideal-ai-chatbot-sdk";
+  const npmUsageCode = `import { initIdealAIChatbot } from "ideal-ai-chatbot-sdk";
+
+const chatbot = await initIdealAIChatbot({
+  botId: "${bot.id}",
+  endpoint: "${baseUrl}",
+});`;
 
   return (
     <div className="max-w-2xl">
@@ -62,7 +69,26 @@ export default async function BotDetailPage({
       <BotSettings bot={bot} />
 
       <div className="mt-6 bg-white border border-gray-200 rounded-xl p-5">
-        <h3 className="font-semibold text-gray-900 mb-1">임베드 코드</h3>
+        <h3 className="font-semibold text-gray-900 mb-1">npm으로 설치</h3>
+        <p className="text-sm text-gray-500 mb-3">
+          React, Next.js, Vue 등 패키지 기반 프로젝트에 권장합니다
+        </p>
+        <div className="relative mb-3">
+          <pre className="bg-gray-900 text-green-400 text-xs p-4 rounded-lg overflow-x-auto">
+            {npmInstallCode}
+          </pre>
+          <CopyButton text={npmInstallCode} />
+        </div>
+        <div className="relative">
+          <pre className="bg-gray-900 text-sky-300 text-xs p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">
+            {npmUsageCode}
+          </pre>
+          <CopyButton text={npmUsageCode} />
+        </div>
+      </div>
+
+      <div className="mt-6 bg-white border border-gray-200 rounded-xl p-5">
+        <h3 className="font-semibold text-gray-900 mb-1">스크립트로 설치</h3>
         <p className="text-sm text-gray-500 mb-3">
           웹사이트 <code className="bg-gray-100 px-1 rounded text-xs">&lt;/body&gt;</code> 태그 바로 위에 붙여넣으세요
         </p>

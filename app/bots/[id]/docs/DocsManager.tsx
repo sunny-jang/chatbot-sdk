@@ -83,9 +83,35 @@ export default function DocsManager({
   const rootFolders = folders.filter((f) => !f.parent_id);
   const childFolders = (parentId: string) => folders.filter((f) => f.parent_id === parentId);
 
+  function getDescendantIds(folderId: string): string[] {
+    const children = childFolders(folderId);
+    return [folderId, ...children.flatMap((child) => getDescendantIds(child.id))];
+  }
+
+  function flattenFolders(parentId: string | null = null, depth = 0): { folder: Folder; depth: number; path: string }[] {
+    const siblings = folders.filter((folder) => folder.parent_id === parentId);
+    return siblings.flatMap((folder) => {
+      const parent = folders.find((candidate) => candidate.id === folder.parent_id);
+      const parentPath = parent ? getFolderPath(parent.id) : "";
+      return [
+        { folder, depth, path: parentPath ? `${parentPath} / ${folder.name}` : folder.name },
+        ...flattenFolders(folder.id, depth + 1),
+      ];
+    });
+  }
+
+  function getFolderPath(folderId: string): string {
+    const folder = folders.find((candidate) => candidate.id === folderId);
+    if (!folder) return "";
+    return folder.parent_id ? `${getFolderPath(folder.parent_id)} / ${folder.name}` : folder.name;
+  }
+
+  const flatFolders = flattenFolders();
+  const selectedFolderIds = selectedFolder ? new Set(getDescendantIds(selectedFolder)) : null;
+
   const visibleDocs = selectedFolder === null
     ? docs
-    : docs.filter((d) => d.folder_id === selectedFolder);
+    : docs.filter((d) => d.folder_id && selectedFolderIds?.has(d.folder_id));
 
   async function handleAddDoc(e: React.FormEvent) {
     e.preventDefault();
@@ -127,6 +153,9 @@ export default function DocsManager({
       });
       const folder = await res.json();
       setFolders((prev) => [...prev, folder].sort((a, b) => a.name.localeCompare(b.name)));
+      if (folder.parent_id) {
+        setExpandedFolders((prev) => new Set(prev).add(folder.parent_id));
+      }
       setNewFolderName("");
       setNewFolderParent("");
       setShowFolderForm(false);
@@ -136,10 +165,35 @@ export default function DocsManager({
   }
 
   async function handleDeleteFolder(folderId: string) {
+    const affectedIds = getDescendantIds(folderId);
+    const affectedDocs = docs.filter((doc) => doc.folder_id && affectedIds.includes(doc.folder_id)).length;
+    if (!window.confirm(`이 폴더와 하위 폴더를 삭제할까요? 포함된 문서 ${affectedDocs}개는 폴더 없음으로 이동합니다.`)) return;
     await fetch(`/api/bots/${botId}/folders/${folderId}`, { method: "DELETE" });
-    setFolders((prev) => prev.filter((f) => f.id !== folderId));
-    setDocs((prev) => prev.map((d) => d.folder_id === folderId ? { ...d, folder_id: null } : d));
-    if (selectedFolder === folderId) setSelectedFolder(null);
+    setFolders((prev) => prev.filter((f) => !affectedIds.includes(f.id)));
+    setDocs((prev) => prev.map((d) => d.folder_id && affectedIds.includes(d.folder_id) ? { ...d, folder_id: null } : d));
+    if (selectedFolder && affectedIds.includes(selectedFolder)) setSelectedFolder(null);
+  }
+
+  async function handleRenameFolder(folder: Folder) {
+    const name = window.prompt("새 폴더 이름을 입력하세요.", folder.name)?.trim();
+    if (!name || name === folder.name) return;
+    const res = await fetch(`/api/bots/${botId}/folders/${folder.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) setFolders((prev) => prev.map((item) => item.id === folder.id ? { ...item, name } : item));
+  }
+
+  async function handleMoveDoc(docId: string, folderId: string) {
+    const res = await fetch(`/api/bots/${botId}/docs/${docId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder_id: folderId || null }),
+    });
+    if (!res.ok) return;
+    const updated = await res.json();
+    setDocs((prev) => prev.map((doc) => doc.id === docId ? { ...doc, folder_id: updated.folder_id } : doc));
   }
 
   function toggleFolder(id: string) {
@@ -155,7 +209,8 @@ export default function DocsManager({
     const hasChildren = children.length > 0;
     const isExpanded = expandedFolders.has(folder.id);
     const isSelected = selectedFolder === folder.id;
-    const count = docs.filter((d) => d.folder_id === folder.id).length;
+    const descendantIds = getDescendantIds(folder.id);
+    const count = docs.filter((d) => d.folder_id && descendantIds.includes(d.folder_id)).length;
 
     return (
       <div>
@@ -184,6 +239,13 @@ export default function DocsManager({
             <span className="text-xs text-gray-400 ml-auto shrink-0">{count}</span>
           </span>
           <button
+            onClick={(e) => { e.stopPropagation(); handleRenameFolder(folder); }}
+            className="opacity-0 group-hover:opacity-100 text-xs text-gray-400 hover:text-blue-600 transition-opacity ml-1"
+            title="이름 변경"
+          >
+            ✎
+          </button>
+          <button
             onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
             className="opacity-0 group-hover:opacity-100 text-xs text-red-400 hover:text-red-600 transition-opacity ml-1"
           >
@@ -209,7 +271,10 @@ export default function DocsManager({
           <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">폴더</span>
             <button
-              onClick={() => setShowFolderForm(true)}
+              onClick={() => {
+                setNewFolderParent(selectedFolder ?? "");
+                setShowFolderForm(true);
+              }}
               className="text-xs text-blue-600 hover:text-blue-800"
             >
               + 추가
@@ -255,8 +320,10 @@ export default function DocsManager({
                 className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="">최상위 폴더</option>
-                {rootFolders.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
+                {flatFolders.map(({ folder, depth, path }) => (
+                  <option key={folder.id} value={folder.id}>
+                    {`${"　".repeat(depth)}${path}`}
+                  </option>
                 ))}
               </select>
             )}
@@ -324,8 +391,10 @@ export default function DocsManager({
                 className="px-2 py-1 border border-gray-200 rounded-lg text-xs bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="">📁 폴더 없음</option>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.id}>📁 {f.name}</option>
+                {flatFolders.map(({ folder, depth, path }) => (
+                  <option key={folder.id} value={folder.id}>
+                    {`${"　".repeat(depth)}📁 ${path}`}
+                  </option>
                 ))}
               </select>
             </div>
@@ -400,7 +469,7 @@ export default function DocsManager({
           <span className="text-sm font-medium text-gray-700">
             {selectedFolder === null
               ? "전체 문서"
-              : `📁 ${folders.find((f) => f.id === selectedFolder)?.name}`}
+              : `📁 ${getFolderPath(selectedFolder)} · 하위 폴더 포함`}
           </span>
           <span className="text-xs text-gray-400">({visibleDocs.length}건)</span>
         </div>
@@ -413,7 +482,7 @@ export default function DocsManager({
         ) : (
           <div className="space-y-2">
             {visibleDocs.map((doc) => {
-              const folderName = folders.find((f) => f.id === doc.folder_id)?.name;
+              const folderName = doc.folder_id ? getFolderPath(doc.folder_id) : "";
               return (
                 <div key={doc.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                   <div className="flex items-center gap-3 px-5 py-4">
@@ -427,6 +496,19 @@ export default function DocsManager({
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <select
+                        value={doc.folder_id ?? ""}
+                        onChange={(event) => handleMoveDoc(doc.id, event.target.value)}
+                        className="max-w-48 px-2 py-1 border border-gray-200 rounded-lg text-xs bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        aria-label={`${doc.title} 폴더 이동`}
+                      >
+                        <option value="">폴더 없음</option>
+                        {flatFolders.map(({ folder, depth, path }) => (
+                          <option key={folder.id} value={folder.id}>
+                            {`${"　".repeat(depth)}${path}`}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
                         className="text-xs text-gray-500 hover:text-gray-700"

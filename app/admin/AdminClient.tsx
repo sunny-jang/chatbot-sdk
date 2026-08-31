@@ -8,6 +8,9 @@ type Tenant = {
   api_key: string;
   created_at: number;
   bot_count: number;
+  plan: "starter" | "growth" | "pro" | "enterprise";
+  subscription_status: "active" | "inactive";
+  enterprise_bot_limit: number | null;
 };
 
 export default function AdminClient({ initialTenants }: { initialTenants: Tenant[] }) {
@@ -28,7 +31,13 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
         body: JSON.stringify({ name: newName.trim() }),
       });
       const data = await res.json();
-      setTenants((prev) => [{ ...data, bot_count: 0 }, ...prev]);
+      setTenants((prev) => [{
+        ...data,
+        bot_count: 0,
+        plan: "starter",
+        subscription_status: "active",
+        enterprise_bot_limit: null,
+      }, ...prev]);
       setNewApiKey({ name: data.name, key: data.api_key });
       setNewName("");
     } finally {
@@ -46,6 +55,28 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
     await navigator.clipboard.writeText(key);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  async function updatePlan(
+    tenant: Tenant,
+    changes: Partial<Pick<Tenant, "plan" | "subscription_status" | "enterprise_bot_limit">>,
+  ) {
+    const next = { ...tenant, ...changes };
+    if (next.plan === "enterprise" && !next.enterprise_bot_limit) {
+      next.enterprise_bot_limit = Math.max(10, next.bot_count);
+    }
+    const res = await fetch(`/api/admin/tenants/${tenant.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: next.plan,
+        subscription_status: next.subscription_status,
+        enterprise_bot_limit: next.enterprise_bot_limit,
+      }),
+    });
+    if (!res.ok) return;
+    const saved = await res.json();
+    setTenants((prev) => prev.map((item) => item.id === tenant.id ? { ...item, ...saved } : item));
   }
 
   return (
@@ -156,6 +187,44 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
                   <p className="text-xs mt-0.5" style={{ color: "#c4b8e0" }}>
                     {new Date(Number(t.created_at) * 1000).toLocaleDateString("ko-KR")} 등록
                   </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <select
+                      value={t.plan}
+                      onChange={(event) => updatePlan(t, { plan: event.target.value as Tenant["plan"] })}
+                      className="rounded-lg border px-2 py-1.5 text-xs bg-white"
+                      style={{ borderColor: "#d4cfff", color: "#4c3b78" }}
+                      aria-label={`${t.name} 플랜`}
+                    >
+                      <option value="starter">스타터 · 1개</option>
+                      <option value="growth">그로스 · 3개</option>
+                      <option value="pro">프로 · 5개</option>
+                      <option value="enterprise">엔터프라이즈 · 협의</option>
+                    </select>
+                    {t.plan === "enterprise" && (
+                      <label className="flex items-center gap-1 text-xs" style={{ color: "#7565a7" }}>
+                        최대
+                        <input
+                          type="number"
+                          min={1}
+                          defaultValue={t.enterprise_bot_limit ?? 10}
+                          onBlur={(event) => updatePlan(t, { enterprise_bot_limit: Math.max(1, Number(event.target.value) || 1) })}
+                          className="w-16 rounded-lg border px-2 py-1.5 text-xs"
+                          style={{ borderColor: "#d4cfff" }}
+                        />
+                        개
+                      </label>
+                    )}
+                    <select
+                      value={t.subscription_status}
+                      onChange={(event) => updatePlan(t, { subscription_status: event.target.value as Tenant["subscription_status"] })}
+                      className="rounded-lg border px-2 py-1.5 text-xs bg-white"
+                      style={{ borderColor: "#d4cfff", color: t.subscription_status === "active" ? "#15803d" : "#b91c1c" }}
+                      aria-label={`${t.name} 구독 상태`}
+                    >
+                      <option value="active">구독 활성</option>
+                      <option value="inactive">구독 중지</option>
+                    </select>
+                  </div>
                 </div>
                 <button
                   onClick={() => handleDelete(t.id, t.name)}

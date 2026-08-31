@@ -42,6 +42,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { name, parent_id } = await req.json();
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
+  if (parent_id) {
+    const parent = await sql`
+      SELECT id FROM doc_folders WHERE id = ${parent_id} AND bot_id = ${id}
+    `;
+    if (!parent[0]) {
+      return NextResponse.json({ error: "Parent folder not found" }, { status: 404 });
+    }
+  }
+
   const folderId = randomUUID();
   const rows = await sql`
     INSERT INTO doc_folders (id, bot_id, name, parent_id)

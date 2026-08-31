@@ -27,6 +27,9 @@ async function _runInit() {
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS oauth_sub TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS phone TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'starter'`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'active'`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS enterprise_bot_limit INTEGER`;
   // 어드민 이메일 목록에서 is_admin 자동 갱신
   const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e: string) => e.trim()).filter(Boolean);
   if (adminEmails.length > 0) {
@@ -63,6 +66,17 @@ async function _runInit() {
     )
   `;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL DEFAULT 'legacy'`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS intent TEXT`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS refused BOOLEAN`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS refusal_reason TEXT`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS model TEXT`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS input_tokens INTEGER`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS output_tokens INTEGER`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS latency_ms INTEGER`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS api_success BOOLEAN`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS estimated_cost_usd DOUBLE PRECISION`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS tool_name TEXT`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS tool_success BOOLEAN`;
   await sql`
     CREATE TABLE IF NOT EXISTS doc_folders (
       id TEXT PRIMARY KEY,
@@ -112,6 +126,9 @@ export type Tenant = {
   password_hash: string | null;
   phone: string | null;
   is_admin: boolean;
+  plan: "starter" | "growth" | "pro" | "enterprise";
+  subscription_status: "active" | "inactive";
+  enterprise_bot_limit: number | null;
   created_at: number;
 };
 
@@ -135,6 +152,17 @@ export type ChatLog = {
   user_message: string;
   bot_reply: string;
   created_at: number;
+  intent: string | null;
+  refused: boolean | null;
+  refusal_reason: string | null;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  latency_ms: number | null;
+  api_success: boolean | null;
+  estimated_cost_usd: number | null;
+  tool_name: string | null;
+  tool_success: boolean | null;
 };
 
 export type DocFolder = {
