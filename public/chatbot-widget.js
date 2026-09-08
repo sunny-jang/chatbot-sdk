@@ -183,11 +183,29 @@
       addChoices(qaFolders.map((folder) => ({ label: folder.name, folder })), ({ folder }) => {
         addMessage(folder.name, "user");
         addChoices(folder.questions.map((question) => ({ label: question.question, question })), ({ question }) => {
-          addMessage(question.question, "user");
-          addMessage(question.answer, "bot");
-          addChoices([{ label: "다른 질문 보기" }], showFolderChoices);
+          sendSelectedQuestion(question);
         });
       });
+    }
+
+    async function sendSelectedQuestion(question) {
+      addMessage(question.question, "user");
+      const typingEl = addMessage("입력 중...", "bot typing");
+      try {
+        const res = await fetch(`${endpoint}/api/chat/${botId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: question.question, qaId: question.id, sessionId }),
+        });
+        const data = await res.json();
+        typingEl.textContent = data.reply || "오류가 발생했습니다.";
+        typingEl.classList.remove("typing");
+      } catch {
+        typingEl.textContent = "네트워크 오류가 발생했습니다.";
+        typingEl.classList.remove("typing");
+      } finally {
+        addChoices([{ label: "다른 질문 보기" }], showFolderChoices);
+      }
     }
 
     async function sendMessage() {

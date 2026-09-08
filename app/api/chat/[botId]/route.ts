@@ -55,7 +55,7 @@ export async function POST(
   { params }: { params: Promise<{ botId: string }> }
 ) {
   const { botId } = await params;
-  const { message, history = [], sessionId = randomUUID() } = await req.json();
+  const { message, history = [], sessionId = randomUUID(), qaId } = await req.json();
 
   if (!message) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
@@ -71,6 +71,15 @@ export async function POST(
   const openai = new OpenAI({ apiKey: tenantApiKey ?? process.env.OPENAI_API_KEY });
 
   if (bot.type === "qa") {
+    if (qaId) {
+      const selectedRows = await sql`
+        SELECT question, answer FROM qa_pairs WHERE id = ${qaId} AND bot_id = ${botId}
+      `;
+      const selected = selectedRows[0] as { question: string; answer: string } | undefined;
+      if (!selected) return NextResponse.json({ error: "Q&A not found" }, { status: 404 });
+      await saveLog(botId, sessionId, selected.question, selected.answer);
+      return NextResponse.json({ reply: selected.answer });
+    }
     const pairRows = await sql`
       SELECT id, answer, embedding FROM qa_pairs WHERE bot_id = ${botId}
     `;

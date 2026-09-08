@@ -113,12 +113,14 @@ export default async function HomePage() {
                 >
                   ⚙️ 설정
                 </Link>
-                <Link
-                  href={`/bots/${bot.id}/docs`}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  📄 문서
-                </Link>
+                {bot.type === "ai" && (
+                  <Link
+                    href={`/bots/${bot.id}/docs`}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    📄 문서
+                  </Link>
+                )}
                 {bot.type === "qa" && (
                   <Link
                     href={`/bots/${bot.id}/qa`}
