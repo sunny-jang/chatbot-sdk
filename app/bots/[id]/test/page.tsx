@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
-import { Bot } from "@/lib/db";
+import { Bot, initSchema, QaFolder, QaPair } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
 import TestChat from "./TestChat";
 import BotHeader from "../BotHeader";
@@ -41,16 +41,21 @@ export default async function TestPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  await initSchema();
   const tenantId = await getTenantId();
   const botRows = await sql`SELECT * FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
+  const folders = (await sql`SELECT id, bot_id, name, created_at FROM qa_folders WHERE bot_id = ${id} ORDER BY name ASC`) as unknown as QaFolder[];
+  const qaPairs = bot.type === "qa"
+    ? (await sql`SELECT id, bot_id, folder_id, question, answer, created_at FROM qa_pairs WHERE bot_id = ${id} ORDER BY created_at ASC`) as unknown as QaPair[]
+    : [];
 
   return (
     <div className="max-w-2xl">
       <BotHeader bot={bot} current="테스트" />
       <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
-      <TestChat botId={id} />
+      <TestChat botId={id} folders={folders} qaPairs={qaPairs} logoUrl={bot.logo_url} themeColor={bot.widget_color ?? "#a855f7"} />
     </div>
   );
 }

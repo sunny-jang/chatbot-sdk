@@ -52,6 +52,7 @@ async function _runInit() {
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS widget_title TEXT`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS widget_color TEXT DEFAULT '#2563eb'`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS greeting_message TEXT`;
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS logo_url TEXT`;
   await sql`
     CREATE TABLE IF NOT EXISTS chat_logs (
       id TEXT PRIMARY KEY,
@@ -85,15 +86,25 @@ async function _runInit() {
   `;
   await sql`ALTER TABLE documents ADD COLUMN IF NOT EXISTS folder_id TEXT REFERENCES doc_folders(id) ON DELETE SET NULL`;
   await sql`
+    CREATE TABLE IF NOT EXISTS qa_folders (
+      id TEXT PRIMARY KEY,
+      bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS qa_pairs (
       id TEXT PRIMARY KEY,
       bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      folder_id TEXT REFERENCES qa_folders(id) ON DELETE SET NULL,
       question TEXT NOT NULL,
       answer TEXT NOT NULL,
       embedding TEXT,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
+  await sql`ALTER TABLE qa_pairs ADD COLUMN IF NOT EXISTS folder_id TEXT REFERENCES qa_folders(id) ON DELETE SET NULL`;
   await sql`
     CREATE TABLE IF NOT EXISTS phone_otps (
       phone TEXT PRIMARY KEY,
@@ -125,6 +136,7 @@ export type Bot = {
   widget_title: string | null;
   widget_color: string | null;
   greeting_message: string | null;
+  logo_url: string | null;
   created_at: number;
 };
 
@@ -158,8 +170,16 @@ export type Document = {
 export type QaPair = {
   id: string;
   bot_id: string;
+  folder_id: string | null;
   question: string;
   answer: string;
   embedding: string | null;
+  created_at: number;
+};
+
+export type QaFolder = {
+  id: string;
+  bot_id: string;
+  name: string;
   created_at: number;
 };

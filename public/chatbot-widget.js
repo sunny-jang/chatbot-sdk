@@ -22,6 +22,8 @@
     const color = settings.color || "#2563eb";
     const title = settings.title || "💬 Ideal AI";
     const greeting = settings.greeting || null;
+    const logo = settings.logo || null;
+    const qaFolders = settings.qaFolders || [];
 
     // ── Styles ────────────────────────────────────────────────────────────────
     const css = `
@@ -29,7 +31,7 @@
       #__chatbot-fab {
         position: fixed; bottom: 24px; right: 24px; z-index: 9998;
         width: 52px; height: 52px; border-radius: 50%;
-        background: ${color}; color: white; border: none; cursor: pointer;
+        background: linear-gradient(135deg, #ec4899, ${color}); color: white; border: none; cursor: pointer;
         font-size: 22px; box-shadow: 0 4px 16px ${color}66;
         display: flex; align-items: center; justify-content: center;
         transition: transform 0.2s, box-shadow 0.2s;
@@ -46,11 +48,13 @@
       }
       #__chatbot-panel.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: all; }
       #__chatbot-header {
-        background: ${color}; color: white; padding: 14px 16px;
+        background: linear-gradient(135deg, #ec4899, ${color}); color: white; padding: 14px 16px;
         display: flex; align-items: center; justify-content: space-between;
         flex-shrink: 0;
       }
       #__chatbot-header .title { font-weight: 600; font-size: 15px; }
+      #__chatbot-header .title { display: flex; align-items: center; gap: 9px; }
+      #__chatbot-header .logo { width: 30px; height: 30px; border-radius: 8px; background: white; object-fit: contain; }
       #__chatbot-header .close { background: none; border: none; color: white; cursor: pointer; font-size: 18px; line-height: 1; opacity: 0.8; }
       #__chatbot-header .close:hover { opacity: 1; }
       #__chatbot-messages {
@@ -66,6 +70,9 @@
       .cb-msg.user { align-self: flex-end; background: ${color}; color: white; border-bottom-right-radius: 4px; }
       .cb-msg.bot { align-self: flex-start; background: #f3f4f6; color: #111; border-bottom-left-radius: 4px; }
       .cb-msg.typing { color: #9ca3af; font-style: italic; }
+      .cb-choices { display: flex; flex-wrap: wrap; gap: 7px; align-self: stretch; margin: 2px 0 6px; }
+      .cb-choice { padding: 8px 11px; border-radius: 999px; border: 1px solid ${color}55; background: #fff; color: ${color}; font-size: 13px; cursor: pointer; text-align: left; }
+      .cb-choice:hover { background: ${color}0d; border-color: ${color}; }
       #__chatbot-input-area {
         padding: 10px 12px; border-top: 1px solid #f0f0f0;
         display: flex; gap: 8px; flex-shrink: 0;
@@ -105,7 +112,7 @@
     panel.id = "__chatbot-panel";
     panel.innerHTML = `
       <div id="__chatbot-header">
-        <span class="title">💬 ${title}</span>
+        <span class="title">${logo ? `<img class="logo" src="${logo}" alt="" />` : "💬"}<span>${title}</span></span>
         <button class="close" aria-label="닫기">✕</button>
       </div>
       <div id="__chatbot-messages"></div>
@@ -131,6 +138,7 @@
     let sessionId = crypto.randomUUID();
 
     if (greeting) addMessage(greeting, "bot");
+    if (qaFolders.length) showFolderChoices();
 
     function togglePanel() {
       open = !open;
@@ -144,6 +152,7 @@
         sessionId = crypto.randomUUID();
         messagesEl.innerHTML = "";
         if (greeting) addMessage(greeting, "bot");
+        if (qaFolders.length) showFolderChoices();
       }
     }
 
@@ -154,6 +163,31 @@
       messagesEl.appendChild(el);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       return el;
+    }
+
+    function addChoices(items, onChoose) {
+      const wrap = document.createElement("div");
+      wrap.className = "cb-choices";
+      items.forEach((item) => {
+        const button = document.createElement("button");
+        button.className = "cb-choice";
+        button.textContent = item.label;
+        button.addEventListener("click", () => { wrap.remove(); onChoose(item); });
+        wrap.appendChild(button);
+      });
+      messagesEl.appendChild(wrap);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function showFolderChoices() {
+      addChoices(qaFolders.map((folder) => ({ label: folder.name, folder })), ({ folder }) => {
+        addMessage(folder.name, "user");
+        addChoices(folder.questions.map((question) => ({ label: question.question, question })), ({ question }) => {
+          addMessage(question.question, "user");
+          addMessage(question.answer, "bot");
+          addChoices([{ label: "다른 질문 보기" }], showFolderChoices);
+        });
+      });
     }
 
     async function sendMessage() {

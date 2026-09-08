@@ -12,6 +12,8 @@ export default function BotSettings({ bot }: { bot: Bot }) {
   const [widgetTitle, setWidgetTitle] = useState(bot.widget_title ?? "");
   const [widgetColor, setWidgetColor] = useState(bot.widget_color ?? "#2563eb");
   const [greeting, setGreeting] = useState(bot.greeting_message ?? "");
+  const [logoUrl, setLogoUrl] = useState(bot.logo_url ?? "");
+  const [logoUploading, setLogoUploading] = useState(false);
   const [serviceDesc, setServiceDesc] = useState("");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -60,6 +62,17 @@ export default function BotSettings({ bot }: { bot: Bot }) {
     setDeleting(true);
     await fetch(`/api/bots/${bot.id}`, { method: "DELETE" });
     router.push("/");
+  }
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    const form = new FormData(); form.append("file", file);
+    const res = await fetch(`/api/bots/${bot.id}/logo`, { method: "POST", body: form });
+    const data = await res.json();
+    if (res.ok) setLogoUrl(data.logo_url);
+    setLogoUploading(false); e.target.value = "";
   }
 
   return (
@@ -139,6 +152,20 @@ export default function BotSettings({ bot }: { bot: Bot }) {
       {/* 위젯 커스터마이징 */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
         <h3 className="font-semibold text-gray-900">위젯 설정</h3>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">챗봇 로고</label>
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
+              {logoUrl ? <img src={logoUrl} alt="챗봇 로고" className="w-full h-full object-contain" /> : <span className="text-xl">💬</span>}
+            </div>
+            <label className="px-3 py-2 rounded-lg bg-purple-50 text-purple-700 text-xs font-medium cursor-pointer hover:bg-purple-100">
+              {logoUploading ? "업로드 중..." : "이미지 선택"}
+              <input type="file" accept="image/*" className="hidden" disabled={logoUploading} onChange={handleLogoUpload} />
+            </label>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">PNG·JPG, 최대 2MB</p>
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
