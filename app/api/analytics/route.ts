@@ -3,6 +3,9 @@ import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { classifyIntent, detectRefusal } from "@/lib/analytics";
+import { createAnalyticsMockData } from "@/lib/analyticsMock";
+import { getMonthlySessionLimit, normalizePlan } from "@/lib/plans";
+import { getMonthlySessionUsage } from "@/lib/monthlyUsage";
 
 type AnalyticsRow = {
   id: string;
@@ -32,14 +35,18 @@ export async function GET(req: Request) {
   const tenantId = jar.get("tenant_id")?.value;
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const url = new URL(req.url);
+  if (url.searchParams.get("mock") === "1" && process.env.NODE_ENV !== "production") {
+    return NextResponse.json(createAnalyticsMockData());
+  }
+
   await initSchema();
 
-  const url = new URL(req.url);
   const days = Math.min(Math.max(Number(url.searchParams.get("days") ?? 30), 1), 365);
   const botId = url.searchParams.get("botId");
   const since = Math.floor(Date.now() / 1000) - days * 24 * 60 * 60;
 
-  const [botRows, logRows] = await Promise.all([
+  const [botRows, logRows, tenantRows] = await Promise.all([
     sql`SELECT id, name FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC`,
     botId && botId !== "all"
       ? sql`
@@ -58,7 +65,12 @@ export async function GET(req: Request) {
           ORDER BY l.created_at DESC
           LIMIT 10000
         `,
+    sql`SELECT plan, enterprise_monthly_session_limit FROM tenants WHERE id = ${tenantId}`,
   ]);
+
+  const tenantPlan = normalizePlan(tenantRows[0]?.plan);
+  const monthlyLimit = getMonthlySessionLimit(tenantPlan, tenantRows[0]?.enterprise_monthly_session_limit as number | null);
+  const planUsage = monthlyLimit === null ? null : await getMonthlySessionUsage(tenantId, monthlyLimit);
 
   const logs = (logRows as unknown as AnalyticsRow[]).map((row) => {
     const refusal = row.refused === null ? detectRefusal(row.bot_reply) : {
@@ -140,6 +152,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     generatedAt: new Date().toISOString(),
     periodDays: days,
+    planUsage,
     bots: botRows.map((row) => ({ id: row.id as string, name: row.name as string })),
     coverage: {
       logs: logs.length,
@@ -163,6 +176,25 @@ export async function GET(req: Request) {
     daily: [...dailyMap.entries()].map(([date, value]) => ({ date, messages: value.messages, conversations: value.sessions.size, refusals: value.refusals })),
     intents,
     refusalReasons,
+    refusedConversations: logs.filter((log) => log.refused).slice(0, 50).map((log) => ({
+      id: log.id,
+      botId: log.bot_id,
+      botName: log.bot_name,
+      sessionId: log.session_id,
+      userMessage: log.user_message,
+      botReply: log.bot_reply,
+      createdAt: log.created_at,
+      intent: log.intent,
+      refused: true,
+      refusalReason: log.refusal_reason,
+      model: log.model,
+      inputTokens: log.input_tokens,
+      outputTokens: log.output_tokens,
+      latencyMs: log.latency_ms,
+      apiSuccess: log.api_success,
+      costUsd: log.estimated_cost_usd,
+      toolName: log.tool_name,
+    })),
     tools,
     conversations: logs.slice(0, 100).map((log) => ({
       id: log.id,

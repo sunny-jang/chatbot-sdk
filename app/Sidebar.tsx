@@ -83,7 +83,7 @@ export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: str
       <aside className="w-56 flex flex-col border-r" style={{ backgroundColor: "#f8f7ff", borderColor: "#e8e6ff" }}>
         <div className="px-4 pt-5 pb-4 border-b" style={{ borderColor: "#e8e6ff" }}>
           <Link href="/" className="flex flex-col gap-1">
-            <Image src="/logo.png" alt="Ideal AI" width={120} height={36} priority style={{ width: 120, height: "auto" }} />
+            <Image src="/logo.png" alt="Ideal AI" width={120} height={36} priority unoptimized style={{ width: 120, height: "auto" }} />
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "#1a1040" }}>CHATBOT SDK</span>
           </Link>
           <p className="text-xs mt-2.5 truncate" style={{ color: "#9b8fc0" }}>{tenantName}</p>
@@ -92,6 +92,7 @@ export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: str
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {navLink("/", "🤖", "챗봇", true)}
           {navLink("/analytics", "◫", "분석 대시보드")}
+          {navLink("/sdk-guide", "⌘", "SDK 설치 가이드")}
           {navLink("/bots/new", "➕", "새 챗봇 만들기")}
           {navLink("/settings", "⚙️", "설정")}
 

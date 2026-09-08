@@ -16,7 +16,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "GUIDE.ko.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

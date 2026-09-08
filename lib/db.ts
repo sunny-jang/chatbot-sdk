@@ -30,6 +30,7 @@ async function _runInit() {
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'starter'`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'active'`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS enterprise_bot_limit INTEGER`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS enterprise_monthly_session_limit INTEGER`;
   // 어드민 이메일 목록에서 is_admin 자동 갱신
   const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e: string) => e.trim()).filter(Boolean);
   if (adminEmails.length > 0) {
@@ -59,13 +60,14 @@ async function _runInit() {
   await sql`
     CREATE TABLE IF NOT EXISTS chat_logs (
       id TEXT PRIMARY KEY,
-      bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      bot_id TEXT NOT NULL,
       session_id TEXT NOT NULL DEFAULT 'legacy',
       user_message TEXT NOT NULL,
       bot_reply TEXT NOT NULL,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
+  await sql`ALTER TABLE monthly_chat_sessions DROP CONSTRAINT IF EXISTS monthly_chat_sessions_bot_id_fkey`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS intent TEXT`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS refused BOOLEAN`;
@@ -78,6 +80,17 @@ async function _runInit() {
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS estimated_cost_usd DOUBLE PRECISION`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS tool_name TEXT`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS tool_success BOOLEAN`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS monthly_chat_sessions (
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      month_key TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      PRIMARY KEY (tenant_id, month_key, session_id)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS monthly_chat_sessions_usage_idx ON monthly_chat_sessions (tenant_id, month_key)`;
   await sql`
     CREATE TABLE IF NOT EXISTS doc_folders (
       id TEXT PRIMARY KEY,
@@ -140,6 +153,7 @@ export type Tenant = {
   plan: "starter" | "growth" | "pro" | "enterprise";
   subscription_status: "active" | "inactive";
   enterprise_bot_limit: number | null;
+  enterprise_monthly_session_limit: number | null;
   created_at: number;
 };
 

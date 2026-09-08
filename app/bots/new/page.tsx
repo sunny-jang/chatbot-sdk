@@ -9,6 +9,7 @@ type PlanUsage = {
   subscription_status: string;
   bot_count: number;
   bot_limit: number | null;
+  monthly_session_usage: { used: number; limit: number; percent: number; warningLevel: string } | null;
 };
 
 export default function NewBotPage() {
@@ -79,8 +80,16 @@ export default function NewBotPage() {
             <span className="ml-2 text-violet-600">
               챗봇 {usage.bot_count} / {usage.bot_limit ?? "한도 설정 필요"}
             </span>
+            {usage.monthly_session_usage && <span className="ml-2 text-violet-600">· 이번 달 세션 {usage.monthly_session_usage.used.toLocaleString("ko-KR")} / {usage.monthly_session_usage.limit.toLocaleString("ko-KR")}</span>}
           </div>
           <Link href="/plan" className="font-medium text-violet-700 hover:text-violet-900">플랜 보기</Link>
+        </div>
+      )}
+
+      {usage?.monthly_session_usage && usage.monthly_session_usage.warningLevel !== "none" && (
+        <div className={`mb-5 rounded-xl border px-4 py-3 text-sm ${usage.monthly_session_usage.warningLevel === "notice" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-700"}`}>
+          이번 달 대화 세션을 {usage.monthly_session_usage.percent}% 사용했습니다.
+          {usage.monthly_session_usage.warningLevel === "blocked" ? " 새 세션은 다음 달까지 시작할 수 없습니다." : " 한도 도달 전에 플랜 변경을 검토해주세요."}
         </div>
       )}
 

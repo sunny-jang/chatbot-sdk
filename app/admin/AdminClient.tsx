@@ -11,7 +11,25 @@ type Tenant = {
   plan: "starter" | "growth" | "pro" | "enterprise";
   subscription_status: "active" | "inactive";
   enterprise_bot_limit: number | null;
+  enterprise_monthly_session_limit: number | null;
+  monthly_session_count: number;
 };
+
+function sessionLimit(tenant: Tenant) {
+  if (tenant.plan === "starter") return 1_000;
+  if (tenant.plan === "growth") return 5_000;
+  if (tenant.plan === "pro") return 10_000;
+  return tenant.enterprise_monthly_session_limit;
+}
+
+function usageBadgeStyle(tenant: Tenant) {
+  const limit = sessionLimit(tenant);
+  const percent = limit ? (tenant.monthly_session_count / limit) * 100 : 0;
+  if (percent >= 100) return { backgroundColor: "#fef2f2", color: "#b91c1c" };
+  if (percent >= 90) return { backgroundColor: "#fff1f2", color: "#be123c" };
+  if (percent >= 80) return { backgroundColor: "#fffbeb", color: "#b45309" };
+  return { backgroundColor: "#ecfdf5", color: "#047857" };
+}
 
 export default function AdminClient({ initialTenants }: { initialTenants: Tenant[] }) {
   const [tenants, setTenants] = useState<Tenant[]>(initialTenants);
@@ -37,6 +55,8 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
         plan: "starter",
         subscription_status: "active",
         enterprise_bot_limit: null,
+        enterprise_monthly_session_limit: null,
+        monthly_session_count: 0,
       }, ...prev]);
       setNewApiKey({ name: data.name, key: data.api_key });
       setNewName("");
@@ -59,11 +79,14 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
 
   async function updatePlan(
     tenant: Tenant,
-    changes: Partial<Pick<Tenant, "plan" | "subscription_status" | "enterprise_bot_limit">>,
+    changes: Partial<Pick<Tenant, "plan" | "subscription_status" | "enterprise_bot_limit" | "enterprise_monthly_session_limit">>,
   ) {
     const next = { ...tenant, ...changes };
     if (next.plan === "enterprise" && !next.enterprise_bot_limit) {
       next.enterprise_bot_limit = Math.max(10, next.bot_count);
+    }
+    if (next.plan === "enterprise" && !next.enterprise_monthly_session_limit) {
+      next.enterprise_monthly_session_limit = 50_000;
     }
     const res = await fetch(`/api/admin/tenants/${tenant.id}`, {
       method: "PATCH",
@@ -72,6 +95,7 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
         plan: next.plan,
         subscription_status: next.subscription_status,
         enterprise_bot_limit: next.enterprise_bot_limit,
+        enterprise_monthly_session_limit: next.enterprise_monthly_session_limit,
       }),
     });
     if (!res.ok) return;
@@ -171,6 +195,9 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "#ede9ff", color: "#6d28d9" }}>
                       봇 {t.bot_count}개
                     </span>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={usageBadgeStyle(t)}>
+                      이번 달 세션 {t.monthly_session_count.toLocaleString("ko-KR")} / {sessionLimit(t)?.toLocaleString("ko-KR") ?? "한도 설정 필요"}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs" style={{ color: "#9b8fc0" }}>
@@ -201,18 +228,16 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
                       <option value="enterprise">엔터프라이즈 · 협의</option>
                     </select>
                     {t.plan === "enterprise" && (
-                      <label className="flex items-center gap-1 text-xs" style={{ color: "#7565a7" }}>
-                        최대
-                        <input
-                          type="number"
-                          min={1}
-                          defaultValue={t.enterprise_bot_limit ?? 10}
-                          onBlur={(event) => updatePlan(t, { enterprise_bot_limit: Math.max(1, Number(event.target.value) || 1) })}
-                          className="w-16 rounded-lg border px-2 py-1.5 text-xs"
-                          style={{ borderColor: "#d4cfff" }}
-                        />
-                        개
-                      </label>
+                      <>
+                        <label className="flex items-center gap-1 text-xs" style={{ color: "#7565a7" }}>
+                          챗봇
+                          <input type="number" min={1} defaultValue={t.enterprise_bot_limit ?? 10} onBlur={(event) => updatePlan(t, { enterprise_bot_limit: Math.max(1, Number(event.target.value) || 1) })} className="w-16 rounded-lg border px-2 py-1.5 text-xs" style={{ borderColor: "#d4cfff" }} />개
+                        </label>
+                        <label className="flex items-center gap-1 text-xs" style={{ color: "#7565a7" }}>
+                          월 세션
+                          <input type="number" min={1} defaultValue={t.enterprise_monthly_session_limit ?? 50000} onBlur={(event) => updatePlan(t, { enterprise_monthly_session_limit: Math.max(1, Number(event.target.value) || 1) })} className="w-24 rounded-lg border px-2 py-1.5 text-xs" style={{ borderColor: "#d4cfff" }} />건
+                        </label>
+                      </>
                     )}
                     <select
                       value={t.subscription_status}

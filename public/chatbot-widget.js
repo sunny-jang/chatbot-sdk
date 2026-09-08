@@ -209,11 +209,13 @@
           body: JSON.stringify({ message: text, history, sessionId }),
         });
         const data = await res.json();
-        typingEl.textContent = data.reply || "오류가 발생했습니다.";
+        typingEl.textContent = data.reply || data.error || "오류가 발생했습니다.";
         typingEl.classList.remove("typing");
-        history.push({ role: "user", content: text });
-        history.push({ role: "assistant", content: data.reply });
-        if (history.length > 20) history = history.slice(-20);
+        if (res.ok && data.reply) {
+          history.push({ role: "user", content: text });
+          history.push({ role: "assistant", content: data.reply });
+          if (history.length > 20) history = history.slice(-20);
+        }
       } catch {
         typingEl.textContent = "네트워크 오류가 발생했습니다.";
         typingEl.classList.remove("typing");
