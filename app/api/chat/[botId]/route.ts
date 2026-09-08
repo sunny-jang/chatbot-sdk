@@ -109,6 +109,7 @@ export async function POST(
   const sessionId = typeof body.sessionId === "string" && body.sessionId.trim()
     ? body.sessionId.trim().slice(0, 200)
     : randomUUID();
+  const qaId = typeof body.qaId === "string" && body.qaId.trim() ? body.qaId.trim() : null;
   const startedAt = Date.now();
 
   if (!message) {
@@ -158,6 +159,21 @@ export async function POST(
   const openai = new OpenAI({ apiKey: tenantApiKey ?? process.env.OPENAI_API_KEY });
 
   if (bot.type === "qa") {
+    if (qaId) {
+      const selectedRows = await sql`
+        SELECT question, answer FROM qa_pairs WHERE id = ${qaId} AND bot_id = ${botId}
+      `;
+      const selected = selectedRows[0] as { question: string; answer: string } | undefined;
+      if (!selected) return NextResponse.json({ error: "Q&A not found" }, { status: 404 });
+      const refusal = detectRefusal(selected.answer);
+      await saveLog(botId, sessionId, selected.question, selected.answer, {
+        intent: classifyIntent(selected.question), refused: refusal.refused, refusalReason: refusal.reason,
+        model: "qa-choice", inputTokens: null, outputTokens: null,
+        latencyMs: Date.now() - startedAt, apiSuccess: true, estimatedCostUsd: null,
+        toolName: "Q&A 선택", toolSuccess: true,
+      });
+      return NextResponse.json({ reply: selected.answer, usage: reservation.usage });
+    }
     const pairRows = await sql`
       SELECT id, answer, embedding FROM qa_pairs WHERE bot_id = ${botId}
     `;

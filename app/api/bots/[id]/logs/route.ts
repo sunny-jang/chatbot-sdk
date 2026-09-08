@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { ChatLog } from "@/lib/db";
-
-async function getTenantId() {
-  const jar = await cookies();
-  return jar.get("tenant_id")?.value ?? null;
-}
+import { getTenantId } from "@/lib/auth";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const tenantId = await getTenantId();
