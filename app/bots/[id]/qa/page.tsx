@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
-import { Bot, QaPair } from "@/lib/db";
+import { Bot, initSchema, QaFolder, QaPair } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
 import QaManager from "./QaManager";
 import BotHeader from "../BotHeader";
@@ -41,21 +41,26 @@ export default async function QaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  await initSchema();
   const tenantId = await getTenantId();
   const botRows = await sql`SELECT * FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
 
   const pairs = (await sql`
-    SELECT id, bot_id, question, answer, created_at
+    SELECT id, bot_id, folder_id, question, answer, created_at
     FROM qa_pairs WHERE bot_id = ${id} ORDER BY created_at DESC
   `) as unknown as QaPair[];
+  const folders = (await sql`
+    SELECT id, bot_id, name, created_at
+    FROM qa_folders WHERE bot_id = ${id} ORDER BY name ASC
+  `) as unknown as QaFolder[];
 
   return (
     <div className="max-w-3xl">
       <BotHeader bot={bot} current="Q&A 관리" />
       <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
-      <QaManager botId={id} initialPairs={pairs} />
+      <QaManager botId={id} initialPairs={pairs} initialFolders={folders} />
     </div>
   );
 }

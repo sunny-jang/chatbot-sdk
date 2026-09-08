@@ -12,6 +12,15 @@ export async function getEmbedding(text: string, apiKey?: string | null): Promis
   return response.data[0].embedding;
 }
 
+export async function getEmbeddings(texts: string[], apiKey?: string | null): Promise<number[][]> {
+  if (texts.length === 0) return [];
+  const response = await getClient(apiKey).embeddings.create({
+    model: "text-embedding-3-small",
+    input: texts,
+  });
+  return response.data.sort((a, b) => a.index - b.index).map((item) => item.embedding);
+}
+
 export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
