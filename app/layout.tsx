@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import Sidebar from "./Sidebar";
+import { auth } from "@/auth";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"] });
@@ -14,8 +15,10 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const jar = await cookies();
-  const tenantId = jar.get("tenant_id")?.value;
-  const isAdmin = jar.get("is_admin")?.value === "1";
+  const cookieTenantId = jar.get("tenant_id")?.value;
+  const session = cookieTenantId ? null : await auth();
+  const tenantId = cookieTenantId ?? session?.tenant_id ?? null;
+  const isAdmin = jar.get("is_admin")?.value === "1" || session?.is_admin === true;
 
   let tenantName: string | null = null;
   let bots: { id: string; name: string; type: string }[] = [];
