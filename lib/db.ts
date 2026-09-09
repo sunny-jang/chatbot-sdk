@@ -80,6 +80,11 @@ async function _runInit() {
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS estimated_cost_usd DOUBLE PRECISION`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS tool_name TEXT`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS tool_success BOOLEAN`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS qa_pair_id TEXT`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS qa_matched BOOLEAN`;
+  await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS qa_match_score DOUBLE PRECISION`;
+  await sql`CREATE INDEX IF NOT EXISTS chat_logs_bot_created_idx ON chat_logs (bot_id, created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS chat_logs_qa_pair_idx ON chat_logs (qa_pair_id) WHERE qa_pair_id IS NOT NULL`;
   await sql`
     CREATE TABLE IF NOT EXISTS monthly_chat_sessions (
       tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -189,6 +194,9 @@ export type ChatLog = {
   estimated_cost_usd: number | null;
   tool_name: string | null;
   tool_success: boolean | null;
+  qa_pair_id: string | null;
+  qa_matched: boolean | null;
+  qa_match_score: number | null;
 };
 
 export type DocFolder = {

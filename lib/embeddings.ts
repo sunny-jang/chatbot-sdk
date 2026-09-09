@@ -38,17 +38,17 @@ export async function findBestMatch(
   pairs: { id: string; answer: string; embedding: string | null }[],
   threshold = 0.75,
   apiKey?: string | null
-): Promise<{ answer: string; score: number } | null> {
+): Promise<{ id: string; answer: string; score: number } | null> {
   const queryEmbedding = await getEmbedding(query, apiKey);
 
-  let best: { answer: string; score: number } | null = null;
+  let best: { id: string; answer: string; score: number } | null = null;
 
   for (const pair of pairs) {
     if (!pair.embedding) continue;
     const pairEmbedding: number[] = JSON.parse(pair.embedding);
     const score = cosineSimilarity(queryEmbedding, pairEmbedding);
     if (score >= threshold && (!best || score > best.score)) {
-      best = { answer: pair.answer, score };
+      best = { id: pair.id, answer: pair.answer, score };
     }
   }
 

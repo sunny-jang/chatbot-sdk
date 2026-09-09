@@ -21,6 +21,9 @@ type AnalyticsLog = {
   estimatedCostUsd: number | null;
   toolName: string | null;
   toolSuccess: boolean | null;
+  qaPairId?: string | null;
+  qaMatched?: boolean | null;
+  qaMatchScore?: number | null;
 };
 
 async function saveLog(
@@ -35,14 +38,16 @@ async function saveLog(
       INSERT INTO chat_logs (
         id, bot_id, session_id, user_message, bot_reply, intent, refused,
         refusal_reason, model, input_tokens, output_tokens, latency_ms,
-        api_success, estimated_cost_usd, tool_name, tool_success
+        api_success, estimated_cost_usd, tool_name, tool_success,
+        qa_pair_id, qa_matched, qa_match_score
       )
       VALUES (
         ${randomUUID()}, ${botId}, ${sessionId}, ${userMessage}, ${botReply},
         ${analytics.intent}, ${analytics.refused}, ${analytics.refusalReason},
         ${analytics.model}, ${analytics.inputTokens}, ${analytics.outputTokens},
         ${analytics.latencyMs}, ${analytics.apiSuccess}, ${analytics.estimatedCostUsd},
-        ${analytics.toolName}, ${analytics.toolSuccess}
+        ${analytics.toolName}, ${analytics.toolSuccess}, ${analytics.qaPairId ?? null},
+        ${analytics.qaMatched ?? null}, ${analytics.qaMatchScore ?? null}
       )
     `;
   } catch {
@@ -171,6 +176,7 @@ export async function POST(
         model: "qa-choice", inputTokens: null, outputTokens: null,
         latencyMs: Date.now() - startedAt, apiSuccess: true, estimatedCostUsd: null,
         toolName: "Q&A 선택", toolSuccess: true,
+        qaPairId: qaId, qaMatched: true, qaMatchScore: 1,
       });
       return NextResponse.json({ reply: selected.answer, usage: reservation.usage });
     }
@@ -191,6 +197,7 @@ export async function POST(
         model: "qa-match", inputTokens: null, outputTokens: null,
         latencyMs: Date.now() - startedAt, apiSuccess: false, estimatedCostUsd: null,
         toolName: "Q&A 검색", toolSuccess: false,
+        qaPairId: null, qaMatched: false, qaMatchScore: null,
       });
       return NextResponse.json({ error: "답변을 생성하지 못했습니다." }, { status: 500 });
     }
@@ -208,6 +215,9 @@ export async function POST(
       estimatedCostUsd: null,
       toolName: "Q&A 검색",
       toolSuccess: Boolean(match),
+      qaPairId: match?.id ?? null,
+      qaMatched: Boolean(match),
+      qaMatchScore: match?.score ?? null,
     });
     return NextResponse.json({ reply, usage: reservation.usage });
   }
