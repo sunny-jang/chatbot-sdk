@@ -9,6 +9,8 @@ function removeWidget() {
 function validateOptions(options) {
     if (!options.botId?.trim())
         throw new Error("botId는 필수입니다.");
+    if (!options.botToken?.trim())
+        throw new Error("botToken은 필수입니다.");
     if (!options.endpoint?.trim())
         throw new Error("endpoint는 필수입니다.");
     try {
@@ -33,6 +35,7 @@ export async function initIdealAIChatbot(options) {
         script.async = true;
         script.src = options.scriptUrl || `${endpoint}/chatbot-widget.js`;
         script.setAttribute("data-bot-id", options.botId.trim());
+        script.setAttribute("data-bot-token", options.botToken.trim());
         script.setAttribute("data-endpoint", endpoint);
         script.onload = () => resolve();
         script.onerror = () => reject(new Error("IDEAL AI 챗봇 위젯을 불러오지 못했습니다."));

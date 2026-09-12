@@ -57,6 +57,10 @@ async function _runInit() {
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS widget_color TEXT DEFAULT '#2563eb'`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS greeting_message TEXT`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS logo_url TEXT`;
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS support_mode TEXT NOT NULL DEFAULT 'unattended'`;
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS public_token TEXT`;
+  await sql`UPDATE bots SET public_token = 'ibt-' || md5(random()::text || id) WHERE public_token IS NULL`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS bots_public_token_idx ON bots (public_token) WHERE public_token IS NOT NULL`;
   await sql`
     CREATE TABLE IF NOT EXISTS chat_logs (
       id TEXT PRIMARY KEY,
@@ -133,6 +137,83 @@ async function _runInit() {
   `;
   await sql`ALTER TABLE qa_pairs ADD COLUMN IF NOT EXISTS folder_id TEXT REFERENCES qa_folders(id) ON DELETE SET NULL`;
   await sql`
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'bot',
+      customer_name TEXT,
+      assigned_agent_name TEXT,
+      started_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      closed_at BIGINT
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS chat_sessions_bot_status_idx ON chat_sessions (bot_id, status, updated_at DESC)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      sender_type TEXT NOT NULL,
+      sender_name TEXT,
+      content TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'widget',
+      external_message_id TEXT,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS chat_messages_session_idx ON chat_messages (session_id, created_at ASC)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_external_idx ON chat_messages (source, external_message_id) WHERE external_message_id IS NOT NULL`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS telegram_integrations (
+      bot_id TEXT PRIMARY KEY REFERENCES bots(id) ON DELETE CASCADE,
+      bot_token TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      webhook_secret TEXT NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS slack_integrations (
+      bot_id TEXT PRIMARY KEY REFERENCES bots(id) ON DELETE CASCADE,
+      bot_token TEXT NOT NULL,
+      signing_secret TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      team_id TEXT,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS support_handoffs (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL UNIQUE REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+      telegram_chat_id TEXT,
+      telegram_topic_id BIGINT,
+      slack_channel_id TEXT,
+      slack_thread_ts TEXT,
+      status TEXT NOT NULL DEFAULT 'waiting',
+      reason TEXT,
+      requested_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      accepted_at BIGINT,
+      closed_at BIGINT
+    )
+  `;
+  await sql`ALTER TABLE support_handoffs ADD COLUMN IF NOT EXISTS slack_channel_id TEXT`;
+  await sql`ALTER TABLE support_handoffs ADD COLUMN IF NOT EXISTS slack_thread_ts TEXT`;
+  await sql`CREATE INDEX IF NOT EXISTS support_handoffs_slack_thread_idx ON support_handoffs (bot_id, slack_channel_id, slack_thread_ts)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS api_rate_limits (
+      bucket_key TEXT PRIMARY KEY,
+      request_count INTEGER NOT NULL DEFAULT 1,
+      expires_at BIGINT NOT NULL
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS phone_otps (
       phone TEXT PRIMARY KEY,
       code TEXT NOT NULL,
@@ -168,6 +249,8 @@ export type Bot = {
   widget_color: string | null;
   greeting_message: string | null;
   logo_url: string | null;
+  support_mode: "unattended" | "hybrid";
+  public_token: string | null;
   created_at: number;
 };
 

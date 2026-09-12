@@ -5,6 +5,8 @@ const STYLE_ID = "__chatbot-widget-style";
 export interface IdealAIChatbotOptions {
   /** 관리자 화면에서 발급된 챗봇 ID */
   botId: string;
+  /** 관리자 화면에서 발급된 공개 위젯 호출 토큰 */
+  botToken: string;
   /** IDEAL AI 서버 주소. 마지막 슬래시는 자동으로 제거됩니다. */
   endpoint: string;
   /** 자체 호스팅한 위젯 스크립트를 사용할 때만 지정합니다. */
@@ -26,6 +28,7 @@ function removeWidget() {
 
 function validateOptions(options: IdealAIChatbotOptions) {
   if (!options.botId?.trim()) throw new Error("botId는 필수입니다.");
+  if (!options.botToken?.trim()) throw new Error("botToken은 필수입니다.");
   if (!options.endpoint?.trim()) throw new Error("endpoint는 필수입니다.");
   try {
     return new URL(options.endpoint).toString().replace(/\/$/, "");
@@ -54,6 +57,7 @@ export async function initIdealAIChatbot(
     script.async = true;
     script.src = options.scriptUrl || `${endpoint}/chatbot-widget.js`;
     script.setAttribute("data-bot-id", options.botId.trim());
+    script.setAttribute("data-bot-token", options.botToken.trim());
     script.setAttribute("data-endpoint", endpoint);
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("IDEAL AI 챗봇 위젯을 불러오지 못했습니다."));

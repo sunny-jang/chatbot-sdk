@@ -6,7 +6,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ botId: str
   const { botId } = await params;
   await initSchema();
   const rows = await sql`
-    SELECT widget_title, widget_color, greeting_message, logo_url, name, type
+    SELECT widget_title, widget_color, greeting_message, logo_url, name, type, support_mode
     FROM bots WHERE id = ${botId}
   `;
   if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -18,6 +18,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ botId: str
     logo_url: string | null;
     name: string;
     type: string;
+    support_mode: string;
   };
 
   let qaFolders: { id: string; name: string; questions: { id: string; question: string; answer: string }[] }[] = [];
@@ -33,6 +34,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ botId: str
 
   return NextResponse.json({
     title: bot.widget_title || bot.name,
+    type: bot.type,
+    supportMode: bot.support_mode || "unattended",
     color: bot.widget_color || "#2563eb",
     greeting: bot.greeting_message || null,
     logo: bot.logo_url || null,

@@ -8,9 +8,10 @@
   const script = document.currentScript;
   const botId = script.getAttribute("data-bot-id");
   const endpoint = (script.getAttribute("data-endpoint") || "").replace(/\/$/, "");
+  const botToken = script.getAttribute("data-bot-token") || "";
 
-  if (!botId || !endpoint) {
-    console.error("[Ideal AI Chatbot SDK] data-bot-id and data-endpoint are required");
+  if (!botId || !endpoint || !botToken) {
+    console.error("[Ideal AI Chatbot SDK] data-bot-id, data-endpoint and data-bot-token are required");
     return;
   }
 
@@ -26,6 +27,8 @@
     const greeting = settings.greeting || null;
     const logo = settings.logo || null;
     const qaFolders = settings.qaFolders || [];
+    const isQaBot = settings.type === "qa";
+    const supportMode = settings.supportMode || "unattended";
 
     // ── Styles ────────────────────────────────────────────────────────────────
     const css = `
@@ -79,6 +82,8 @@
         padding: 10px 12px; border-top: 1px solid #f0f0f0;
         display: flex; gap: 8px; flex-shrink: 0;
       }
+      #__chatbot-support-bar { padding: 7px 12px; border-top: 1px solid #f0f0f0; background: #fafafa; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: #6b7280; }
+      #__chatbot-support-bar button { border: 0; background: transparent; color: ${color}; font-size: 11px; font-weight: 600; cursor: pointer; }
       #__chatbot-input {
         flex: 1; padding: 9px 13px; border: 1.5px solid #e5e7eb;
         border-radius: 24px; font-size: 14px; outline: none;
@@ -119,6 +124,7 @@
         <button class="close" aria-label="닫기">✕</button>
       </div>
       <div id="__chatbot-messages"></div>
+      <div id="__chatbot-support-bar" style="display:none"><span>24시간 챗봇 상담</span><button type="button">상담원 연결</button></div>
       <div id="__chatbot-input-area">
         <input id="__chatbot-input" type="text" placeholder="메시지를 입력하세요..." autocomplete="off" />
         <button id="__chatbot-send" aria-label="전송">
@@ -136,12 +142,30 @@
     const inputEl = panel.querySelector("#__chatbot-input");
     const sendBtn = panel.querySelector("#__chatbot-send");
     const closeBtn = panel.querySelector(".close");
+    const supportBar = panel.querySelector("#__chatbot-support-bar");
+    const supportBtn = supportBar.querySelector("button");
     let open = false;
     let history = [];
-    let sessionId = crypto.randomUUID();
+    const sessionStorageKey = `ideal-ai-session:${endpoint}:${botId}`;
+    let sessionId = localStorage.getItem(sessionStorageKey) || crypto.randomUUID();
+    localStorage.setItem(sessionStorageKey, sessionId);
+    let handoffActive = false;
+    let lastSeen = 0;
+    let pollTimer = null;
+    const displayedMessageIds = new Set();
+
+    function setComposerVisible(visible) {
+      inputEl.parentElement.style.display = visible ? "flex" : "none";
+      if (visible && open) inputEl.focus();
+    }
 
     if (greeting) addMessage(greeting, "bot");
-    if (qaFolders.length) showFolderChoices();
+    if (isQaBot) {
+      setComposerVisible(false);
+      showFolderChoices();
+    }
+    if (supportMode === "hybrid") supportBar.style.display = "flex";
+    restoreConversation();
 
     function togglePanel() {
       open = !open;
@@ -150,12 +174,7 @@
       if (open) {
         inputEl.focus();
       } else {
-        // New session when widget is closed and reopened
-        history = [];
-        sessionId = crypto.randomUUID();
-        messagesEl.innerHTML = "";
-        if (greeting) addMessage(greeting, "bot");
-        if (qaFolders.length) showFolderChoices();
+        // 세션과 대화는 닫아도 유지합니다. 명시적인 상담 종료 후에만 새 세션을 시작합니다.
       }
     }
 
@@ -183,7 +202,19 @@
     }
 
     function showFolderChoices() {
-      addChoices(qaFolders.map((folder) => ({ label: folder.name, folder })), ({ folder }) => {
+      setComposerVisible(false);
+      const choices = qaFolders.map((folder) => ({ label: folder.name, folder }));
+      choices.push({ label: "직접 질문하기", direct: true });
+      if (supportMode === "hybrid") choices.push({ label: "상담원 연결", handoff: true });
+      addChoices(choices, ({ folder, direct, handoff }) => {
+        if (handoff) {
+          requestHandoff("고객이 상담원 연결을 선택했습니다.");
+          return;
+        }
+        if (direct) {
+          setComposerVisible(true);
+          return;
+        }
         addMessage(folder.name, "user");
         addChoices(folder.questions.map((question) => ({ label: question.question, question })), ({ question }) => {
           sendSelectedQuestion(question);
@@ -197,17 +228,24 @@
       try {
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
           body: JSON.stringify({ message: question.question, qaId: question.id, sessionId }),
         });
         const data = await res.json();
         typingEl.textContent = data.reply || "오류가 발생했습니다.";
         typingEl.classList.remove("typing");
+        if (data.handoffAvailable) addChoices([{ label: "상담원에게 문의하기", handoff: true }], () => requestHandoff("Q&A 답변 부족"));
       } catch {
         typingEl.textContent = "네트워크 오류가 발생했습니다.";
         typingEl.classList.remove("typing");
       } finally {
-        addChoices([{ label: "다른 질문 보기" }], showFolderChoices);
+        addChoices([
+          { label: "다른 질문 보기", action: "folders" },
+          { label: "직접 질문하기", action: "direct" },
+        ], ({ action }) => {
+          if (action === "direct") setComposerVisible(true);
+          else showFolderChoices();
+        });
       }
     }
 
@@ -218,12 +256,22 @@
       inputEl.value = "";
       sendBtn.disabled = true;
       addMessage(text, "user");
+      if (handoffActive) {
+        try {
+          await fetch(`${endpoint}/api/chat/${botId}/handoff/message`, {
+            method: "POST", headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
+            body: JSON.stringify({ sessionId, message: text }),
+          });
+        } catch { addMessage("메시지 전송에 실패했습니다.", "bot"); }
+        finally { sendBtn.disabled = false; inputEl.focus(); }
+        return;
+      }
       const typingEl = addMessage("입력 중...", "bot typing");
 
       try {
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
           body: JSON.stringify({ message: text, history, sessionId }),
         });
         const data = await res.json();
@@ -233,6 +281,7 @@
           history.push({ role: "user", content: text });
           history.push({ role: "assistant", content: data.reply });
           if (history.length > 20) history = history.slice(-20);
+          if (data.handoffAvailable) addChoices([{ label: "상담원에게 문의하기" }], () => requestHandoff("챗봇 답변 부족"));
         }
       } catch {
         typingEl.textContent = "네트워크 오류가 발생했습니다.";
@@ -243,9 +292,86 @@
       }
     }
 
+    async function requestHandoff(reason) {
+      supportBtn.disabled = true;
+      addMessage("상담원을 연결하고 있습니다. 잠시만 기다려주세요.", "bot");
+      try {
+        const res = await fetch(`${endpoint}/api/chat/${botId}/handoff`, {
+          method: "POST", headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
+          body: JSON.stringify({ sessionId, reason }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "상담 연결에 실패했습니다.");
+        handoffActive = true;
+        supportBar.querySelector("span").textContent = data.telegramConnected ? "상담원 연결 대기 중" : "상담 요청 접수 완료";
+        supportBtn.style.display = "none";
+        setComposerVisible(true);
+        startPolling();
+      } catch (error) {
+        addMessage(error.message || "상담 연결에 실패했습니다.", "bot");
+        supportBtn.disabled = false;
+      }
+    }
+
+    async function restoreConversation() {
+      try {
+        const res = await fetch(`${endpoint}/api/chat/${botId}/handoff?sessionId=${encodeURIComponent(sessionId)}&after=0`, { headers: { "X-Bot-Token": botToken } });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.messages && data.messages.length) {
+          messagesEl.innerHTML = "";
+          data.messages.forEach(renderStoredMessage);
+          history = data.messages.filter((item) => item.sender_type === "customer" || item.sender_type === "bot").map((item) => ({
+            role: item.sender_type === "customer" ? "user" : "assistant",
+            content: item.content,
+          })).slice(-20);
+          lastSeen = Math.max(...data.messages.map((item) => Number(item.created_at) || 0));
+        }
+        handoffActive = data.status === "waiting" || data.status === "human";
+        if (handoffActive) {
+          supportBar.style.display = "flex";
+          supportBar.querySelector("span").textContent = data.status === "human" ? `${data.assigned_agent_name || "상담원"} 상담 중` : "상담원 연결 대기 중";
+          supportBtn.style.display = "none";
+          setComposerVisible(true);
+          startPolling();
+        } else if (isQaBot && data.messages?.length) {
+          showFolderChoices();
+        }
+      } catch { /* 복원 실패는 새 상담 이용을 막지 않습니다. */ }
+    }
+
+    function renderStoredMessage(item) {
+      if (displayedMessageIds.has(item.id)) return;
+      displayedMessageIds.add(item.id);
+      const role = item.sender_type === "customer" ? "user" : "bot";
+      const prefix = item.sender_type === "agent" && item.sender_name ? `${item.sender_name}: ` : "";
+      addMessage(prefix + item.content, role);
+    }
+
+    function startPolling() {
+      if (pollTimer) return;
+      pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch(`${endpoint}/api/chat/${botId}/handoff?sessionId=${encodeURIComponent(sessionId)}&after=${Math.max(0, lastSeen - 1)}`, { headers: { "X-Bot-Token": botToken } });
+          if (!res.ok) return;
+          const data = await res.json();
+          (data.messages || []).filter((item) => item.sender_type !== "customer").forEach(renderStoredMessage);
+          if (data.messages?.length) lastSeen = Math.max(lastSeen, ...data.messages.map((item) => Number(item.created_at) || 0));
+          if (data.status === "human") supportBar.querySelector("span").textContent = `${data.assigned_agent_name || "상담원"} 상담 중`;
+          if (data.status === "closed") {
+            handoffActive = false;
+            clearInterval(pollTimer); pollTimer = null;
+            supportBar.querySelector("span").textContent = "상담 종료";
+            supportBtn.style.display = "inline"; supportBtn.disabled = false;
+          }
+        } catch { /* 다음 폴링에서 재시도 */ }
+      }, 2500);
+    }
+
     fab.addEventListener("click", togglePanel);
     closeBtn.addEventListener("click", togglePanel);
     sendBtn.addEventListener("click", sendMessage);
+    supportBtn.addEventListener("click", () => requestHandoff("고객이 상담원 연결을 선택했습니다."));
     inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     });

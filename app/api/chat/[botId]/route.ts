@@ -5,9 +5,11 @@ import { findBestMatch, getEmbedding, cosineSimilarity } from "@/lib/embeddings"
 import { getTenantApiKey } from "@/lib/tenantKey";
 import OpenAI from "openai";
 import { randomUUID } from "crypto";
+import { cookies } from "next/headers";
 import { classifyIntent, detectRefusal, estimateOpenAICost } from "@/lib/analytics";
 import { getMonthlySessionLimit, normalizePlan, PLAN_CONFIG } from "@/lib/plans";
 import { reserveMonthlySession } from "@/lib/monthlyUsage";
+import { enforceRateLimit, ensureChatSession, saveChatMessage } from "@/lib/support";
 
 type AnalyticsLog = {
   intent: string;
@@ -123,6 +125,12 @@ export async function POST(
   ]);
   const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) return NextResponse.json({ error: "Bot not found" }, { status: 404 });
+  const cookieTenantId = (await cookies()).get("tenant_id")?.value;
+  const suppliedToken = req.headers.get("x-bot-token");
+  if (cookieTenantId !== bot.tenant_id && (!bot.public_token || suppliedToken !== bot.public_token)) {
+    return NextResponse.json({ error: "Invalid bot token" }, { status: 401 });
+  }
+  if (!(await enforceRateLimit(botId, req))) return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
 
   const tenantRows = await sql`
     SELECT plan, subscription_status, enterprise_monthly_session_limit
@@ -156,6 +164,9 @@ export async function POST(
     }, { status: 429 });
   }
 
+  await ensureChatSession(sessionId, bot.tenant_id, botId);
+  await saveChatMessage(sessionId, "customer", message);
+
   const openai = new OpenAI({ apiKey: tenantApiKey ?? process.env.OPENAI_API_KEY });
 
   if (bot.type === "qa") {
@@ -172,7 +183,8 @@ export async function POST(
         latencyMs: Date.now() - startedAt, apiSuccess: true, estimatedCostUsd: null,
         toolName: "Q&A 선택", toolSuccess: true,
       });
-      return NextResponse.json({ reply: selected.answer, usage: reservation.usage });
+      await saveChatMessage(sessionId, "bot", selected.answer, "bot");
+      return NextResponse.json({ reply: selected.answer, usage: reservation.usage, handoffAvailable: bot.support_mode === "hybrid" && refusal.refused });
     }
     const pairRows = await sql`
       SELECT id, answer, embedding FROM qa_pairs WHERE bot_id = ${botId}
@@ -209,7 +221,8 @@ export async function POST(
       toolName: "Q&A 검색",
       toolSuccess: Boolean(match),
     });
-    return NextResponse.json({ reply, usage: reservation.usage });
+    await saveChatMessage(sessionId, "bot", reply, "bot");
+    return NextResponse.json({ reply, usage: reservation.usage, handoffAvailable: bot.support_mode === "hybrid" && (!match || refusal.refused) });
   }
 
   // AI bot — build messages with optional RAG context
@@ -263,7 +276,8 @@ export async function POST(
     toolName: relevantDocs.length > 0 ? "문서 검색(RAG)" : null,
     toolSuccess: relevantDocs.length > 0 ? true : null,
   });
+  await saveChatMessage(sessionId, "bot", reply, "bot");
 
   const usedDocs = relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) }));
-  return NextResponse.json({ reply, usedDocs, usage: reservation.usage });
+  return NextResponse.json({ reply, usedDocs, usage: reservation.usage, handoffAvailable: bot.support_mode === "hybrid" && (refusal.refused || relevantDocs.length === 0) });
 }

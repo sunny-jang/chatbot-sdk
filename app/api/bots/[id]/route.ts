@@ -26,7 +26,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const check = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   if (!check[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { name, system_prompt, model, widget_title, widget_color, greeting_message } = await req.json();
+  const { name, system_prompt, model, widget_title, widget_color, greeting_message, support_mode } = await req.json();
   const rows = await sql`
     UPDATE bots SET
       name = COALESCE(${name ?? null}, name),
@@ -34,7 +34,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       model = COALESCE(${model ?? null}, model),
       widget_title = ${widget_title ?? null},
       widget_color = COALESCE(${widget_color ?? null}, widget_color),
-      greeting_message = ${greeting_message ?? null}
+      greeting_message = ${greeting_message ?? null},
+      support_mode = COALESCE(${support_mode === "hybrid" || support_mode === "unattended" ? support_mode : null}, support_mode)
     WHERE id = ${id}
     RETURNING *
   `;

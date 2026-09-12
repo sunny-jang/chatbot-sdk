@@ -50,14 +50,15 @@ export default async function BotDetailPage({
 
   const headersList = await headers();
   const host = headersList.get("host") ?? "localhost:3000";
-  const proto = host.startsWith("localhost") ? "http" : "https";
+  const proto = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
   const baseUrl = `${proto}://${host}`;
-  const embedCode = `<script src="${baseUrl}/chatbot-widget.js" data-bot-id="${bot.id}" data-endpoint="${baseUrl}"></script>`;
+  const embedCode = `<script src="${baseUrl}/chatbot-widget.js" data-bot-id="${bot.id}" data-bot-token="${bot.public_token}" data-endpoint="${baseUrl}"></script>`;
   const npmInstallCode = "npm install ideal-ai-chatbot-sdk";
   const npmUsageCode = `import { initIdealAIChatbot } from "ideal-ai-chatbot-sdk";
 
 const chatbot = await initIdealAIChatbot({
   botId: "${bot.id}",
+  botToken: "${bot.public_token}",
   endpoint: "${baseUrl}",
 });`;
 

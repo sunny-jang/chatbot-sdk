@@ -1,6 +1,8 @@
 export interface IdealAIChatbotOptions {
     /** 관리자 화면에서 발급된 챗봇 ID */
     botId: string;
+    /** 관리자 화면에서 발급된 공개 위젯 호출 토큰 */
+    botToken: string;
     /** IDEAL AI 서버 주소. 마지막 슬래시는 자동으로 제거됩니다. */
     endpoint: string;
     /** 자체 호스팅한 위젯 스크립트를 사용할 때만 지정합니다. */

@@ -70,8 +70,8 @@ export async function POST(req: Request) {
 
   const id = randomUUID();
   const rows = await sql`
-    INSERT INTO bots (id, tenant_id, name, type, system_prompt, model)
-    VALUES (${id}, ${tenantId}, ${name}, ${type}, ${system_prompt ?? null}, ${model ?? "gpt-4o-mini"})
+    INSERT INTO bots (id, tenant_id, name, type, system_prompt, model, public_token)
+    VALUES (${id}, ${tenantId}, ${name}, ${type}, ${system_prompt ?? null}, ${model ?? "gpt-4o-mini"}, ${`ibt-${randomUUID().replaceAll("-", "")}`})
     RETURNING *
   `;
   return NextResponse.json(rows[0] as unknown as Bot, { status: 201 });

@@ -2,10 +2,21 @@ import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
 const TENANT_PUBLIC_PATHS = ["/login", "/signup", "/demo", "/plan"];
-const TENANT_PUBLIC_PREFIXES = ["/api/auth/", "/api/chat/", "/api/widget/", "/api/tenants", "/api/guide"];
+const TENANT_PUBLIC_PREFIXES = ["/api/auth/", "/api/chat/", "/api/widget/", "/api/integrations/telegram/", "/api/integrations/slack/", "/api/tenants", "/api/guide"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
+
+  if (req.method === "OPTIONS" && (pathname.startsWith("/api/chat/") || pathname.startsWith("/api/widget/"))) {
+    return new NextResponse(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-Bot-Token",
+      },
+    });
+  }
 
   // Super-admin routes
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
