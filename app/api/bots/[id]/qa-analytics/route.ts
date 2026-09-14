@@ -1,14 +1,15 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
+import { readTenantId } from "@/lib/auth";
 
 const round = (value: number) => Number(value.toFixed(1));
 type QaAnalyticsRow = { id:string; session_id:string; user_message:string; created_at:number|string; qa_pair_id:string|null; qa_matched:boolean|null; qa_match_score:number|null; model:string|null; matched_question:string|null; folder_name:string };
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const tenantId = (await cookies()).get("tenant_id")?.value;
+  // 쿠키 값이 아니라 검증된 Auth.js 세션의 계정 ID를 사용합니다. (tenant_id 쿠키 위조로 다른 계정 데이터 조회 차단)
+  const tenantId = await readTenantId();
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await initSchema();
   const botRows = await sql`SELECT id, name, type FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
