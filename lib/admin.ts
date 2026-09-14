@@ -11,10 +11,3 @@ export async function syncAdminRole(tenantId: string, email: string) {
   return admin;
 }
 
-export const COOKIE_OPTS = (maxAge = 60 * 60 * 24 * 30) => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  maxAge,
-  path: "/",
-});

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import JSZip from "jszip";
 import mammoth from "mammoth";
 import sql from "@/lib/neon";
@@ -7,6 +6,7 @@ import { Document } from "@/lib/db";
 import { getEmbedding } from "@/lib/embeddings";
 import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import { randomUUID } from "crypto";
+import { readTenantId } from "@/lib/auth";
 
 export const maxDuration = 120;
 
@@ -129,8 +129,7 @@ async function processBatch(
 }
 
 async function getTenantId() {
-  const jar = await cookies();
-  return jar.get("tenant_id")?.value ?? null;
+  return (await readTenantId()) ?? null;
 }
 
 async function botBelongsToTenant(botId: string, tenantId: string) {

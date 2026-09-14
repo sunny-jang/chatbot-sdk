@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { randomUUID } from "crypto";
+import { readTenantId } from "@/lib/auth";
 
 async function getTenantId() {
-  return (await cookies()).get("tenant_id")?.value ?? null;
+  return (await readTenantId()) ?? null;
 }
 
 async function ownsBot(botId: string, tenantId: string) {

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import Sidebar from "./Sidebar";
 import { auth } from "@/auth";
@@ -14,11 +13,10 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const jar = await cookies();
-  const cookieTenantId = jar.get("tenant_id")?.value;
-  const session = cookieTenantId ? null : await auth();
-  const tenantId = cookieTenantId ?? session?.tenant_id ?? null;
-  const isAdmin = jar.get("is_admin")?.value === "1" || session?.is_admin === true;
+  // 모든 로그인 방식(Google·이메일·개발 로그인)이 Auth.js 세션 하나를 사용합니다.
+  const session = await auth();
+  const tenantId = session?.tenant_id ?? null;
+  const isAdmin = session?.is_admin === true;
 
   let tenantName: string | null = null;
   let bots: { id: string; name: string; type: string }[] = [];

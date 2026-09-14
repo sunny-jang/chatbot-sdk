@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { classifyIntent, detectRefusal } from "@/lib/analytics";
 import { createAnalyticsMockData } from "@/lib/analyticsMock";
 import { getMonthlySessionLimit, normalizePlan } from "@/lib/plans";
 import { getMonthlySessionUsage } from "@/lib/monthlyUsage";
+import { readTenantId } from "@/lib/auth";
 
 type AnalyticsRow = {
   id: string;
@@ -31,8 +31,7 @@ type AnalyticsRow = {
 const round = (value: number, digits = 1) => Number(value.toFixed(digits));
 
 export async function GET(req: Request) {
-  const jar = await cookies();
-  const tenantId = jar.get("tenant_id")?.value;
+  const tenantId = (await readTenantId());
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);

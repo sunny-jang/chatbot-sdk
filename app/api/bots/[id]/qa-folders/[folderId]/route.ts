@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
+import { readTenantId } from "@/lib/auth";
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string; folderId: string }> }) {
-  const tenantId = (await cookies()).get("tenant_id")?.value;
+  const tenantId = (await readTenantId());
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id, folderId } = await params;
   const owned = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;

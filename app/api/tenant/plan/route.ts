@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { getBotLimit, getMonthlySessionLimit, normalizePlan, PLAN_CONFIG } from "@/lib/plans";
 import { getMonthlySessionUsage } from "@/lib/monthlyUsage";
+import { readTenantId } from "@/lib/auth";
 
 export async function GET() {
-  const jar = await cookies();
-  const tenantId = jar.get("tenant_id")?.value;
+  const tenantId = (await readTenantId());
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await initSchema();

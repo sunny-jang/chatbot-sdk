@@ -1,14 +1,14 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { getSupportStatus } from "@/lib/supportHours";
+import { readTenantId } from "@/lib/auth";
 
 // 강제 무인 운영 스위치 전용 API.
 // 챗봇 저장(PUT /api/bots/[id])은 보내지 않은 항목을 비우므로, 이 값만 즉시 바꾸도록 분리했습니다.
 
 async function ownedBot(id: string) {
-  const tenantId = (await cookies()).get("tenant_id")?.value;
+  const tenantId = (await readTenantId());
   if (!tenantId) return null;
   const rows = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   return rows[0] ? tenantId : null;

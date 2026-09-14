@@ -18,14 +18,9 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "로그인에 실패했습니다.");
+      const res = await signIn("credentials", { email, password, redirect: false });
+      if (!res?.ok || res.error) {
+        setError("이메일 또는 비밀번호가 올바르지 않습니다.");
         return;
       }
       router.push("/");
@@ -41,10 +36,10 @@ export default function LoginPage() {
     setTestLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/dev-login", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "테스트 로그인에 실패했습니다.");
+      // 개발 환경에서만 등록되는 Auth.js 테스트 로그인입니다.
+      const res = await signIn("dev-login", { redirect: false });
+      if (!res?.ok || res.error) {
+        setError("테스트 로그인은 로컬 개발 환경에서만 사용할 수 있습니다.");
         return;
       }
       router.push("/analytics");

@@ -11,7 +11,7 @@ export type SupportHours = {
   end: string;
 };
 
-export const SUPPORT_HOURS_TIME_ZONE = "Asia/Seoul";
+const SUPPORT_HOURS_TIME_ZONE = "Asia/Seoul";
 
 export const DEFAULT_SUPPORT_HOURS: SupportHours = {
   enabled: false,
@@ -54,7 +54,7 @@ function nowInSupportTimeZone(now: Date) {
 }
 
 /** 운영 시간 설정이 꺼져 있거나 없으면 항상 연결 가능으로 봅니다. */
-export function isWithinSupportHours(hours: SupportHours | null | undefined, now = new Date()) {
+function isWithinSupportHours(hours: SupportHours | null | undefined, now = new Date()) {
   if (!hours?.enabled) return true;
   if (hours.days.length === 0) return false;
   const { day, minutes } = nowInSupportTimeZone(now);

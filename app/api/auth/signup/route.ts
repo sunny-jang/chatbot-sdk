@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { hash } from "bcryptjs";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { randomUUID } from "crypto";
-import { isAdminEmail, COOKIE_OPTS } from "@/lib/admin";
+import { isAdminEmail } from "@/lib/admin";
 
 export async function POST(req: Request) {
   const { name, email, password, phone } = await req.json();
@@ -33,11 +32,7 @@ export async function POST(req: Request) {
     VALUES (${id}, ${name}, ${apiKey}, ${email}, ${passwordHash}, ${normalizedPhone}, ${admin})
   `;
 
-  const jar = await cookies();
-  jar.set("tenant_id", id, COOKIE_OPTS());
-  if (admin) {
-    jar.set("is_admin", "1", COOKIE_OPTS());
-  }
+  // 가입만 처리합니다. 로그인 세션은 화면에서 Auth.js signIn("credentials")으로 발급합니다.
 
   return NextResponse.json({ ok: true, name }, { status: 201 });
 }

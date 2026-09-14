@@ -7,7 +7,7 @@ export default function LogoutButton() {
   const router = useRouter();
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    // 모든 로그인 방식이 Auth.js 세션이므로 signOut 한 번으로 로그아웃됩니다.
     await signOut({ redirect: false });
     router.push("/login");
     router.refresh();

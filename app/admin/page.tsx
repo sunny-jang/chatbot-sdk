@@ -3,6 +3,8 @@ import { initSchema } from "@/lib/db";
 import AdminClient from "./AdminClient";
 import { getMonthlySessionLimit, normalizePlan } from "@/lib/plans";
 import { getMonthlySessionUsage } from "@/lib/monthlyUsage";
+import { isAdminRequest } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,8 @@ type TenantRow = {
 };
 
 export default async function AdminPage() {
+  // 미들웨어와 별도로 DB의 관리자 여부를 다시 확인합니다.
+  if (!(await isAdminRequest())) redirect("/login");
   await initSchema();
   const tenantRows = (await sql`
     SELECT t.id, t.name, t.api_key, t.created_at, t.plan,

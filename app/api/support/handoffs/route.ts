@@ -1,10 +1,10 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { fanOutToSupportChannels, saveChatMessage } from "@/lib/support";
+import { readTenantId } from "@/lib/auth";
 
-async function tenantId() { return (await cookies()).get("tenant_id")?.value ?? null; }
+async function tenantId() { return (await readTenantId()) ?? null; }
 
 async function channelRefs(sessionId: string) {
   const rows = await sql`SELECT bot_id, telegram_topic_id, slack_thread_ts FROM support_handoffs WHERE session_id = ${sessionId}`;

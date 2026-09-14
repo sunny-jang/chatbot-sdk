@@ -3,8 +3,12 @@ import sql from "@/lib/neon";
 import { initSchema, Tenant } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { randomUUID } from "crypto";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET() {
+  // 미들웨어와 별도로 DB의 관리자 여부를 다시 확인합니다.
+  const denied = await requireAdmin();
+  if (denied) return denied;
   await initSchema();
   const rows = await sql`
     SELECT t.id, t.name, t.api_key, t.created_at, t.plan,
@@ -20,6 +24,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // 미들웨어와 별도로 DB의 관리자 여부를 다시 확인합니다.
+  const denied = await requireAdmin();
+  if (denied) return denied;
   const { name, openai_api_key } = await req.json();
   if (!name) {
     return NextResponse.json({ error: "name required" }, { status: 400 });

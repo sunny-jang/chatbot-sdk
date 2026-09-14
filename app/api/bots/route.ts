@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { initSchema, Bot } from "@/lib/db";
 import { randomUUID } from "crypto";
 import { getBotLimit, normalizePlan, PLAN_CONFIG } from "@/lib/plans";
+import { readTenantId } from "@/lib/auth";
 
 async function getTenantId() {
-  const jar = await cookies();
-  return jar.get("tenant_id")?.value ?? null;
+  return (await readTenantId()) ?? null;
 }
 
 export async function GET() {

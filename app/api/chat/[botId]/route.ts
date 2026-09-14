@@ -5,12 +5,12 @@ import { findBestMatch, getEmbedding, cosineSimilarity } from "@/lib/embeddings"
 import { getTenantApiKey } from "@/lib/tenantKey";
 import OpenAI from "openai";
 import { randomUUID } from "crypto";
-import { cookies } from "next/headers";
 import { classifyIntent, detectRefusal, estimateOpenAICost } from "@/lib/analytics";
 import { getMonthlySessionLimit, normalizePlan, PLAN_CONFIG } from "@/lib/plans";
 import { reserveMonthlySession } from "@/lib/monthlyUsage";
 import { enforceRateLimit, ensureChatSession, fanOutToSupportChannels, saveChatMessage } from "@/lib/support";
 import { getSupportStatus } from "@/lib/supportHours";
+import { readTenantId } from "@/lib/auth";
 
 type AnalyticsLog = {
   intent: string;
@@ -128,7 +128,7 @@ export async function POST(
   if (!bot) return NextResponse.json({ error: "Bot not found" }, { status: 404 });
   // 상담원 연결 모드 · 강제 무인 운영 꺼짐 · 운영 시간 안일 때만 상담원 연결 버튼을 제공합니다.
   const supportLive = getSupportStatus(bot).live;
-  const cookieTenantId = (await cookies()).get("tenant_id")?.value;
+  const cookieTenantId = (await readTenantId());
   const suppliedToken = req.headers.get("x-bot-token");
   if (cookieTenantId !== bot.tenant_id && (!bot.public_token || suppliedToken !== bot.public_token)) {
     return NextResponse.json({ error: "Invalid bot token" }, { status: 401 });

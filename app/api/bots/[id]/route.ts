@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { Bot } from "@/lib/db";
 import { normalizeSupportHours } from "@/lib/supportHours";
+import { readTenantId } from "@/lib/auth";
 
 async function getTenantId() {
-  const jar = await cookies();
-  return jar.get("tenant_id")?.value ?? null;
+  return (await readTenantId()) ?? null;
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {

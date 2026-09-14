@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { initSchema, QaPair } from "@/lib/db";
 import { getEmbedding } from "@/lib/embeddings";
 import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
+import { readTenantId } from "@/lib/auth";
 
 async function getTenantId() {
-  const jar = await cookies();
-  return jar.get("tenant_id")?.value ?? null;
+  return (await readTenantId()) ?? null;
 }
 
 async function botBelongsToTenant(botId: string, tenantId: string) {

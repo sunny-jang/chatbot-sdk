@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -80,6 +81,12 @@ export default function SignupPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "회원가입에 실패했습니다.");
+        return;
+      }
+      // 가입 후 같은 이메일·비밀번호로 Auth.js 세션을 발급받아 바로 로그인합니다.
+      const login = await signIn("credentials", { email, password, redirect: false });
+      if (!login?.ok || login.error) {
+        router.push("/login");
         return;
       }
       router.push("/");

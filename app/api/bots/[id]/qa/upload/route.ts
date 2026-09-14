@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { getEmbeddings } from "@/lib/embeddings";
 import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import { randomUUID } from "crypto";
 import * as XLSX from "xlsx";
+import { readTenantId } from "@/lib/auth";
 
-async function getTenantId() { return (await cookies()).get("tenant_id")?.value ?? null; }
+async function getTenantId() { return (await readTenantId()) ?? null; }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   await initSchema();

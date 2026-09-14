@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
-import { getSlackIntegration, saveChatMessage, sendSlackMessage, sendTelegramMessage, slackCall, verifySlackSignature } from "@/lib/support";
+import { getSlackIntegration, saveChatMessage, sendSlackMessage, slackCall, verifySlackSignature } from "@/lib/support";
 
 type SlackEvent = {
   type?: string;
@@ -43,12 +43,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
   }
   const threadTs = event.thread_ts || event.ts;
   const handoffs = await sql`
-    SELECT session_id, status, telegram_topic_id FROM support_handoffs
+    SELECT session_id, status FROM support_handoffs
     WHERE bot_id = ${botId} AND slack_channel_id = ${event.channel} AND slack_thread_ts = ${threadTs}
   `;
   if (!handoffs[0]) return NextResponse.json({ ok: true });
   const sessionId = handoffs[0].session_id as string;
-  const telegramTopicId = handoffs[0].telegram_topic_id as number | null;
   const externalId = `${event.channel}:${event.ts}`;
   const text = event.text.trim();
 
@@ -67,7 +66,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
     await sql`UPDATE chat_sessions SET status = 'closed', closed_at = ${now}, updated_at = ${now} WHERE id = ${sessionId}`;
     await saveChatMessage(sessionId, "system", "상담이 종료되었습니다.", "slack", agentName, externalId);
     await sendSlackMessage(botId, "✅ 상담이 종료되었습니다.", threadTs).catch(() => null);
-    if (telegramTopicId) await sendTelegramMessage(botId, "✅ 상담이 종료되었습니다. (Slack)", Number(telegramTopicId)).catch(() => false);
     return NextResponse.json({ ok: true });
   }
 
@@ -76,10 +74,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
     await sql`UPDATE chat_sessions SET status = 'human', assigned_agent_name = ${agentName}, updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = ${sessionId}`;
     await saveChatMessage(sessionId, "system", `${agentName}이 연결되었습니다.`, "system");
   }
-  const saved = await saveChatMessage(sessionId, "agent", text, "slack", agentName, externalId);
-  // 이미 처리한 중복 이벤트는 DB 멱등성으로 걸러지므로 미러링도 건너뜁니다.
-  if (saved && telegramTopicId) {
-    await sendTelegramMessage(botId, `[Slack 상담원] ${text}`, Number(telegramTopicId)).catch(() => false);
-  }
+  // 같은 이벤트가 다시 와도 (source, external_message_id) 멱등성으로 한 번만 저장됩니다.
+  await saveChatMessage(sessionId, "agent", text, "slack", agentName, externalId);
   return NextResponse.json({ ok: true });
 }

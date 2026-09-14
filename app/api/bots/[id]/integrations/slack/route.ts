@@ -1,12 +1,12 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { getSlackIntegration, slackCall } from "@/lib/support";
+import { readTenantId } from "@/lib/auth";
 
 async function ownedBot(id: string) {
-  const tenantId = (await cookies()).get("tenant_id")?.value;
+  const tenantId = (await readTenantId());
   if (!tenantId) return null;
   const rows = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   return rows[0] ? tenantId : null;

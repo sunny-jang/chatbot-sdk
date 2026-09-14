@@ -2,7 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import sql from "./neon";
 import { decrypt } from "./crypto";
 
-export type SenderType = "customer" | "bot" | "agent" | "system";
+type SenderType = "customer" | "bot" | "agent" | "system";
 
 export async function ensureChatSession(sessionId: string, tenantId: string, botId: string, customerName?: string) {
   await sql`
@@ -122,7 +122,7 @@ export async function enforceRateLimit(botId: string, request: Request, limit = 
   return Number(rows[0]?.request_count || 1) <= limit;
 }
 
-export type SupportChannelRefs = {
+type SupportChannelRefs = {
   telegram_topic_id?: number | string | null;
   slack_thread_ts?: string | null;
 };
@@ -135,13 +135,12 @@ export async function fanOutToSupportChannels(
   botId: string,
   refs: SupportChannelRefs,
   text: string,
-  skip: { telegram?: boolean; slack?: boolean } = {},
 ) {
   const tasks: Promise<unknown>[] = [];
-  if (!skip.telegram && refs.telegram_topic_id) {
+  if (refs.telegram_topic_id) {
     tasks.push(sendTelegramMessage(botId, text, Number(refs.telegram_topic_id)).catch(() => false));
   }
-  if (!skip.slack && refs.slack_thread_ts) {
+  if (refs.slack_thread_ts) {
     tasks.push(sendSlackMessage(botId, text, refs.slack_thread_ts).catch(() => null));
   }
   await Promise.all(tasks);

@@ -2,14 +2,21 @@ import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { encrypt } from "@/lib/crypto";
 import { normalizePlan } from "@/lib/plans";
+import { requireAdmin } from "@/lib/auth";
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  // 미들웨어와 별도로 DB의 관리자 여부를 다시 확인합니다.
+  const denied = await requireAdmin();
+  if (denied) return denied;
   const { id } = await params;
   await sql`DELETE FROM tenants WHERE id = ${id}`;
   return NextResponse.json({ ok: true });
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  // 미들웨어와 별도로 DB의 관리자 여부를 다시 확인합니다.
+  const denied = await requireAdmin();
+  if (denied) return denied;
   const { id } = await params;
   const { name, openai_api_key, plan, subscription_status, enterprise_bot_limit, enterprise_monthly_session_limit } = await req.json();
 

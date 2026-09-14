@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
+import { readTenantId } from "@/lib/auth";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   await initSchema();
-  const tenantId = (await cookies()).get("tenant_id")?.value;
+  const tenantId = (await readTenantId());
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   const owned = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const tenantId = (await cookies()).get("tenant_id")?.value;
+  const tenantId = (await readTenantId());
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   await sql`UPDATE bots SET logo_url = NULL WHERE id = ${id} AND tenant_id = ${tenantId}`;

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 const TENANT_PUBLIC_PATHS = ["/login", "/signup", "/demo", "/plan"];
 const TENANT_PUBLIC_PREFIXES = ["/api/auth/", "/api/chat/", "/api/widget/", "/api/integrations/telegram/", "/api/integrations/slack/", "/api/tenants", "/api/guide"];
 
+// 인증은 Auth.js 세션(req.auth) 하나만 신뢰합니다. tenant_id / is_admin 같은 일반 쿠키는 보지 않습니다.
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
@@ -18,11 +19,9 @@ export default auth((req) => {
     });
   }
 
-  // Super-admin routes
+  // Super-admin routes: 1차 확인만 하고, 각 관리자 API와 관리자 화면에서 DB로 다시 확인합니다.
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
-    const isAdminCookie = req.cookies.get("is_admin")?.value === "1";
-    const isAdminSession = req.auth?.is_admin === true;
-    if (!isAdminCookie && !isAdminSession) {
+    if (req.auth?.is_admin !== true) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
@@ -39,33 +38,11 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // Tenant auth: cookie(이메일/비밀번호) or Auth.js session(OAuth)
-  const cookieTenantId = req.cookies.get("tenant_id")?.value;
-  const sessionTenantId = req.auth?.tenant_id ?? null;
-  const tenantId = cookieTenantId || sessionTenantId;
-
-  if (!tenantId) {
+  if (!req.auth?.tenant_id) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.redirect(new URL("/login", req.url));
-  }
-
-  // OAuth 로그인 후 쿠키가 없으면 세션에서 동기화
-  if (!cookieTenantId && sessionTenantId) {
-    const res = NextResponse.next();
-    const cookieOpts = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax" as const,
-      maxAge: 60 * 60 * 24 * 30,
-      path: "/",
-    };
-    res.cookies.set("tenant_id", sessionTenantId, cookieOpts);
-    if (req.auth?.is_admin) {
-      res.cookies.set("is_admin", "1", cookieOpts);
-    }
-    return res;
   }
 
   return NextResponse.next();
