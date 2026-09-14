@@ -130,6 +130,12 @@ export default async function HomePage() {
                   </Link>
                 )}
                 <Link
+                  href={`/bots/${bot.id}/analytics`}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                >
+                  📊 분석
+                </Link>
+                <Link
                   href={`/bots/${bot.id}/test`}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
                 >
