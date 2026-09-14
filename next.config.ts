@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["unpdf", "mammoth"],
-  allowedDevOrigins: ["127.0.0.1"],
+  // 로컬 개발 중 Telegram/Slack 웹훅 테스트용 임시 터널(ngrok, cloudflared) 주소를 허용합니다.
+  allowedDevOrigins: ["127.0.0.1", "*.ngrok-free.dev", "*.ngrok-free.app", "*.trycloudflare.com"],
   async headers() {
     const cors = [
       { key: "Access-Control-Allow-Origin", value: "*" },

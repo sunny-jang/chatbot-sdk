@@ -5,6 +5,7 @@ import { initSchema } from "@/lib/db";
 import { enforceRateLimit, ensureChatSession, getSlackIntegration, getTelegramIntegration, saveChatMessage, slackCall, telegramCall } from "@/lib/support";
 import { getMonthlySessionLimit, normalizePlan } from "@/lib/plans";
 import { reserveMonthlySession } from "@/lib/monthlyUsage";
+import { getSupportStatus } from "@/lib/supportHours";
 
 export async function POST(req: Request, { params }: { params: Promise<{ botId: string }> }) {
   const { botId } = await params;
@@ -12,11 +13,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
   if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
   await initSchema();
   const botRows = await sql`
-    SELECT b.id, b.tenant_id, b.name, b.support_mode, b.public_token,
+    SELECT b.id, b.tenant_id, b.name, b.support_mode, b.support_channel, b.support_hours, b.force_unattended, b.public_token,
            t.plan, t.subscription_status, t.enterprise_monthly_session_limit
     FROM bots b JOIN tenants t ON t.id = b.tenant_id WHERE b.id = ${botId}
   `;
-  const bot = botRows[0] as { id:string; tenant_id:string; name:string; support_mode:string; public_token:string|null; plan:string; subscription_status:string; enterprise_monthly_session_limit:number|null } | undefined;
+  const bot = botRows[0] as { id:string; tenant_id:string; name:string; support_mode:string; support_channel:string|null; support_hours:unknown; force_unattended:boolean|null; public_token:string|null; plan:string; subscription_status:string; enterprise_monthly_session_limit:number|null } | undefined;
   if (!bot) return NextResponse.json({ error: "Bot not found" }, { status: 404 });
   if (!bot.public_token || req.headers.get("x-bot-token") !== bot.public_token) return NextResponse.json({ error: "Invalid bot token" }, { status: 401 });
   if (!(await enforceRateLimit(botId, req, 20))) return NextResponse.json({ error: "요청이 너무 많습니다." }, { status: 429 });
@@ -39,10 +40,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
     });
   }
 
+  // 이미 진행 중인 상담은 위에서 이어가고, 새 상담 요청만 강제 무인 운영·운영 시간을 확인합니다.
+  const supportStatus = getSupportStatus(bot);
+  if (!supportStatus.live) {
+    const forced = supportStatus.reason === "forced";
+    return NextResponse.json({
+      error: forced
+        ? "지금은 상담원 연결이 어렵습니다. 챗봇 상담을 이용해주세요."
+        : `지금은 상담원 연결 가능 시간이 아닙니다.${supportStatus.hoursText ? ` 상담 가능 시간: ${supportStatus.hoursText}` : ""}`,
+      code: forced ? "FORCED_UNATTENDED" : "OUTSIDE_SUPPORT_HOURS",
+      supportHoursText: supportStatus.hoursText,
+    }, { status: 409 });
+  }
+
   const handoffId = randomUUID();
   let topicId: number | null = null;
   let telegramChatId: string | null = null;
-  const integration = await getTelegramIntegration(botId);
+  // 상담원 연결 채널은 하나만 사용합니다. 이후 메시지·종료 알림은 상담 건에 저장된 채널 정보로만 전달됩니다.
+  const channel = bot.support_channel === "telegram" || bot.support_channel === "slack" ? bot.support_channel : "inbox";
+  const integration = channel === "telegram" ? await getTelegramIntegration(botId) : null;
   if (integration) {
     try {
       const topic = await telegramCall(integration.token, "createForumTopic", {
@@ -51,14 +67,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
       }) as { message_thread_id: number };
       topicId = topic.message_thread_id;
       telegramChatId = integration.chat_id;
-    } catch {
-      // Telegram 연결 실패 시에도 로컬 상담 대기열에는 정상 접수합니다.
+    } catch (error) {
+      // Telegram 연결 실패 시에도 로컬 상담 대기열에는 정상 접수합니다. 원인 파악을 위해 에러 내용만 로그로 남깁니다.
+      console.error(`[handoff] Telegram 주제 생성 실패 (bot ${botId}):`, error instanceof Error ? error.message : error);
     }
   }
 
   let slackChannelId: string | null = null;
   let slackThreadTs: string | null = null;
-  const slack = await getSlackIntegration(botId);
+  const slack = channel === "slack" ? await getSlackIntegration(botId) : null;
 
   const rows = await sql`
     INSERT INTO support_handoffs (id, session_id, bot_id, telegram_chat_id, telegram_topic_id, status, reason)
@@ -94,14 +111,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
         slackThreadTs = posted.ts;
         await sql`UPDATE support_handoffs SET slack_channel_id = ${slackChannelId}, slack_thread_ts = ${slackThreadTs} WHERE id = ${handoffId}`;
       }
-    } catch {
-      // Slack 연결 실패 시에도 로컬 상담 대기열에는 정상 접수합니다.
+    } catch (error) {
+      // Slack 연결 실패 시에도 로컬 상담 대기열에는 정상 접수합니다. 원인 파악을 위해 에러 내용만 로그로 남깁니다.
+      console.error(`[handoff] Slack 스레드 생성 실패 (bot ${botId}):`, error instanceof Error ? error.message : error);
     }
   }
 
   return NextResponse.json({
     ok: true,
     handoff: { ...rows[0], slack_channel_id: slackChannelId, slack_thread_ts: slackThreadTs },
+    channel,
     telegramConnected: Boolean(topicId),
     slackConnected: Boolean(slackThreadTs),
   }, { status: 201 });

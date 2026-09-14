@@ -7,12 +7,13 @@ export type HelpContent = {
   sections: { heading: string; items: string[] }[];
 };
 
-export default function HelpButton({ content }: { content: HelpContent }) {
+export default function HelpButton({ content, label = "이 화면 사용방법 보기" }: { content: HelpContent; label?: string }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <button
+        type="button"
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors"
         style={{ backgroundColor: "#ede9ff", color: "#6949f4", fontWeight: 500 }}
@@ -20,7 +21,7 @@ export default function HelpButton({ content }: { content: HelpContent }) {
         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "#ede9ff"; }}
       >
         <span style={{ fontSize: 13 }}>?</span>
-        이 화면 사용방법 보기
+        {label}
       </button>
 
       {open && (
@@ -41,6 +42,8 @@ export default function HelpButton({ content }: { content: HelpContent }) {
                 <h2 className="font-bold text-base" style={{ color: "#1a1040" }}>{content.title}</h2>
               </div>
               <button
+                type="button"
+                aria-label="닫기"
                 onClick={() => setOpen(false)}
                 className="text-lg leading-none transition-colors"
                 style={{ color: "#b8aee0" }}
@@ -73,6 +76,7 @@ export default function HelpButton({ content }: { content: HelpContent }) {
             {/* Footer */}
             <div className="px-6 py-4 border-t" style={{ borderColor: "#e8e6ff" }}>
               <button
+                type="button"
                 onClick={() => setOpen(false)}
                 className="w-full py-2 text-sm font-medium rounded-lg text-white transition-colors"
                 style={{ backgroundColor: "#6949f4" }}

@@ -9,7 +9,8 @@ import { cookies } from "next/headers";
 import { classifyIntent, detectRefusal, estimateOpenAICost } from "@/lib/analytics";
 import { getMonthlySessionLimit, normalizePlan, PLAN_CONFIG } from "@/lib/plans";
 import { reserveMonthlySession } from "@/lib/monthlyUsage";
-import { enforceRateLimit, ensureChatSession, saveChatMessage } from "@/lib/support";
+import { enforceRateLimit, ensureChatSession, fanOutToSupportChannels, saveChatMessage } from "@/lib/support";
+import { getSupportStatus } from "@/lib/supportHours";
 
 type AnalyticsLog = {
   intent: string;
@@ -125,12 +126,31 @@ export async function POST(
   ]);
   const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) return NextResponse.json({ error: "Bot not found" }, { status: 404 });
+  // 상담원 연결 모드 · 강제 무인 운영 꺼짐 · 운영 시간 안일 때만 상담원 연결 버튼을 제공합니다.
+  const supportLive = getSupportStatus(bot).live;
   const cookieTenantId = (await cookies()).get("tenant_id")?.value;
   const suppliedToken = req.headers.get("x-bot-token");
   if (cookieTenantId !== bot.tenant_id && (!bot.public_token || suppliedToken !== bot.public_token)) {
     return NextResponse.json({ error: "Invalid bot token" }, { status: 401 });
   }
   if (!(await enforceRateLimit(botId, req))) return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
+
+  // 상담원 연결 대기·상담 중인 세션에는 챗봇이 답하지 않고, 고객 메시지를 상담원 채널로 전달합니다.
+  // 위젯 상태가 어긋나거나(새로고침 복원 실패, 다른 탭) SDK로 직접 호출해도 AI 답변이 나가지 않도록 서버에서 막습니다.
+  if (sessionId) {
+    const activeHandoffs = await sql`
+      SELECT s.status, h.telegram_topic_id, h.slack_thread_ts
+      FROM chat_sessions s JOIN support_handoffs h ON h.session_id = s.id
+      WHERE s.id = ${sessionId} AND s.bot_id = ${botId} AND s.status IN ('waiting', 'human') AND h.status <> 'closed'
+    `;
+    const activeHandoff = activeHandoffs[0] as { status: string; telegram_topic_id: number | null; slack_thread_ts: string | null } | undefined;
+    if (activeHandoff) {
+      const text = String(message).trim();
+      await saveChatMessage(sessionId, "customer", text);
+      await fanOutToSupportChannels(botId, activeHandoff, `고객: ${text}`);
+      return NextResponse.json({ reply: null, handoffActive: true, status: activeHandoff.status });
+    }
+  }
 
   const tenantRows = await sql`
     SELECT plan, subscription_status, enterprise_monthly_session_limit
@@ -167,8 +187,6 @@ export async function POST(
   await ensureChatSession(sessionId, bot.tenant_id, botId);
   await saveChatMessage(sessionId, "customer", message);
 
-  const openai = new OpenAI({ apiKey: tenantApiKey ?? process.env.OPENAI_API_KEY });
-
   if (bot.type === "qa") {
     if (qaId) {
       const selectedRows = await sql`
@@ -184,7 +202,13 @@ export async function POST(
         toolName: "Q&A 선택", toolSuccess: true,
       });
       await saveChatMessage(sessionId, "bot", selected.answer, "bot");
-      return NextResponse.json({ reply: selected.answer, usage: reservation.usage, handoffAvailable: bot.support_mode === "hybrid" && refusal.refused });
+      // 목록에서 고른 질문의 답변은 Q&A 마지막 단계입니다.
+      // qa_handoff_always가 켜져 있으면 항상, 꺼져 있으면 답변 부족으로 판정된 경우에만 상담원 연결을 허용합니다.
+      return NextResponse.json({
+        reply: selected.answer,
+        usage: reservation.usage,
+        handoffAvailable: supportLive && (bot.qa_handoff_always !== false || refusal.refused),
+      });
     }
     const pairRows = await sql`
       SELECT id, answer, embedding FROM qa_pairs WHERE bot_id = ${botId}
@@ -222,13 +246,16 @@ export async function POST(
       toolSuccess: Boolean(match),
     });
     await saveChatMessage(sessionId, "bot", reply, "bot");
-    return NextResponse.json({ reply, usage: reservation.usage, handoffAvailable: bot.support_mode === "hybrid" && (!match || refusal.refused) });
+    return NextResponse.json({ reply, usage: reservation.usage, handoffAvailable: supportLive && (!match || refusal.refused) });
   }
 
   // AI bot — build messages with optional RAG context
   const queryEmbedding = await getEmbedding(message, tenantApiKey);
   const relevantDocs = await findRelevantDocs(botId, queryEmbedding);
 
+  // OpenAI 클라이언트는 AI 답변이 필요한 경로에서만 만듭니다.
+  // 키가 없어도 Q&A 목록 선택 답변은 동작해야 하기 때문입니다.
+  const openai = new OpenAI({ apiKey: tenantApiKey || process.env.OPENAI_API_KEY });
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
   let systemContent = bot.system_prompt ?? "";
@@ -279,5 +306,5 @@ export async function POST(
   await saveChatMessage(sessionId, "bot", reply, "bot");
 
   const usedDocs = relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) }));
-  return NextResponse.json({ reply, usedDocs, usage: reservation.usage, handoffAvailable: bot.support_mode === "hybrid" && (refusal.refused || relevantDocs.length === 0) });
+  return NextResponse.json({ reply, usedDocs, usage: reservation.usage, handoffAvailable: supportLive && (refusal.refused || relevantDocs.length === 0) });
 }

@@ -54,13 +54,25 @@ export async function PATCH(req: Request) {
   const sessions = await sql`SELECT id FROM chat_sessions WHERE id = ${sessionId} AND tenant_id = ${tenant}`;
   if (!sessions[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (action === "accept") {
+    // 대기 중인 상담만 시작합니다. 버튼을 여러 번 눌러도 연결 안내가 한 번만 저장되도록 조건부로 갱신합니다.
+    const accepted = await sql`
+      UPDATE support_handoffs SET status = 'active', accepted_at = COALESCE(accepted_at, EXTRACT(EPOCH FROM NOW())::BIGINT)
+      WHERE session_id = ${sessionId} AND status = 'waiting'
+      RETURNING session_id
+    `;
+    if (accepted.length === 0) return NextResponse.json({ ok: true, alreadyAccepted: true });
     await sql`UPDATE chat_sessions SET status = 'human', assigned_agent_name = ${agentName}, updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = ${sessionId}`;
-    await sql`UPDATE support_handoffs SET status = 'active', accepted_at = COALESCE(accepted_at, EXTRACT(EPOCH FROM NOW())::BIGINT) WHERE session_id = ${sessionId}`;
     await saveChatMessage(sessionId, "system", `${agentName} 상담원이 연결되었습니다.`, "system");
   } else if (action === "close") {
     const now = Math.floor(Date.now() / 1000);
+    // 아직 닫히지 않은 상담만 종료합니다. 중복 요청에도 종료 안내와 채널 알림이 한 번만 나가도록 조건부로 갱신합니다.
+    const closed = await sql`
+      UPDATE support_handoffs SET status = 'closed', closed_at = ${now}
+      WHERE session_id = ${sessionId} AND status <> 'closed'
+      RETURNING session_id
+    `;
+    if (closed.length === 0) return NextResponse.json({ ok: true, alreadyClosed: true });
     await sql`UPDATE chat_sessions SET status = 'closed', closed_at = ${now}, updated_at = ${now} WHERE id = ${sessionId}`;
-    await sql`UPDATE support_handoffs SET status = 'closed', closed_at = ${now} WHERE session_id = ${sessionId}`;
     await saveChatMessage(sessionId, "system", "상담이 종료되었습니다.", "system");
     const refs = await channelRefs(sessionId);
     if (refs) await fanOutToSupportChannels(refs.bot_id, refs, "✅ 상담이 종료되었습니다. (상담함)");

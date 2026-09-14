@@ -42,9 +42,16 @@ export async function telegramCall(token: string, method: string, body: Record<s
     body: JSON.stringify(body),
   });
   const data = await response.json();
-  if (!response.ok || !data.ok) throw new Error(data.description || `Telegram ${method} failed`);
+  if (!response.ok || !data.ok) {
+    // 그룹이 슈퍼그룹으로 업그레이드된 경우 parameters.migrate_to_chat_id로 새 Chat ID가 전달되므로 함께 보존합니다.
+    const error = new Error(data.description || `Telegram ${method} failed`) as TelegramApiError;
+    error.parameters = data.parameters;
+    throw error;
+  }
   return data.result;
 }
+
+export type TelegramApiError = Error & { parameters?: { migrate_to_chat_id?: number; retry_after?: number } };
 
 export async function sendTelegramMessage(botId: string, text: string, topicId?: number | null) {
   const integration = await getTelegramIntegration(botId);

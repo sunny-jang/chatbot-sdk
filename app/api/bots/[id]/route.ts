@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import sql from "@/lib/neon";
 import { Bot } from "@/lib/db";
+import { normalizeSupportHours } from "@/lib/supportHours";
 
 async function getTenantId() {
   const jar = await cookies();
@@ -26,7 +27,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const check = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   if (!check[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { name, system_prompt, model, widget_title, widget_color, greeting_message, support_mode } = await req.json();
+  const { name, system_prompt, model, widget_title, widget_color, greeting_message, support_mode, qa_handoff_always, support_channel, support_hours } = await req.json();
   const rows = await sql`
     UPDATE bots SET
       name = COALESCE(${name ?? null}, name),
@@ -35,10 +36,18 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       widget_title = ${widget_title ?? null},
       widget_color = COALESCE(${widget_color ?? null}, widget_color),
       greeting_message = ${greeting_message ?? null},
-      support_mode = COALESCE(${support_mode === "hybrid" || support_mode === "unattended" ? support_mode : null}, support_mode)
+      support_mode = COALESCE(${support_mode === "hybrid" || support_mode === "unattended" ? support_mode : null}, support_mode),
+      qa_handoff_always = COALESCE(${typeof qa_handoff_always === "boolean" ? qa_handoff_always : null}, qa_handoff_always),
+      support_channel = COALESCE(${support_channel === "inbox" || support_channel === "telegram" || support_channel === "slack" ? support_channel : null}, support_channel)
     WHERE id = ${id}
     RETURNING *
   `;
+  if (support_hours !== undefined) {
+    // 잘못된 값은 기본값으로 보정해 저장합니다. null을 보내면 운영 시간 설정을 지웁니다.
+    const hours = support_hours === null ? null : normalizeSupportHours(support_hours);
+    const updated = await sql`UPDATE bots SET support_hours = ${hours ? sql.json(hours) : null} WHERE id = ${id} RETURNING *`;
+    return NextResponse.json(updated[0] as unknown as Bot);
+  }
   return NextResponse.json(rows[0] as unknown as Bot);
 }
 

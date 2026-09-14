@@ -235,7 +235,31 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
                         </label>
                         <label className="flex items-center gap-1 text-xs" style={{ color: "#7565a7" }}>
                           월 세션
-                          <input type="number" min={1} defaultValue={t.enterprise_monthly_session_limit ?? 50000} onBlur={(event) => updatePlan(t, { enterprise_monthly_session_limit: Math.max(1, Number(event.target.value) || 1) })} className="w-24 rounded-lg border px-2 py-1.5 text-xs" style={{ borderColor: "#d4cfff" }} />건
+                          <input
+                            // 저장 후 값이 바뀌면 다시 마운트해 미설정 표시를 갱신합니다.
+                            key={`${t.id}-${t.enterprise_monthly_session_limit ?? "unset"}`}
+                            type="number"
+                            min={1}
+                            defaultValue={t.enterprise_monthly_session_limit ?? ""}
+                            placeholder="미설정"
+                            onBlur={(event) => {
+                              // 빈칸은 저장하지 않습니다. 기존 코드는 빈 값을 한도 1로 저장했습니다.
+                              const value = Number(event.target.value);
+                              if (!event.target.value.trim() || !(value > 0)) return;
+                              updatePlan(t, { enterprise_monthly_session_limit: Math.floor(value) });
+                            }}
+                            className="w-24 rounded-lg border px-2 py-1.5 text-xs"
+                            style={{ borderColor: t.enterprise_monthly_session_limit ? "#d4cfff" : "#f87171" }}
+                          />건
+                          {!t.enterprise_monthly_session_limit && (
+                            <span
+                              className="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                              style={{ backgroundColor: "#fef2f2", color: "#dc2626" }}
+                              title="한도를 입력하기 전까지 이 계정의 챗봇 대화가 차단됩니다."
+                            >
+                              ⚠ 미설정 · 대화 차단됨
+                            </span>
+                          )}
                         </label>
                       </>
                     )}

@@ -29,6 +29,13 @@
     const qaFolders = settings.qaFolders || [];
     const isQaBot = settings.type === "qa";
     const supportMode = settings.supportMode || "unattended";
+    // 설정이 없던 기존 응답도 켜짐으로 취급합니다.
+    const qaHandoffAlways = settings.qaHandoffAlways !== false;
+    // 운영 시간 밖이면 새 상담원 연결을 제공하지 않습니다. 이미 진행 중인 상담은 계속 이어집니다.
+    const supportAvailable = settings.supportAvailable !== false;
+    const supportHoursText = settings.supportHoursText || null;
+    const supportUnavailableReason = settings.supportUnavailableReason || null;
+    const canRequestHandoff = supportMode === "hybrid" && supportAvailable;
 
     // ── Styles ────────────────────────────────────────────────────────────────
     const css = `
@@ -164,7 +171,17 @@
       setComposerVisible(false);
       showFolderChoices();
     }
-    if (supportMode === "hybrid") supportBar.style.display = "flex";
+    if (supportMode === "hybrid") {
+      supportBar.style.display = "flex";
+      if (!supportAvailable) showOutsideHoursBar();
+    }
+
+    function showOutsideHoursBar() {
+      supportBar.querySelector("span").textContent = supportUnavailableReason === "forced"
+        ? "현재 챗봇 상담만 운영 중입니다"
+        : supportHoursText ? `상담원 연결 가능 시간: ${supportHoursText}` : "지금은 상담원 연결 가능 시간이 아닙니다";
+      supportBtn.style.display = "none";
+    }
     restoreConversation();
 
     function togglePanel() {
@@ -203,16 +220,12 @@
 
     function showFolderChoices() {
       setComposerVisible(false);
+      // Q&A 봇은 상담원 연결 전까지 직접 입력을 받지 않고, 질문 목록 선택과 상담원 연결만 제공합니다.
       const choices = qaFolders.map((folder) => ({ label: folder.name, folder }));
-      choices.push({ label: "직접 질문하기", direct: true });
-      if (supportMode === "hybrid") choices.push({ label: "상담원 연결", handoff: true });
-      addChoices(choices, ({ folder, direct, handoff }) => {
+      if (canRequestHandoff) choices.push({ label: "상담원 연결", handoff: true });
+      addChoices(choices, ({ folder, handoff }) => {
         if (handoff) {
           requestHandoff("고객이 상담원 연결을 선택했습니다.");
-          return;
-        }
-        if (direct) {
-          setComposerVisible(true);
           return;
         }
         addMessage(folder.name, "user");
@@ -223,8 +236,14 @@
     }
 
     async function sendSelectedQuestion(question) {
+      if (handoffActive) {
+        addMessage(question.question, "user");
+        await sendHandoffMessage(question.question);
+        return;
+      }
       addMessage(question.question, "user");
       const typingEl = addMessage("입력 중...", "bot typing");
+      let handoffAvailable = false;
       try {
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
@@ -234,16 +253,18 @@
         const data = await res.json();
         typingEl.textContent = data.reply || "오류가 발생했습니다.";
         typingEl.classList.remove("typing");
-        if (data.handoffAvailable) addChoices([{ label: "상담원에게 문의하기", handoff: true }], () => requestHandoff("Q&A 답변 부족"));
+        handoffAvailable = Boolean(data.handoffAvailable);
       } catch {
         typingEl.textContent = "네트워크 오류가 발생했습니다.";
         typingEl.classList.remove("typing");
       } finally {
-        addChoices([
-          { label: "다른 질문 보기", action: "folders" },
-          { label: "직접 질문하기", action: "direct" },
-        ], ({ action }) => {
-          if (action === "direct") setComposerVisible(true);
+        const nextChoices = [{ label: "다른 질문 보기", action: "folders" }];
+        // 설정이 켜져 있으면 마지막 단계에서 항상, 꺼져 있으면 답변 부족으로 판정된 경우에만 상담원 연결을 제공합니다.
+        if (canRequestHandoff && !handoffActive && (qaHandoffAlways || handoffAvailable)) {
+          nextChoices.push({ label: "상담원 연결", action: "handoff" });
+        }
+        addChoices(nextChoices, ({ action }) => {
+          if (action === "handoff") requestHandoff(`Q&A 답변 후 상담 요청: ${question.question}`);
           else showFolderChoices();
         });
       }
@@ -251,18 +272,14 @@
 
     async function sendMessage() {
       const text = inputEl.value.trim();
-      if (!text) return;
+      if (!text || sendBtn.disabled) return;
+      if (isQaBot && !handoffActive) return;
 
       inputEl.value = "";
       sendBtn.disabled = true;
       addMessage(text, "user");
       if (handoffActive) {
-        try {
-          await fetch(`${endpoint}/api/chat/${botId}/handoff/message`, {
-            method: "POST", headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
-            body: JSON.stringify({ sessionId, message: text }),
-          });
-        } catch { addMessage("메시지 전송에 실패했습니다.", "bot"); }
+        try { await sendHandoffMessage(text); }
         finally { sendBtn.disabled = false; inputEl.focus(); }
         return;
       }
@@ -275,6 +292,11 @@
           body: JSON.stringify({ message: text, history, sessionId }),
         });
         const data = await res.json();
+        if (res.ok && data.handoffActive) {
+          typingEl.remove();
+          enterHandoffMode(data.status, { announce: true });
+          return;
+        }
         typingEl.textContent = data.reply || data.error || "오류가 발생했습니다.";
         typingEl.classList.remove("typing");
         if (res.ok && data.reply) {
@@ -293,7 +315,12 @@
     }
 
     async function requestHandoff(reason) {
+      if (handoffActive) return;
       supportBtn.disabled = true;
+      // 요청이 처리되는 동안 입력한 메시지가 챗봇으로 가지 않도록 입력을 잠급니다.
+      inputEl.disabled = true;
+      sendBtn.disabled = true;
+      messagesEl.querySelectorAll(".cb-choices").forEach((el) => el.remove());
       addMessage("상담원을 연결하고 있습니다. 잠시만 기다려주세요.", "bot");
       try {
         const res = await fetch(`${endpoint}/api/chat/${botId}/handoff`, {
@@ -302,14 +329,56 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "상담 연결에 실패했습니다.");
-        handoffActive = true;
-        supportBar.querySelector("span").textContent = data.telegramConnected ? "상담원 연결 대기 중" : "상담 요청 접수 완료";
-        supportBtn.style.display = "none";
-        setComposerVisible(true);
-        startPolling();
+        enterHandoffMode(data.handoff?.status || "waiting", { announce: true });
       } catch (error) {
         addMessage(error.message || "상담 연결에 실패했습니다.", "bot");
         supportBtn.disabled = false;
+        if (isQaBot) showFolderChoices();
+      } finally {
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+      }
+    }
+
+    // 상담 대기·상담 중 상태로 전환합니다. 이후 입력은 챗봇이 아니라 상담원에게 전달됩니다.
+    function enterHandoffMode(status, { announce = false } = {}) {
+      const wasActive = handoffActive;
+      handoffActive = true;
+      messagesEl.querySelectorAll(".cb-choices").forEach((el) => el.remove());
+      supportBar.style.display = "flex";
+      supportBar.querySelector("span").textContent = status === "human" ? "상담원 상담 중" : "상담원 연결 대기 중";
+      supportBtn.style.display = "none";
+      setComposerVisible(true);
+      if (announce && !wasActive && status !== "human") {
+        addMessage("상담 요청이 접수되었습니다. 곧 상담원이 연결됩니다. 기다리시는 동안 남겨주신 메시지는 상담원에게 바로 전달됩니다.", "bot");
+      }
+      // 화면에 이미 보이는 챗봇 답변·시스템 메시지를 폴링이 다시 그리지 않도록, 현재까지의 메시지를 표시 완료로 기록합니다.
+      if (announce && !wasActive) markExistingMessagesSeen().finally(startPolling);
+      else startPolling();
+    }
+
+    async function markExistingMessagesSeen() {
+      try {
+        const res = await fetch(`${endpoint}/api/chat/${botId}/handoff?sessionId=${encodeURIComponent(sessionId)}&after=0`, { headers: { "X-Bot-Token": botToken } });
+        if (!res.ok) return;
+        const data = await res.json();
+        (data.messages || []).forEach((item) => displayedMessageIds.add(item.id));
+        if (data.messages?.length) lastSeen = Math.max(lastSeen, ...data.messages.map((item) => Number(item.created_at) || 0));
+      } catch { /* 실패하면 기존처럼 폴링만 진행합니다. */ }
+    }
+
+    async function sendHandoffMessage(text) {
+      try {
+        const res = await fetch(`${endpoint}/api/chat/${botId}/handoff/message`, {
+          method: "POST", headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
+          body: JSON.stringify({ sessionId, message: text }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          addMessage(data.error || "메시지 전송에 실패했습니다. 잠시 후 다시 시도해주세요.", "bot");
+        }
+      } catch {
+        addMessage("메시지 전송에 실패했습니다. 잠시 후 다시 시도해주세요.", "bot");
       }
     }
 
@@ -327,13 +396,9 @@
           })).slice(-20);
           lastSeen = Math.max(...data.messages.map((item) => Number(item.created_at) || 0));
         }
-        handoffActive = data.status === "waiting" || data.status === "human";
-        if (handoffActive) {
-          supportBar.style.display = "flex";
-          supportBar.querySelector("span").textContent = data.status === "human" ? `${data.assigned_agent_name || "상담원"} 상담 중` : "상담원 연결 대기 중";
-          supportBtn.style.display = "none";
-          setComposerVisible(true);
-          startPolling();
+        if (data.status === "waiting" || data.status === "human") {
+          enterHandoffMode(data.status);
+          if (data.status === "human") supportBar.querySelector("span").textContent = `${data.assigned_agent_name || "상담원"} 상담 중`;
         } else if (isQaBot && data.messages?.length) {
           showFolderChoices();
         }
@@ -344,8 +409,8 @@
       if (displayedMessageIds.has(item.id)) return;
       displayedMessageIds.add(item.id);
       const role = item.sender_type === "customer" ? "user" : "bot";
-      const prefix = item.sender_type === "agent" && item.sender_name ? `${item.sender_name}: ` : "";
-      addMessage(prefix + item.content, role);
+      // 상담원 이름("관리자: ")을 붙이지 않고 내용만 표시합니다. 상담 중 여부는 상단 바에 표시됩니다.
+      addMessage(item.content, role);
     }
 
     function startPolling() {
@@ -363,6 +428,9 @@
             clearInterval(pollTimer); pollTimer = null;
             supportBar.querySelector("span").textContent = "상담 종료";
             supportBtn.style.display = "inline"; supportBtn.disabled = false;
+            if (!supportAvailable) showOutsideHoursBar();
+            addMessage("상담이 종료되었습니다. 추가 문의는 챗봇이나 상담원 연결을 이용해주세요.", "bot");
+            if (isQaBot) showFolderChoices();
           }
         } catch { /* 다음 폴링에서 재시도 */ }
       }, 2500);
@@ -373,7 +441,9 @@
     sendBtn.addEventListener("click", sendMessage);
     supportBtn.addEventListener("click", () => requestHandoff("고객이 상담원 연결을 선택했습니다."));
     inputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      sendMessage();
     });
   }
 })();

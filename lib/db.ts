@@ -1,4 +1,5 @@
 import sql from "./neon";
+import type { SupportHours } from "./supportHours";
 
 let _initialized = false;
 let _initPromise: Promise<void> | null = null;
@@ -59,6 +60,14 @@ async function _runInit() {
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS logo_url TEXT`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS support_mode TEXT NOT NULL DEFAULT 'unattended'`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS public_token TEXT`;
+  // Q&A 마지막 단계(답변 표시)에서 항상 상담원 연결 버튼을 보여줄지 여부
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS qa_handoff_always BOOLEAN NOT NULL DEFAULT TRUE`;
+  // 상담원 연결 채널: inbox(자체 상담함만) / telegram / slack 중 하나. 자체 상담함은 항상 함께 사용됩니다.
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS support_channel TEXT NOT NULL DEFAULT 'inbox'`;
+  // 상담원 연결 가능 시간. NULL 또는 enabled=false면 항상 연결 가능합니다.
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS support_hours JSONB`;
+  // 강제 무인 운영: 켜져 있으면 운영 시간과 관계없이 새 상담원 연결을 막습니다. (진행 중인 상담은 유지)
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS force_unattended BOOLEAN NOT NULL DEFAULT FALSE`;
   await sql`UPDATE bots SET public_token = 'ibt-' || md5(random()::text || id) WHERE public_token IS NULL`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS bots_public_token_idx ON bots (public_token) WHERE public_token IS NOT NULL`;
   await sql`
@@ -251,6 +260,10 @@ export type Bot = {
   logo_url: string | null;
   support_mode: "unattended" | "hybrid";
   public_token: string | null;
+  qa_handoff_always: boolean;
+  support_channel: "inbox" | "telegram" | "slack";
+  support_hours: SupportHours | null;
+  force_unattended: boolean;
   created_at: number;
 };
 
