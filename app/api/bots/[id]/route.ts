@@ -37,7 +37,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       greeting_message = ${greeting_message ?? null},
       support_mode = COALESCE(${support_mode === "hybrid" || support_mode === "unattended" ? support_mode : null}, support_mode),
       qa_handoff_always = COALESCE(${typeof qa_handoff_always === "boolean" ? qa_handoff_always : null}, qa_handoff_always),
-      support_channel = COALESCE(${support_channel === "inbox" || support_channel === "telegram" || support_channel === "slack" ? support_channel : null}, support_channel)
+      -- Slack은 연동 준비 중이라 선택할 수 없습니다. (inbox, telegram만 저장)
+      support_channel = COALESCE(${support_channel === "inbox" || support_channel === "telegram" ? support_channel : null}, support_channel)
     WHERE id = ${id}
     RETURNING *
   `;

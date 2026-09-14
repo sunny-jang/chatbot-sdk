@@ -447,15 +447,19 @@ export default function BotSettings({ bot }: { bot: Bot }) {
           {([
             { value: "inbox", label: "자체 상담함만", desc: "관리자 화면에서 응대" },
             { value: "telegram", label: "Telegram", desc: telegramConnected ? "연결됨" : "연결 필요" },
-            { value: "slack", label: "Slack", desc: slackConnected ? "연결됨" : "연결 필요" },
+            // Slack은 실제 워크스페이스 연동 테스트 전까지 선택할 수 없게 막아둡니다.
+            { value: "slack", label: "Slack", desc: "준비 중", disabled: true },
           ] as const).map((option) => (
             <button
               key={option.value}
               type="button"
               role="radio"
               aria-checked={supportChannel === option.value}
+              aria-disabled={"disabled" in option && option.disabled}
+              disabled={"disabled" in option && option.disabled}
+              title={"disabled" in option && option.disabled ? "Slack 연동은 준비 중입니다." : undefined}
               onClick={() => setSupportChannel(option.value)}
-              className={`p-3 rounded-xl border-2 text-left ${supportChannel === option.value ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
+              className={`p-3 rounded-xl border-2 text-left disabled:cursor-not-allowed disabled:opacity-50 ${supportChannel === option.value ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
             >
               <b className="block text-sm text-gray-900">{option.label}</b>
               <span className="block text-[11px] text-gray-500 mt-0.5">{option.desc}</span>
