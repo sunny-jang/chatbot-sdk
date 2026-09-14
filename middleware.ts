@@ -50,6 +50,7 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|chatbot-widget.js|guide.html).*)",
+    // 공개 폴더의 이미지(로그인 화면 로고 등)는 로그인 전에도 보여야 하므로 인증 검사에서 제외합니다.
+    "/((?!_next/static|_next/image|favicon.ico|chatbot-widget.js|guide.html|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico)$).*)",
   ],
 };

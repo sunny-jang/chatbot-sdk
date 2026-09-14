@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
+import Image from "next/image";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -102,7 +103,7 @@ export default function SignupPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-md shadow-sm">
         <div className="mb-6">
-          <div className="text-2xl mb-2">🤖</div>
+          <Image src="/logo.png" alt="Ideal AI" width={140} height={42} priority unoptimized className="mb-3" style={{ width: 140, height: "auto" }} />
           <h1 className="text-xl font-bold text-gray-900">Ideal AI Chatbot SDK</h1>
           <p className="text-sm text-gray-500 mt-1">계정을 만들어 시작하세요</p>
         </div>
