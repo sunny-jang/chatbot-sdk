@@ -216,6 +216,7 @@
       });
       messagesEl.appendChild(wrap);
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      return wrap;
     }
 
     function showFolderChoices() {
@@ -242,32 +243,47 @@
         return;
       }
       addMessage(question.question, "user");
-      const typingEl = addMessage("입력 중...", "bot typing");
-      let handoffAvailable = false;
+      // 답은 위젯 설정으로 이미 받아두었으므로 즉시 표시합니다. 대화 기록·월 세션 차감은 뒤이어 서버에서 처리합니다.
+      const answerEl = addMessage(question.answer, "bot");
+      let choicesEl = addAnswerChoices(question, canRequestHandoff && qaHandoffAlways);
       try {
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
           body: JSON.stringify({ message: question.question, qaId: question.id, sessionId }),
         });
-        const data = await res.json();
-        typingEl.textContent = data.reply || "오류가 발생했습니다.";
-        typingEl.classList.remove("typing");
-        handoffAvailable = Boolean(data.handoffAvailable);
-      } catch {
-        typingEl.textContent = "네트워크 오류가 발생했습니다.";
-        typingEl.classList.remove("typing");
-      } finally {
-        const nextChoices = [{ label: "다른 질문 보기", action: "folders" }];
-        // 설정이 켜져 있으면 마지막 단계에서 항상, 꺼져 있으면 답변 부족으로 판정된 경우에만 상담원 연결을 제공합니다.
-        if (canRequestHandoff && !handoffActive && (qaHandoffAlways || handoffAvailable)) {
-          nextChoices.push({ label: "상담원 연결", action: "handoff" });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.handoffActive) {
+          // 다른 탭 등에서 이미 상담이 진행 중인 세션이면 상담 모드로 전환합니다.
+          enterHandoffMode(data.status, { announce: true });
+          return;
         }
-        addChoices(nextChoices, ({ action }) => {
-          if (action === "handoff") requestHandoff(`Q&A 답변 후 상담 요청: ${question.question}`);
-          else showFolderChoices();
-        });
+        if (!res.ok) {
+          // 월 세션 한도 초과·구독 중지·삭제된 질문 등 서버가 막은 경우 답 대신 서버 안내를 보여줍니다.
+          answerEl.textContent = data.reply || data.error || "답변을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
+          if (choicesEl.isConnected) {
+            choicesEl.remove();
+            choicesEl = addAnswerChoices(question, false);
+          }
+          return;
+        }
+        // "항상 표시"가 꺼져 있으면 서버가 답변 부족으로 판정한 경우에만 상담원 연결을 추가합니다.
+        if (!qaHandoffAlways && canRequestHandoff && data.handoffAvailable && choicesEl.isConnected && !handoffActive) {
+          choicesEl.remove();
+          choicesEl = addAnswerChoices(question, true);
+        }
+      } catch {
+        // 네트워크 실패: 답은 이미 표시되어 있으므로 그대로 두고, 기록만 누락됩니다.
       }
+    }
+
+    function addAnswerChoices(question, withHandoff) {
+      const nextChoices = [{ label: "다른 질문 보기", action: "folders" }];
+      if (withHandoff && !handoffActive) nextChoices.push({ label: "상담원 연결", action: "handoff" });
+      return addChoices(nextChoices, ({ action }) => {
+        if (action === "handoff") requestHandoff(`Q&A 답변 후 상담 요청: ${question.question}`);
+        else showFolderChoices();
+      });
     }
 
     async function sendMessage() {
