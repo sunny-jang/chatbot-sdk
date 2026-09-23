@@ -7,11 +7,11 @@ const HELP = {
   title: "설정 사용방법",
   sections: [
     {
-      heading: "OpenAI API 키",
+      heading: "AI API 키",
       items: [
-        "직접 발급받은 OpenAI API 키를 등록하면 해당 키로 챗봇이 동작합니다.",
-        "등록하지 않으면 서비스 기본 키가 사용됩니다.",
-        "키는 platform.openai.com → API Keys에서 발급받을 수 있습니다.",
+        "사용할 AI 제공업체의 API 키를 등록하면 챗봇별 모델 설정에 따라 해당 키가 사용됩니다.",
+        "키를 등록하지 않으면 해당 제공업체의 AI 채팅을 사용할 수 없습니다.",
+        "OpenAI 키는 platform.openai.com, Gemini 키는 Google AI Studio에서 발급받을 수 있습니다.",
       ],
     },
     {
@@ -27,6 +27,7 @@ const HELP = {
 export default function SettingsPage() {
   const [hasKey, setHasKey] = useState(false);
   const [maskedKey, setMaskedKey] = useState<string | null>(null);
+  const [provider, setProvider] = useState<"openai" | "gemini">("openai");
   const [newKey, setNewKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -36,8 +37,8 @@ export default function SettingsPage() {
     fetch("/api/tenants/settings")
       .then((r) => r.json())
       .then((d) => {
-        setHasKey(d.hasKey);
-        setMaskedKey(d.maskedKey);
+        setHasKey(d.openai?.hasKey ?? false);
+        setMaskedKey(d.openai?.maskedKey ?? null);
       });
   }, []);
 
@@ -49,17 +50,17 @@ export default function SettingsPage() {
       const res = await fetch("/api/tenants/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ openai_api_key: newKey.trim() }),
+        body: JSON.stringify({ provider, [`${provider}_api_key`]: newKey.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
         setMessage({ type: "error", text: data.error ?? "저장 실패" });
       } else {
-        setHasKey(data.hasKey);
+        setHasKey(true);
         setMaskedKey(newKey.trim().slice(0, 8) + "••••••••••••••••••••");
         setNewKey("");
         setShowInput(false);
-        setMessage({ type: "success", text: "API 키가 저장되었습니다." });
+        setMessage({ type: "success", text: `${provider === "gemini" ? "Gemini" : "OpenAI"} API 키가 저장되었습니다.` });
       }
     } finally {
       setSaving(false);
@@ -74,7 +75,7 @@ export default function SettingsPage() {
       await fetch("/api/tenants/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ openai_api_key: "" }),
+        body: JSON.stringify({ provider, [`${provider}_api_key`]: "" }),
       });
       setHasKey(false);
       setMaskedKey(null);
@@ -98,9 +99,9 @@ export default function SettingsPage() {
       <div className="bg-white border border-gray-200 rounded-2xl p-6">
         <div className="flex items-start justify-between mb-1">
           <div>
-            <h3 className="font-semibold text-gray-900">OpenAI API 키</h3>
+            <h3 className="font-semibold text-gray-900">AI API 키</h3>
             <p className="text-sm text-gray-500 mt-0.5">
-              직접 발급받은 키를 등록하면 해당 키로 챗봇이 동작합니다.
+              챗봇 설정에서 선택한 모델의 제공업체 키가 사용됩니다.
             </p>
           </div>
           <span
@@ -112,6 +113,27 @@ export default function SettingsPage() {
           >
             {hasKey ? "등록됨" : "미등록"}
           </span>
+        </div>
+
+        <div className="mt-4 flex gap-2 border-b border-gray-100">
+          {(["openai", "gemini"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => {
+                setProvider(item);
+                setNewKey("");
+                setShowInput(false);
+                fetch("/api/tenants/settings").then((r) => r.json()).then((d) => {
+                  setHasKey(d[item]?.hasKey ?? false);
+                  setMaskedKey(d[item]?.maskedKey ?? null);
+                });
+              }}
+              className={`px-3 py-2 text-sm font-medium border-b-2 ${provider === item ? "border-purple-600 text-purple-700" : "border-transparent text-gray-400"}`}
+            >
+              {item === "openai" ? "OpenAI (GPT)" : "Google Gemini"}
+            </button>
+          ))}
         </div>
 
         {hasKey && maskedKey && (
@@ -139,7 +161,7 @@ export default function SettingsPage() {
               type="password"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
-              placeholder="sk-proj-..."
+              placeholder={provider === "gemini" ? "Gemini API 키를 입력하세요" : "sk-proj-..."}
               required
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             />
@@ -177,10 +199,10 @@ export default function SettingsPage() {
 
         <div className="mt-5 pt-4 border-t border-gray-100 space-y-1">
           <p className="text-xs text-gray-400">
-            키는 AES-256 암호화되어 저장됩니다. 등록하지 않으면 서버의 기본 API 키가 사용됩니다.
+            키는 AES-256 암호화되어 저장됩니다. 사용할 모델의 키를 등록해야 AI 채팅이 가능합니다.
           </p>
           <p className="text-xs text-amber-600 font-medium">
-            ※ 현재 OpenAI(GPT) API 키만 지원합니다.
+            ※ 챗봇 설정에서 GPT 또는 Gemini 모델을 선택할 수 있습니다.
           </p>
         </div>
       </div>

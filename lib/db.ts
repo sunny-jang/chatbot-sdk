@@ -18,10 +18,12 @@ async function _runInit() {
       name TEXT NOT NULL,
       api_key TEXT UNIQUE NOT NULL,
       openai_api_key TEXT,
+      gemini_api_key TEXT,
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS openai_api_key TEXT`;
+  await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS gemini_api_key TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS email TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS password_hash TEXT`;
   await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS oauth_provider TEXT`;
@@ -241,6 +243,7 @@ export type Tenant = {
   name: string;
   api_key: string;
   openai_api_key: string | null;
+  gemini_api_key: string | null;
   email: string | null;
   password_hash: string | null;
   phone: string | null;

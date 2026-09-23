@@ -38,7 +38,7 @@ export default function NewBotPage() {
       const res = await fetch("/api/generate-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: serviceDesc }),
+        body: JSON.stringify({ description: serviceDesc, model }),
       });
       const data = await res.json();
       if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
@@ -122,7 +122,7 @@ export default function NewBotPage() {
                 <div className="text-xs text-gray-500 mt-0.5">
                   {t === "qa"
                     ? "질문/답변 세트로 응답"
-                    : "OpenAI가 자유롭게 응답"}
+                    : "GPT 또는 Gemini가 자유롭게 응답"}
                 </div>
               </button>
             ))}
@@ -199,7 +199,10 @@ export default function NewBotPage() {
                 <option value="gpt-4o-mini">gpt-4o-mini (빠름, 저렴)</option>
                 <option value="gpt-4o">gpt-4o (고성능)</option>
                 <option value="gpt-4.1">gpt-4.1</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (빠름, 저렴)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능)</option>
               </select>
+              <p className="text-xs text-gray-400 mt-1">Gemini를 선택하려면 설정에서 Gemini API 키를 먼저 등록하세요.</p>
             </div>
           </>
         )}

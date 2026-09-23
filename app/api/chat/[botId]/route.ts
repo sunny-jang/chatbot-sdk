@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { Bot, QaPair, initSchema } from "@/lib/db";
 import { findBestMatch, getEmbedding, cosineSimilarity } from "@/lib/embeddings";
-import { getTenantApiKey } from "@/lib/tenantKey";
+import { getTenantApiKeys } from "@/lib/tenantKey";
 import OpenAI from "openai";
+import { generateGeminiContent } from "@/lib/gemini";
 import { randomUUID } from "crypto";
 import { classifyIntent, detectRefusal, estimateOpenAICost } from "@/lib/analytics";
 import { getMonthlySessionLimit, normalizePlan, PLAN_CONFIG } from "@/lib/plans";
@@ -125,9 +126,9 @@ export async function POST(
   }
 
   await initSchema();
-  const [botRows, tenantApiKey] = await Promise.all([
+  const [botRows, tenantApiKeys] = await Promise.all([
     sql`SELECT * FROM bots WHERE id = ${botId}`,
-    getTenantApiKey(botId),
+    getTenantApiKeys(botId),
   ]);
   const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) return NextResponse.json({ error: "Bot not found" }, { status: 404 });
@@ -154,6 +155,20 @@ export async function POST(
       await saveChatMessage(sessionId, "customer", text);
       await fanOutToSupportChannels(botId, activeHandoff, `고객: ${text}`);
       return NextResponse.json({ reply: null, handoffActive: true, status: activeHandoff.status });
+    }
+  }
+
+  const selectedModel = bot.model || "gpt-4o-mini";
+  if (bot.type === "ai") {
+    const hasProviderKey = selectedModel.startsWith("gemini-")
+      ? Boolean(tenantApiKeys.gemini)
+      : Boolean(tenantApiKeys.openai);
+    if (!hasProviderKey) {
+      const provider = selectedModel.startsWith("gemini-") ? "Gemini" : "OpenAI";
+      return NextResponse.json({
+        error: `${provider} API 키를 설정에 등록해야 AI 채팅을 사용할 수 있습니다.`,
+        code: "AI_API_KEY_REQUIRED",
+      }, { status: 400 });
     }
   }
 
@@ -225,7 +240,7 @@ export async function POST(
         message,
         pairRows as unknown as Pick<QaPair, "id" | "answer" | "embedding">[],
         0.75,
-        tenantApiKey
+        tenantApiKeys.openai
       );
     } catch {
       await saveLog(botId, sessionId, message, "요청 처리 중 오류가 발생했습니다.", {
@@ -260,8 +275,11 @@ export async function POST(
   }
 
   // AI bot — build messages with optional RAG context
-  const queryEmbedding = await getEmbedding(message, tenantApiKey);
-  const relevantDocs = await findRelevantDocs(botId, queryEmbedding);
+  let relevantDocs: { title: string; content: string; score: number }[] = [];
+  if (tenantApiKeys.openai) {
+    const queryEmbedding = await getEmbedding(message, tenantApiKeys.openai);
+    relevantDocs = await findRelevantDocs(botId, queryEmbedding);
+  }
 
   // OpenAI 클라이언트는 AI 답변이 필요한 경로에서만 만듭니다.
   // 키가 없어도 Q&A 목록 선택 답변은 동작해야 하기 때문입니다.
@@ -278,6 +296,50 @@ export async function POST(
   for (const h of history) messages.push({ role: h.role, content: h.content });
   messages.push({ role: "user", content: message });
 
+  if (selectedModel.startsWith("gemini-")) {
+    const geminiKey = tenantApiKeys.gemini;
+    if (!geminiKey) {
+      return NextResponse.json({ error: "Gemini API 키를 설정에서 등록해주세요." }, { status: 400 });
+    }
+    try {
+      const completion = await generateGeminiContent({
+        apiKey: geminiKey,
+        model: selectedModel,
+        systemInstruction: systemContent || undefined,
+        contents: [
+          ...history
+            .filter((h: { role?: string; content?: string }) => h?.content && (h.role === "user" || h.role === "assistant"))
+            .map((h: { role: "user" | "assistant"; content: string }) => ({
+              role: h.role === "assistant" ? "model" as const : "user" as const,
+              parts: [{ text: h.content }],
+            })),
+          { role: "user", parts: [{ text: message }] },
+        ],
+      });
+      const reply = completion.text;
+      const refusal = detectRefusal(reply);
+      await saveLog(botId, sessionId, message, reply, {
+        intent: classifyIntent(message), refused: refusal.refused, refusalReason: refusal.reason,
+        model: completion.model ?? selectedModel,
+        inputTokens: completion.inputTokens, outputTokens: completion.outputTokens,
+        latencyMs: Date.now() - startedAt, apiSuccess: true, estimatedCostUsd: null,
+        toolName: relevantDocs.length > 0 ? "문서 검색(RAG)" : null,
+        toolSuccess: relevantDocs.length > 0 ? true : null,
+      });
+      return NextResponse.json({ reply, usedDocs: relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) })), usage: reservation.usage });
+    } catch {
+      await saveLog(botId, sessionId, message, "요청 처리 중 오류가 발생했습니다.", {
+        intent: classifyIntent(message), refused: false, refusalReason: null,
+        model: selectedModel, inputTokens: null, outputTokens: null,
+        latencyMs: Date.now() - startedAt, apiSuccess: false, estimatedCostUsd: null,
+        toolName: relevantDocs.length > 0 ? "문서 검색(RAG)" : null,
+        toolSuccess: relevantDocs.length > 0 ? false : null,
+      });
+      return NextResponse.json({ error: "Gemini 답변을 생성하지 못했습니다." }, { status: 500 });
+    }
+  }
+
+  const openai = new OpenAI({ apiKey: tenantApiKeys.openai as string });
   let completion;
   try {
     completion = await openai.chat.completions.create({
