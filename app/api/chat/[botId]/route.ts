@@ -281,9 +281,6 @@ export async function POST(
     relevantDocs = await findRelevantDocs(botId, queryEmbedding);
   }
 
-  // OpenAI 클라이언트는 AI 답변이 필요한 경로에서만 만듭니다.
-  // 키가 없어도 Q&A 목록 선택 답변은 동작해야 하기 때문입니다.
-  const openai = new OpenAI({ apiKey: tenantApiKey || process.env.OPENAI_API_KEY });
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
   let systemContent = bot.system_prompt ?? "";

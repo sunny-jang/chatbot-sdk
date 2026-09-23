@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
-const TENANT_PUBLIC_PATHS = ["/login", "/signup", "/demo", "/plan"];
+const TENANT_PUBLIC_PATHS = ["/", "/login", "/signup", "/demo", "/plan", "/brochure.html"];
 const TENANT_PUBLIC_PREFIXES = ["/api/auth/", "/api/chat/", "/api/widget/", "/api/integrations/telegram/", "/api/integrations/slack/", "/api/tenants", "/api/guide"];
 
 // 인증은 Auth.js 세션(req.auth) 하나만 신뢰합니다. tenant_id / is_admin 같은 일반 쿠키는 보지 않습니다.
