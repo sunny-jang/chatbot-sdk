@@ -50,8 +50,8 @@
         transition: transform 0.2s, box-shadow 0.2s;
       }
       #__chatbot-fab .fab-logo {
-        width: 34px; height: 34px; padding: 4px; border-radius: 10px;
-        background: #fff; object-fit: contain; display: block;
+        width: 52px; height: 52px; padding: 0; border-radius: 50%;
+        object-fit: cover; display: block;
       }
       #__chatbot-fab:hover { transform: scale(1.05); box-shadow: 0 6px 20px ${color}88; }
       #__chatbot-panel {
