@@ -15,6 +15,7 @@ import { initIdealAIChatbot } from "ideal-ai-chatbot-sdk";
 
 const chatbot = await initIdealAIChatbot({
   botId: "관리자 화면의 챗봇 ID",
+  botToken: "관리자 화면에서 발급된 공개 위젯 호출 토큰",
   endpoint: "https://your-ideal-ai-server.com",
 });
 
@@ -36,6 +37,7 @@ export function Chatbot() {
 
     initIdealAIChatbot({
       botId: "관리자 화면의 챗봇 ID",
+      botToken: "관리자 화면에서 발급된 공개 위젯 호출 토큰",
       endpoint: "https://your-ideal-ai-server.com",
     }).then((instance) => {
       destroy = instance.destroy;

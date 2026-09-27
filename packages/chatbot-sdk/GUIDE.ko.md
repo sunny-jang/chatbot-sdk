@@ -13,6 +13,7 @@ import { initIdealAIChatbot } from "ideal-ai-chatbot-sdk";
 
 const chatbot = await initIdealAIChatbot({
   botId: "관리자 화면의 챗봇 ID",
+  botToken: "관리자 화면에서 발급된 공개 위젯 호출 토큰",
   endpoint: "https://chatbot.sdk.eunseon.com",
 });
 ```
@@ -34,6 +35,7 @@ export function IdealAIChatbot() {
     let destroy: (() => void) | undefined;
     initIdealAIChatbot({
       botId: "관리자 화면의 챗봇 ID",
+      botToken: "관리자 화면에서 발급된 공개 위젯 호출 토큰",
       endpoint: "https://chatbot.sdk.eunseon.com",
     }).then((instance) => { destroy = instance.destroy; });
     return () => destroy?.();
@@ -47,6 +49,7 @@ export function IdealAIChatbot() {
 | 항목 | 필수 | 설명 |
 |---|---|---|
 | `botId` | 필수 | IDEAL AI 관리자 화면에서 생성한 챗봇 ID |
+| `botToken` | 필수 | IDEAL AI 관리자 화면에서 발급된 공개 위젯 호출 토큰 |
 | `endpoint` | 필수 | IDEAL AI 운영 서버 주소 |
 | `scriptUrl` | 선택 | 위젯 스크립트를 별도 호스팅할 때 사용 |
 

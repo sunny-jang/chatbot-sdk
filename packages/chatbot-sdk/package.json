@@ -1,6 +1,6 @@
 {
   "name": "ideal-ai-chatbot-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "IDEAL AI 챗봇을 웹사이트에 설치하는 공식 브라우저 SDK",
   "license": "MIT",
   "type": "module",

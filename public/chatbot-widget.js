@@ -26,6 +26,7 @@
     const title = settings.title || "💬 Ideal AI";
     const greeting = settings.greeting || null;
     const logo = settings.logo || null;
+    const fabLogo = logo || `${endpoint}/logo.png`;
     const qaFolders = settings.qaFolders || [];
     const isQaBot = settings.type === "qa";
     const supportMode = settings.supportMode || "unattended";
@@ -47,6 +48,10 @@
         font-size: 22px; box-shadow: 0 4px 16px ${color}66;
         display: flex; align-items: center; justify-content: center;
         transition: transform 0.2s, box-shadow 0.2s;
+      }
+      #__chatbot-fab .fab-logo {
+        width: 34px; height: 34px; padding: 4px; border-radius: 10px;
+        background: #fff; object-fit: contain; display: block;
       }
       #__chatbot-fab:hover { transform: scale(1.05); box-shadow: 0 6px 20px ${color}88; }
       #__chatbot-panel {
@@ -79,6 +84,14 @@
         max-width: 80%; padding: 9px 13px; border-radius: 12px;
         font-size: 14px; line-height: 1.5; word-break: break-word;
       }
+      .cb-msg p { margin: 0 0 8px; }
+      .cb-msg p:last-child { margin-bottom: 0; }
+      .cb-msg strong { font-weight: 700; }
+      .cb-msg em { font-style: italic; }
+      .cb-msg code { padding: 1px 4px; border-radius: 4px; background: rgba(0,0,0,0.06); font-size: 0.92em; }
+      .cb-msg ol, .cb-msg ul { margin: 6px 0 8px 20px; padding: 0; }
+      .cb-msg li { margin: 4px 0; padding-left: 2px; }
+      .cb-msg li:last-child { margin-bottom: 0; }
       .cb-msg.user { align-self: flex-end; background: ${color}; color: white; border-bottom-right-radius: 4px; }
       .cb-msg.bot { align-self: flex-start; background: #f3f4f6; color: #111; border-bottom-left-radius: 4px; }
       .cb-msg.typing { color: #9ca3af; font-style: italic; }
@@ -119,8 +132,16 @@
 
     const fab = document.createElement("button");
     fab.id = "__chatbot-fab";
-    fab.innerHTML = "💬";
     fab.setAttribute("aria-label", "채팅 열기");
+    const fabLogoEl = document.createElement("img");
+    fabLogoEl.className = "fab-logo";
+    fabLogoEl.src = fabLogo;
+    fabLogoEl.alt = "";
+    fabLogoEl.addEventListener("error", () => {
+      fabLogoEl.remove();
+      fab.appendChild(document.createTextNode("💬"));
+    }, { once: true });
+    fab.appendChild(fabLogoEl);
     root.appendChild(fab);
 
     const panel = document.createElement("div");
@@ -186,7 +207,19 @@
 
     function togglePanel() {
       open = !open;
-      fab.innerHTML = open ? "✕" : "💬";
+      if (open) {
+        fab.replaceChildren(document.createTextNode("✕"));
+      } else if (!fab.querySelector(".fab-logo")) {
+        const restoredLogo = document.createElement("img");
+        restoredLogo.className = "fab-logo";
+        restoredLogo.src = fabLogo;
+        restoredLogo.alt = "";
+        restoredLogo.addEventListener("error", () => {
+          restoredLogo.remove();
+          fab.appendChild(document.createTextNode("💬"));
+        }, { once: true });
+        fab.appendChild(restoredLogo);
+      }
       panel.classList.toggle("open", open);
       if (open) {
         inputEl.focus();
@@ -195,10 +228,83 @@
       }
     }
 
+    function appendInlineMarkdown(parent, text) {
+      const tokenPattern = /(\*\*|__)(.+?)\1|(?<!\*)\*([^*\n]+?)\*(?!\*)|(?<!_)_([^_\n]+?)_(?!_)|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
+      let cursor = 0;
+      let match;
+
+      while ((match = tokenPattern.exec(text))) {
+        if (match.index > cursor) parent.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+
+        if (match[2]) {
+          const strong = document.createElement("strong");
+          strong.textContent = match[2];
+          parent.appendChild(strong);
+        } else if (match[3] || match[4]) {
+          const emphasis = document.createElement("em");
+          emphasis.textContent = match[3] || match[4];
+          parent.appendChild(emphasis);
+        } else if (match[5]) {
+          const code = document.createElement("code");
+          code.textContent = match[5];
+          parent.appendChild(code);
+        } else if (match[6] && match[7]) {
+          const link = document.createElement("a");
+          link.href = match[7];
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = match[6];
+          parent.appendChild(link);
+        }
+
+        cursor = match.index + match[0].length;
+      }
+
+      if (cursor < text.length) parent.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+
+    function renderMarkdown(parent, markdown) {
+      parent.replaceChildren();
+      const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+      let index = 0;
+
+      while (index < lines.length) {
+        const line = lines[index];
+        if (!line.trim()) {
+          index += 1;
+          continue;
+        }
+
+        const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+        const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+        if (ordered || unordered) {
+          const list = document.createElement(ordered ? "ol" : "ul");
+          while (index < lines.length) {
+            const current = lines[index];
+            const item = current.match(ordered ? /^\s*\d+[.)]\s+(.+)$/ : /^\s*[-*+]\s+(.+)$/);
+            if (!item) break;
+            const li = document.createElement("li");
+            appendInlineMarkdown(li, item[1]);
+            list.appendChild(li);
+            index += 1;
+          }
+          parent.appendChild(list);
+          continue;
+        }
+
+        const heading = line.match(/^\s{0,3}#{1,3}\s+(.+)$/);
+        const block = document.createElement(heading ? "strong" : "p");
+        appendInlineMarkdown(block, heading ? heading[1] : line);
+        parent.appendChild(block);
+        index += 1;
+      }
+    }
+
     function addMessage(text, role) {
       const el = document.createElement("div");
       el.className = "cb-msg " + role;
-      el.textContent = text;
+      if (role === "bot" || role === "assistant") renderMarkdown(el, text);
+      else el.textContent = text;
       messagesEl.appendChild(el);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       return el;
@@ -260,7 +366,7 @@
         }
         if (!res.ok) {
           // 월 세션 한도 초과·구독 중지·삭제된 질문 등 서버가 막은 경우 답 대신 서버 안내를 보여줍니다.
-          answerEl.textContent = data.reply || data.error || "답변을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
+          renderMarkdown(answerEl, data.reply || data.error || "답변을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
           if (choicesEl.isConnected) {
             choicesEl.remove();
             choicesEl = addAnswerChoices(question, false);
@@ -313,7 +419,7 @@
           enterHandoffMode(data.status, { announce: true });
           return;
         }
-        typingEl.textContent = data.reply || data.error || "오류가 발생했습니다.";
+        renderMarkdown(typingEl, data.reply || data.error || "오류가 발생했습니다.");
         typingEl.classList.remove("typing");
         if (res.ok && data.reply) {
           history.push({ role: "user", content: text });
