@@ -62,6 +62,13 @@ async function saveLog(
 const DOC_THRESHOLD = 0.25;
 const DOC_TOP_K = 5;
 const DOC_CONTEXT_MAX_CHARS = 24_000;
+const IDEAL_AI_BOT_ID = "8f3656de-94a4-4175-9b7f-2912baeb25c4";
+const IDEAL_AI_CONTACT_REPLY =
+  "구체적인 상담이나 프로젝트 문의는 아래 연락처로 바로 문의해주세요.\n\n- 이메일: eunseon@ideal-tech.co.kr\n- 전화·문자: 010-7652-9798";
+
+function isContactQuestion(message: string) {
+  return /연락처|문의처|문의 방법|상담|전화번호|전화|휴대폰|이메일|메일|견적/.test(message);
+}
 
 function buildDocumentContext(docs: { title: string; content: string }[]) {
   let remaining = DOC_CONTEXT_MAX_CHARS;
@@ -206,6 +213,25 @@ export async function POST(
 
   await ensureChatSession(sessionId, bot.tenant_id, botId);
   await saveChatMessage(sessionId, "customer", message);
+
+  // Ideal AI 공식 연락처는 모델의 일반적인 예시 답변으로 대체되지 않도록 확정 답변합니다.
+  if (botId === IDEAL_AI_BOT_ID && bot.type === "ai" && isContactQuestion(message)) {
+    await saveLog(botId, sessionId, message, IDEAL_AI_CONTACT_REPLY, {
+      intent: "문의/연락처",
+      refused: false,
+      refusalReason: null,
+      model: "contact-fallback",
+      inputTokens: null,
+      outputTokens: null,
+      latencyMs: Date.now() - startedAt,
+      apiSuccess: true,
+      estimatedCostUsd: null,
+      toolName: "공식 연락처 안내",
+      toolSuccess: true,
+    });
+    await saveChatMessage(sessionId, "bot", IDEAL_AI_CONTACT_REPLY, "bot");
+    return NextResponse.json({ reply: IDEAL_AI_CONTACT_REPLY, usage: reservation.usage });
+  }
 
   if (bot.type === "qa") {
     if (qaId) {
