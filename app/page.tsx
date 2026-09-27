@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import sql from "@/lib/neon";
 import { initSchema, Bot } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
@@ -33,8 +34,10 @@ const HELP = {
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  await initSchema();
   const tenantId = await getTenantId();
+  if (!tenantId) redirect("/brochure.html");
+
+  await initSchema();
   const bots = (await sql`
     SELECT * FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC
   `) as unknown as Bot[];

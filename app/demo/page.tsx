@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 const DEMO_BOT_ID = process.env.NEXT_PUBLIC_DEMO_BOT_ID;
 
@@ -71,17 +72,8 @@ export default function DemoPage() {
       {/* Nav */}
       <nav className="flex items-center justify-between px-8 py-4 border-b border-white/10">
         <Link href="/demo" className="flex items-center gap-2.5">
-          <div style={{
-            display: "grid", placeItems: "center", color: "white",
-            width: "34px", height: "34px", borderRadius: "10px 10px 6px 6px",
-            fontSize: "13px", fontWeight: 800, letterSpacing: "-1px",
-            transform: "skew(-6deg)",
-            background: "linear-gradient(145deg, #f054c1, #6949f4 64%, #2f7bf4)",
-            flexShrink: 0,
-          }}>iA</div>
-          <span className="font-bold text-lg">
-            <span className="text-white">Ideal </span>
-            <span style={{ color: "#6949f4" }}>AI</span>
+          <span className="bg-white rounded-lg px-2 py-1">
+            <Image src="/logo.png" alt="Ideal AI" width={120} height={25} priority className="h-auto w-[120px]" />
           </span>
         </Link>
         <div className="flex items-center gap-5 text-sm text-white/60">

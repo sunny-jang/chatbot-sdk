@@ -141,7 +141,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
       const res = await fetch(`/api/bots/${bot.id}/generate-prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: serviceDesc }),
+        body: JSON.stringify({ description: serviceDesc, model }),
       });
       const data = await res.json();
       if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
@@ -318,7 +318,10 @@ export default function BotSettings({ bot }: { bot: Bot }) {
                 <option value="gpt-4o-mini">gpt-4o-mini (빠름, 저렴)</option>
                 <option value="gpt-4o">gpt-4o (고성능)</option>
                 <option value="gpt-4.1">gpt-4.1</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (빠름, 저렴)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능)</option>
               </select>
+              <p className="text-xs text-gray-400 mt-1">Gemini 모델을 선택하면 설정에 등록한 Gemini API 키가 사용됩니다.</p>
             </div>
           </>
         )}
