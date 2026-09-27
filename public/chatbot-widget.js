@@ -218,7 +218,7 @@
           restoredLogo.remove();
           fab.appendChild(document.createTextNode("💬"));
         }, { once: true });
-        fab.appendChild(restoredLogo);
+        fab.replaceChildren(restoredLogo);
       }
       panel.classList.toggle("open", open);
       if (open) {
