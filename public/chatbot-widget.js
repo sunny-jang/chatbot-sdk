@@ -178,6 +178,7 @@
     let sessionId = localStorage.getItem(sessionStorageKey) || crypto.randomUUID();
     localStorage.setItem(sessionStorageKey, sessionId);
     let handoffActive = false;
+    let qaAiMode = false;
     let lastSeen = 0;
     let pollTimer = null;
     const displayedMessageIds = new Set();
@@ -326,11 +327,20 @@
     }
 
     function showFolderChoices() {
+      qaAiMode = false;
       setComposerVisible(false);
       // Q&A 봇은 상담원 연결 전까지 직접 입력을 받지 않고, 질문 목록 선택과 상담원 연결만 제공합니다.
       const choices = qaFolders.map((folder) => ({ label: folder.name, folder }));
+      choices.push({ label: "AI에게 질문하기", ai: true });
       if (canRequestHandoff) choices.push({ label: "상담원 연결", handoff: true });
-      addChoices(choices, ({ folder, handoff }) => {
+      addChoices(choices, ({ folder, handoff, ai }) => {
+        if (ai) {
+          qaAiMode = true;
+          addMessage("궁금한 내용을 입력해주세요. 등록된 문서를 바탕으로 AI가 답변합니다.", "bot");
+          setComposerVisible(true);
+          inputEl.placeholder = "AI에게 질문하세요...";
+          return;
+        }
         if (handoff) {
           requestHandoff("고객이 상담원 연결을 선택했습니다.");
           return;
@@ -384,18 +394,23 @@
     }
 
     function addAnswerChoices(question, withHandoff) {
-      const nextChoices = [{ label: "다른 질문 보기", action: "folders" }];
+      const nextChoices = [{ label: "다른 질문 보기", action: "folders" }, { label: "AI에게 질문하기", action: "ai" }];
       if (withHandoff && !handoffActive) nextChoices.push({ label: "상담원 연결", action: "handoff" });
       return addChoices(nextChoices, ({ action }) => {
         if (action === "handoff") requestHandoff(`Q&A 답변 후 상담 요청: ${question.question}`);
-        else showFolderChoices();
+        else if (action === "ai") {
+          qaAiMode = true;
+          addMessage("추가 질문을 입력해주세요. 등록된 문서를 바탕으로 AI가 답변합니다.", "bot");
+          setComposerVisible(true);
+          inputEl.placeholder = "AI에게 질문하세요...";
+        } else showFolderChoices();
       });
     }
 
     async function sendMessage() {
       const text = inputEl.value.trim();
       if (!text || sendBtn.disabled) return;
-      if (isQaBot && !handoffActive) return;
+      if (isQaBot && !handoffActive && !qaAiMode) return;
 
       inputEl.value = "";
       sendBtn.disabled = true;
@@ -411,7 +426,7 @@
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
-          body: JSON.stringify({ message: text, history, sessionId }),
+          body: JSON.stringify({ message: text, history, sessionId, mode: isQaBot && qaAiMode ? "rag-ai" : undefined }),
         });
         const data = await res.json();
         if (res.ok && data.handoffActive) {

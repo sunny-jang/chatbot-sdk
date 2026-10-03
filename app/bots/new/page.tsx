@@ -17,7 +17,7 @@ export default function NewBotPage() {
   const [type, setType] = useState<"qa" | "ai">("qa");
   const [name, setName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
-  const [model, setModel] = useState("gpt-4o-mini");
+  const model = "gpt-4o-mini";
   const [serviceDesc, setServiceDesc] = useState("");
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -122,7 +122,7 @@ export default function NewBotPage() {
                 <div className="text-xs text-gray-500 mt-0.5">
                   {t === "qa"
                     ? "질문/답변 세트로 응답"
-                    : "GPT 또는 Gemini가 자유롭게 응답"}
+                    : "AI가 자유롭게 응답"}
                 </div>
               </button>
             ))}
@@ -188,21 +188,6 @@ export default function NewBotPage() {
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">모델</label>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="gpt-4o-mini">gpt-4o-mini (빠름, 저렴)</option>
-                <option value="gpt-4o">gpt-4o (고성능)</option>
-                <option value="gpt-4.1">gpt-4.1</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (빠름, 저렴)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능)</option>
-              </select>
-              <p className="text-xs text-gray-400 mt-1">Gemini를 선택하려면 설정에서 Gemini API 키를 먼저 등록하세요.</p>
             </div>
           </>
         )}

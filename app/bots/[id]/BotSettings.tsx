@@ -75,7 +75,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
   const router = useRouter();
   const [name, setName] = useState(bot.name);
   const [systemPrompt, setSystemPrompt] = useState(bot.system_prompt ?? "");
-  const [model, setModel] = useState(bot.model);
+  const model = bot.model || "gpt-4o-mini";
   const [widgetTitle, setWidgetTitle] = useState(bot.widget_title ?? "");
   const [widgetColor, setWidgetColor] = useState(bot.widget_color ?? "#2563eb");
   const [greeting, setGreeting] = useState(bot.greeting_message ?? "");
@@ -307,21 +307,6 @@ export default function BotSettings({ bot }: { bot: Bot }) {
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">모델</label>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="gpt-4o-mini">gpt-4o-mini (빠름, 저렴)</option>
-                <option value="gpt-4o">gpt-4o (고성능)</option>
-                <option value="gpt-4.1">gpt-4.1</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (빠름, 저렴)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능)</option>
-              </select>
-              <p className="text-xs text-gray-400 mt-1">Gemini 모델을 선택하면 설정에 등록한 Gemini API 키가 사용됩니다.</p>
             </div>
           </>
         )}

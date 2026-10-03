@@ -222,7 +222,7 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
                       style={{ borderColor: "#d4cfff", color: "#4c3b78" }}
                       aria-label={`${t.name} 플랜`}
                     >
-                      <option value="starter">스타터 · 1개</option>
+                      <option value="starter">무료 · 1개</option>
                       <option value="growth">그로스 · 3개</option>
                       <option value="pro">프로 · 5개</option>
                       <option value="enterprise">엔터프라이즈 · 협의</option>

@@ -2,24 +2,24 @@ import Link from "next/link";
 
 const PLANS = [
   {
-    name: "스타터",
-    price: "147,000",
-    desc: "소규모 서비스에 적합",
-    features: ["챗봇 1개", "Q&A 봇 지원", "월 1,000개 대화 세션", "위젯 임베드"],
+    name: "무료",
+    price: "0",
+    desc: "처음 시작하는 서비스",
+    features: ["챗봇 1개", "Q&A + AI 답변", "RAG 문서 검색", "월 1,000개 대화 세션", "위젯 임베드", "OpenAI·Gemini API 키 연동"],
     highlight: false,
   },
   {
     name: "그로스",
-    price: "247,000",
+    price: "99,000",
     desc: "여러 업무 봇을 운영하는 팀",
-    features: ["챗봇 3개", "AI 봇 + RAG 문서 검색", "월 5,000개 대화 세션", "다중 문서 폴더", "대화 분석"],
+    features: ["챗봇 3개", "Q&A + AI 답변", "RAG 문서 검색", "월 5,000개 대화 세션", "다중 문서 폴더", "대화 분석"],
     highlight: true,
   },
   {
     name: "프로",
-    price: "387,000",
+    price: "199,000",
     desc: "성장하는 비즈니스를 위해",
-    features: ["챗봇 5개", "AI 봇 + RAG 문서 검색", "월 10,000개 대화 세션", "위젯 커스터마이징", "대화 기록 열람"],
+    features: ["챗봇 5개", "Q&A + AI 답변", "RAG 문서 검색", "월 10,000개 대화 세션", "위젯 커스터마이징", "대화 기록 열람"],
     highlight: false,
   },
   {
@@ -41,6 +41,7 @@ export default function PlanPage() {
           </div>
           <h1 className="text-4xl font-extrabold mb-3">플랜 안내</h1>
           <p className="text-white/50 text-lg">서비스 규모에 맞는 플랜을 선택하세요</p>
+          <p className="mt-3 text-sm font-semibold text-blue-200">챗봇 설치비 590,000원 · 최초 1회</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-14">
@@ -83,7 +84,7 @@ export default function PlanPage() {
                     : "bg-white/10 hover:bg-white/20 text-white"
                 }`}
               >
-                {plan.price === "문의" ? "문의하기" : "도입 문의"}
+                {plan.price === "문의" ? "문의하기" : plan.price === "0" ? "무료로 시작하기" : "도입 문의"}
               </a>
             </div>
           ))}

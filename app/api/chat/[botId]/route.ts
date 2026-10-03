@@ -126,6 +126,7 @@ export async function POST(
     ? body.sessionId.trim().slice(0, 200)
     : randomUUID();
   const qaId = typeof body.qaId === "string" && body.qaId.trim() ? body.qaId.trim() : null;
+  const ragAiMode = body.mode === "rag-ai";
   const startedAt = Date.now();
 
   if (!message) {
@@ -166,7 +167,7 @@ export async function POST(
   }
 
   const selectedModel = bot.model || "gpt-4o-mini";
-  if (bot.type === "ai") {
+  if (bot.type === "ai" || ragAiMode) {
     const hasProviderKey = selectedModel.startsWith("gemini-")
       ? Boolean(tenantApiKeys.gemini)
       : Boolean(tenantApiKeys.openai);
@@ -233,7 +234,7 @@ export async function POST(
     return NextResponse.json({ reply: IDEAL_AI_CONTACT_REPLY, usage: reservation.usage });
   }
 
-  if (bot.type === "qa") {
+  if (bot.type === "qa" && !ragAiMode) {
     if (qaId) {
       const selectedRows = await sql`
         SELECT question, answer FROM qa_pairs WHERE id = ${qaId} AND bot_id = ${botId}
@@ -300,16 +301,31 @@ export async function POST(
     return NextResponse.json({ reply, usage: reservation.usage, handoffAvailable: supportLive && (!match || refusal.refused) });
   }
 
-  // AI bot — build messages with optional RAG context
+  // AI bot, or a Q&A bot explicitly switched to RAG AI mode.
   let relevantDocs: { title: string; content: string; score: number }[] = [];
   if (tenantApiKeys.openai) {
     const queryEmbedding = await getEmbedding(message, tenantApiKeys.openai);
     relevantDocs = await findRelevantDocs(botId, queryEmbedding);
   }
 
+  if (ragAiMode && relevantDocs.length === 0) {
+    const reply = "등록된 문서에서 해당 질문에 대한 내용을 찾을 수 없습니다. 다른 표현으로 질문하거나 Q&A 목록을 이용해주세요.";
+    await saveLog(botId, sessionId, message, reply, {
+      intent: classifyIntent(message), refused: true, refusalReason: "RAG 문서 근거 없음",
+      model: "rag-no-context", inputTokens: null, outputTokens: null,
+      latencyMs: Date.now() - startedAt, apiSuccess: true, estimatedCostUsd: null,
+      toolName: "문서 검색(RAG)", toolSuccess: false,
+    });
+    await saveChatMessage(sessionId, "bot", reply, "bot");
+    return NextResponse.json({ reply, usedDocs: [], usage: reservation.usage, handoffAvailable: supportLive });
+  }
+
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
   let systemContent = bot.system_prompt ?? "";
+  if (ragAiMode) {
+    systemContent = `${systemContent ? systemContent + "\n\n" : ""}등록된 참고 문서만 근거로 답변하세요. 문서에 근거가 없으면 추측하거나 일반 지식으로 답하지 말고, 등록된 문서에서 해당 내용을 찾을 수 없다고 안내하세요.`;
+  }
   if (relevantDocs.length > 0) {
     const context = buildDocumentContext(relevantDocs);
     systemContent = `${systemContent ? systemContent + "\n\n" : ""}다음 참고 문서를 바탕으로 답변하세요:\n\n${context}`;

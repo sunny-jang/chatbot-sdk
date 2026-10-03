@@ -1,16 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 
 export default function LogoutButton() {
-  const router = useRouter();
-
   async function handleLogout() {
-    // 모든 로그인 방식이 Auth.js 세션이므로 signOut 한 번으로 로그아웃됩니다.
+    // signOut 직후 App Router의 캐시된 로그인 레이아웃이 잠깐 남지 않도록
+    // 클라이언트 라우팅 대신 전체 문서 이동으로 공개 루트를 다시 로드합니다.
     await signOut({ redirect: false });
-    router.push("/login");
-    router.refresh();
+    window.location.replace("/");
   }
 
   return (

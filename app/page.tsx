@@ -11,7 +11,7 @@ const HELP = {
     {
       heading: "챗봇 종류",
       items: [
-        "📚 Q&A 봇 — 질문·답변을 직접 등록해 정확히 일치하는 답변을 제공합니다.",
+        "📚 Q&A 봇 — 등록 Q&A로 빠르게 답하고, 필요하면 AI 모드로 전환해 RAG 문서를 기반으로 답변합니다.",
         "✨ AI 봇 — 업로드한 문서를 기반으로 AI가 자유롭게 답변을 생성합니다.",
       ],
     },
@@ -116,7 +116,7 @@ export default async function HomePage() {
                 >
                   ⚙️ 설정
                 </Link>
-                {bot.type === "ai" && (
+                {(bot.type === "ai" || bot.type === "qa") && (
                   <Link
                     href={`/bots/${bot.id}/docs`}
                     className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"

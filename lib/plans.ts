@@ -3,7 +3,7 @@ export const PLAN_IDS = ["starter", "growth", "pro", "enterprise"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 
 export const PLAN_CONFIG: Record<PlanId, { name: string; botLimit: number | null; monthlySessionLimit: number | null }> = {
-  starter: { name: "스타터", botLimit: 1, monthlySessionLimit: 1_000 },
+  starter: { name: "무료", botLimit: 1, monthlySessionLimit: 1_000 },
   growth: { name: "그로스", botLimit: 3, monthlySessionLimit: 5_000 },
   pro: { name: "프로", botLimit: 5, monthlySessionLimit: 10_000 },
   enterprise: { name: "엔터프라이즈", botLimit: null, monthlySessionLimit: null },
