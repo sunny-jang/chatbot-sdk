@@ -38,6 +38,7 @@ export async function getTelegramIntegration(botId: string) {
 export async function telegramCall(token: string, method: string, body: Record<string, unknown>) {
   const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
+    signal: AbortSignal.timeout(8000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -81,6 +82,7 @@ export async function getSlackIntegration(botId: string) {
 export async function slackCall(token: string, method: string, body: Record<string, unknown>) {
   const response = await fetch(`https://slack.com/api/${method}`, {
     method: "POST",
+    signal: AbortSignal.timeout(8000),
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify(body),
   });
@@ -89,12 +91,13 @@ export async function slackCall(token: string, method: string, body: Record<stri
   return data;
 }
 
-export async function sendSlackMessage(botId: string, text: string, threadTs?: string | null) {
+export async function sendSlackMessage(botId: string, text: string, threadTs?: string | null, clientMessageId?: string) {
   const integration = await getSlackIntegration(botId);
   if (!integration) return null;
   const result = await slackCall(integration.token, "chat.postMessage", {
     channel: integration.channel_id,
     thread_ts: threadTs || undefined,
+    client_msg_id: clientMessageId,
     text: text.slice(0, 40000),
   });
   return result as { ok: boolean; channel: string; ts: string };

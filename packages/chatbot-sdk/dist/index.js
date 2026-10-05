@@ -48,4 +48,22 @@ export async function initIdealAIChatbot(options) {
     };
 }
 export default initIdealAIChatbot;
+async function requestAPI(options, init) {
+    const endpoint = validateOptions(options);
+    const response = await fetch(`${endpoint}/api/chat/${encodeURIComponent(options.botId)}/requests`, {
+        ...init, headers: { "Content-Type": "application/json", "X-Bot-Token": options.botToken },
+    });
+    const data = await response.json();
+    if (!response.ok)
+        throw new Error(data.error || "신청 요청에 실패했습니다.");
+    return data;
+}
+/** 개인정보 안내와 최신 동의 버전을 조회합니다. */
+export async function getIdealAIRequestSettings(options) {
+    return requestAPI(options);
+}
+/** 위젯 없이 견적·상담 신청을 제출합니다. */
+export async function submitIdealAIRequest(options, input) {
+    return requestAPI(options, { method: "POST", body: JSON.stringify(input) });
+}
 //# sourceMappingURL=index.js.map

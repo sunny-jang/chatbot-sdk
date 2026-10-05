@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
 import { Bot, Document, DocFolder } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
+import WebSourceManager from "@/app/components/WebSourceManager";
 import DocsManager from "./DocsManager";
 import BotHeader from "../BotHeader";
 import HelpButton from "@/app/HelpButton";
@@ -60,7 +61,8 @@ export default async function DocsPage({
     <div className="max-w-5xl">
       <BotHeader bot={bot} current="문서 관리" />
       <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
-      <DocsManager botId={id} initialDocs={docs} initialFolders={folders} />
+      <WebSourceManager botId={id} folders={folders}/>
+      <DocsManager key={JSON.stringify(docs.map(d=>[d.id,d.title,d.content]))} botId={id} initialDocs={docs} initialFolders={folders} />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import sql from "./neon";
+import { initOperationsSchema } from "./operations/schema";
 import type { SupportHours } from "./supportHours";
 
 let _initialized = false;
@@ -7,7 +8,7 @@ let _initPromise: Promise<void> | null = null;
 export async function initSchema() {
   if (_initialized) return;
   if (_initPromise) return _initPromise;
-  _initPromise = _runInit().then(() => { _initialized = true; });
+  _initPromise = _runInit().then(() => { _initialized = true; }).catch(error => { _initPromise = null; throw error; });
   return _initPromise;
 }
 
@@ -82,7 +83,6 @@ async function _runInit() {
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     )
   `;
-  await sql`ALTER TABLE monthly_chat_sessions DROP CONSTRAINT IF EXISTS monthly_chat_sessions_bot_id_fkey`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL DEFAULT 'legacy'`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS intent TEXT`;
   await sql`ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS refused BOOLEAN`;
@@ -110,6 +110,7 @@ async function _runInit() {
       PRIMARY KEY (tenant_id, month_key, session_id)
     )
   `;
+  await sql`ALTER TABLE monthly_chat_sessions DROP CONSTRAINT IF EXISTS monthly_chat_sessions_bot_id_fkey`;
   await sql`CREATE INDEX IF NOT EXISTS monthly_chat_sessions_usage_idx ON monthly_chat_sessions (tenant_id, month_key)`;
   await sql`
     CREATE TABLE IF NOT EXISTS doc_folders (
@@ -236,6 +237,7 @@ async function _runInit() {
       expires_at BIGINT NOT NULL
     )
   `;
+  await initOperationsSchema();
 }
 
 export type Tenant = {

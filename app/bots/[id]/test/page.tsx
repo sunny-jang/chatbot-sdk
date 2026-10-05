@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
 import { Bot, initSchema, QaFolder, QaPair } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
+import WidgetPreview from "@/app/components/WidgetPreview";
 import TestChat from "./TestChat";
 import BotHeader from "../BotHeader";
 import HelpButton from "@/app/HelpButton";
@@ -26,7 +27,7 @@ const HELP = {
     {
       heading: "참고",
       items: [
-        "테스트 대화는 대화 기록에 저장되지 않습니다.",
+        "테스트 대화도 기록과 월 사용량에 반영됩니다. 실제 위젯의 신청도 접수 목록에 저장됩니다.",
         "응답 속도는 선택한 AI 모델과 문서 양에 따라 달라집니다.",
       ],
     },
@@ -56,6 +57,7 @@ export default async function TestPage({
       <BotHeader bot={bot} current="테스트" />
       <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
       <TestChat botId={id} folders={folders} qaPairs={qaPairs} logoUrl={bot.logo_url} themeColor={bot.widget_color ?? "#a855f7"} />
+      <WidgetPreview botId={id} botToken={bot.public_token || ""}/>
     </div>
   );
 }

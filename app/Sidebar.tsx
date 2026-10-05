@@ -178,9 +178,10 @@ export default function Sidebar({ tenantName, bots, isAdmin }: { tenantName: str
               <div className="space-y-0.5">
                 {subLink(`/bots/${currentBot.id}`, "⚙️", "설정")}
                 {currentBot.type === "qa" && subLink(`/bots/${currentBot.id}/qa`, "💬", "Q&A 관리")}
-                {currentBot.type === "ai" && subLink(`/bots/${currentBot.id}/docs`, "📄", "문서 관리")}
+                {subLink(`/bots/${currentBot.id}/docs`, "📄", "문서 관리")}
                 {subLink(`/bots/${currentBot.id}/analytics`, "📊", `${currentBot.type === "qa" ? "Q&A " : ""}분석`)}
                 {subLink(`/bots/${currentBot.id}/test`, "▶", "테스트")}
+                {subLink(`/bots/${currentBot.id}/requests`, "📝", "견적·상담 신청")}
                 {subLink(`/bots/${currentBot.id}/logs`, "📋", "대화 기록")}
               </div>
             </>

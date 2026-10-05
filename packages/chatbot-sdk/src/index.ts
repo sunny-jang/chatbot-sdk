@@ -73,3 +73,44 @@ export async function initIdealAIChatbot(
 }
 
 export default initIdealAIChatbot;
+
+export interface IdealAIRequestSettings {
+  quote: boolean;
+  consultation: boolean;
+  company: boolean;
+  contact: "either" | "email" | "phone";
+  consentText: string;
+  consentVersion: string;
+  retentionDays: number;
+}
+export interface IdealAIRequestInput {
+  kind: "quote" | "consultation";
+  name: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  message: string;
+  consent: true;
+  consentVersion: string;
+  /** 같은 제출 재시도에는 같은 키를 사용합니다. 내용 변경 시 새 키를 사용하세요. */
+  idempotencyKey: string;
+  /** 이 봇의 채팅 API에서 생성된 세션만 지정합니다. */
+  sessionId?: string;
+}
+async function requestAPI(options: IdealAIChatbotOptions, init?: RequestInit) {
+  const endpoint = validateOptions(options);
+  const response = await fetch(`${endpoint}/api/chat/${encodeURIComponent(options.botId)}/requests`, {
+    ...init, headers: { "Content-Type": "application/json", "X-Bot-Token": options.botToken },
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "신청 요청에 실패했습니다.");
+  return data;
+}
+/** 개인정보 안내와 최신 동의 버전을 조회합니다. */
+export async function getIdealAIRequestSettings(options: IdealAIChatbotOptions): Promise<IdealAIRequestSettings> {
+  return requestAPI(options);
+}
+/** 위젯 없이 견적·상담 신청을 제출합니다. */
+export async function submitIdealAIRequest(options: IdealAIChatbotOptions, input: IdealAIRequestInput): Promise<{ok: true; receipt: string}> {
+  return requestAPI(options, { method: "POST", body: JSON.stringify(input) });
+}

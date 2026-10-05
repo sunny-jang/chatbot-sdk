@@ -29,11 +29,13 @@ const HELP = {
 export const dynamic = "force-dynamic";
 
 export default async function LogsPage({
-  params,
+  params, searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{sessionId?:string}>;
 }) {
   const { id } = await params;
+  const {sessionId} = await searchParams;
   const tenantId = await getTenantId();
   const botRows = await sql`SELECT * FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   const bot = botRows[0] as unknown as Bot | undefined;
@@ -41,7 +43,7 @@ export default async function LogsPage({
 
   const logs = (await sql`
     SELECT id, bot_id, session_id, user_message, bot_reply, created_at
-    FROM chat_logs WHERE bot_id = ${id}
+    FROM chat_logs WHERE bot_id = ${id} AND (${sessionId||""}='' OR session_id=${sessionId||""})
     ORDER BY created_at ASC
   `) as unknown as ChatLog[];
 

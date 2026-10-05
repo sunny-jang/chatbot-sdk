@@ -1,4 +1,6 @@
 import { randomUUID } from "crypto";
+import { after } from "next/server";
+import { enqueueSummary, processJobs } from "@/lib/operations/jobs";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
@@ -7,13 +9,15 @@ import { getMonthlySessionLimit, normalizePlan } from "@/lib/plans";
 import { reserveMonthlySession } from "@/lib/monthlyUsage";
 import { getSupportStatus } from "@/lib/supportHours";
 
+export const maxDuration = 60;
+
 export async function POST(req: Request, { params }: { params: Promise<{ botId: string }> }) {
   const { botId } = await params;
   const { sessionId, reason, customerName, message } = await req.json();
   if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
   await initSchema();
   const botRows = await sql`
-    SELECT b.id, b.tenant_id, b.name, b.support_mode, b.support_channel, b.support_hours, b.force_unattended, b.public_token,
+    SELECT b.id, b.tenant_id, b.name, b.support_mode, b.support_channel, b.support_hours, b.force_unattended, b.public_token, b.summary_enabled,
            t.plan, t.subscription_status, t.enterprise_monthly_session_limit
     FROM bots b JOIN tenants t ON t.id = b.tenant_id WHERE b.id = ${botId}
   `;
@@ -28,6 +32,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
   const reservation = await reserveMonthlySession(bot.tenant_id, botId, sessionId, monthlyLimit);
   if (!reservation.allowed) return NextResponse.json({ error: "이번 달 대화 세션 한도를 모두 사용했습니다.", code: "MONTHLY_SESSION_LIMIT_REACHED", usage: reservation.usage }, { status: 429 });
 
+  const ownedSession = await sql`SELECT bot_id, tenant_id FROM chat_sessions WHERE id = ${sessionId}`;
+  if (ownedSession[0] && (ownedSession[0].bot_id !== botId || ownedSession[0].tenant_id !== bot.tenant_id)) return NextResponse.json({error:"Invalid session"},{status:400});
   await ensureChatSession(sessionId, bot.tenant_id, botId, customerName);
   if (message) await saveChatMessage(sessionId, "customer", message);
   const existing = await sql`SELECT * FROM support_handoffs WHERE session_id = ${sessionId}`;
@@ -54,6 +60,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
   }
 
   const handoffId = randomUUID();
+  const claimed = await sql.begin(async tx => {
+    await tx`SELECT id FROM chat_sessions WHERE id=${sessionId} FOR UPDATE`;
+    const current = await tx`SELECT * FROM support_handoffs WHERE session_id=${sessionId}`;
+    if (current[0] && current[0].status !== "closed") return {created:false,handoff:current[0]};
+    const rows = await tx`INSERT INTO support_handoffs(id,session_id,bot_id,status,reason)
+      VALUES(${handoffId},${sessionId},${botId},'waiting',${reason || "고객 요청"})
+      ON CONFLICT(session_id) DO UPDATE SET id=EXCLUDED.id,status='waiting',reason=EXCLUDED.reason,
+        telegram_chat_id=NULL,telegram_topic_id=NULL,slack_channel_id=NULL,slack_thread_ts=NULL,
+        summary=NULL,summary_status='disabled',requested_at=EXTRACT(EPOCH FROM NOW())::BIGINT,accepted_at=NULL,closed_at=NULL
+      RETURNING *`;
+    await tx`UPDATE chat_sessions SET status='waiting',customer_name=COALESCE(${customerName||null},customer_name) WHERE id=${sessionId}`;
+    return {created:true,handoff:rows[0]};
+  });
+  if (!claimed.created) return NextResponse.json({ok:true,handoff:claimed.handoff});
   let topicId: number | null = null;
   let telegramChatId: string | null = null;
   // 상담원 연결 채널은 하나만 사용합니다. 이후 메시지·종료 알림은 상담 건에 저장된 채널 정보로만 전달됩니다.
@@ -77,12 +97,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
   let slackThreadTs: string | null = null;
   const slack = channel === "slack" ? await getSlackIntegration(botId) : null;
 
-  const rows = await sql`
-    INSERT INTO support_handoffs (id, session_id, bot_id, telegram_chat_id, telegram_topic_id, status, reason)
-    VALUES (${handoffId}, ${sessionId}, ${botId}, ${telegramChatId}, ${topicId}, 'waiting', ${reason || "고객 요청"})
-    RETURNING *
-  `;
-  await sql`UPDATE chat_sessions SET status = 'waiting', customer_name = COALESCE(${customerName || null}, customer_name) WHERE id = ${sessionId}`;
+  const rows = await sql`UPDATE support_handoffs SET telegram_chat_id=${telegramChatId},telegram_topic_id=${topicId} WHERE id=${handoffId} RETURNING *`;
   await saveChatMessage(sessionId, "system", "상담원 연결이 요청되었습니다.", "system");
 
   let transcript = "";
@@ -117,6 +132,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
     }
   }
 
+  await sql`UPDATE support_handoffs SET summary_status=CASE WHEN (SELECT summary_enabled FROM bots WHERE id=${botId}) THEN 'pending' ELSE 'disabled' END WHERE id=${handoffId}`;
+  await enqueueSummary(botId, handoffId);
+  after(async () => { await processJobs().catch(() => undefined); });
   return NextResponse.json({
     ok: true,
     handoff: { ...rows[0], slack_channel_id: slackChannelId, slack_thread_ts: slackThreadTs },
@@ -136,11 +154,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ botId: s
   const bots = await sql`SELECT public_token FROM bots WHERE id = ${botId}`;
   if (!bots[0]?.public_token || req.headers.get("x-bot-token") !== bots[0].public_token) return NextResponse.json({ error: "Invalid bot token" }, { status: 401 });
   const sessions = await sql`SELECT status, assigned_agent_name FROM chat_sessions WHERE id = ${sessionId} AND bot_id = ${botId}`;
-  if (!sessions[0]) return NextResponse.json({ status: "bot", messages: [] });
+  if (!sessions[0]) return NextResponse.json({ status: "bot", exists: false, messages: [] });
   const messages = await sql`
     SELECT id, sender_type, sender_name, content, source, created_at
     FROM chat_messages WHERE session_id = ${sessionId} AND created_at > ${after}
     ORDER BY created_at ASC LIMIT 100
   `;
-  return NextResponse.json({ ...sessions[0], messages });
+  return NextResponse.json({ ...sessions[0], exists: true, messages });
 }

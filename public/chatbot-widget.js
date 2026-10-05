@@ -1,4 +1,10 @@
 (function () {
+  function wantsQuote(message) {
+    const text = message.normalize("NFKC").replace(/\s+/g, "");
+    // 단순 가격 질문이나 거절에는 신청 폼을 열지 않습니다.
+    if (/견적.{0,16}(필요없|원하지않|받고싶지않|받기싫|요청하지않|안받|괜찮|취소|받지않|안필요|불필요|안해|하지마)/.test(text) || /견적.{0,8}(이란|뜻|무슨뜻)/.test(text)) return false;
+    return /견적.{0,16}(받고싶|받을수|받으려|받아보고|받아볼|받아야|받는방법|받으려면|받을래|받겠습니다|요청|문의|신청|부탁|주세요|주실|내줘|내주|알려|보내|가능|필요|원해|원합니다)/.test(text);
+  }
   // Remove any pre-existing widget to prevent duplicate instances
   const existing = document.getElementById("__chatbot-widget");
   if (existing) existing.remove();
@@ -56,7 +62,7 @@
       #__chatbot-fab:hover { transform: scale(1.05); box-shadow: 0 6px 20px ${color}88; }
       #__chatbot-panel {
         position: fixed; bottom: 88px; right: 24px; z-index: 9999;
-        width: 360px; height: 520px;
+        width: 360px; max-width: calc(100vw - 48px); height: 520px; max-height: calc(100dvh - 112px);
         background: #fff; border-radius: 16px;
         box-shadow: 0 8px 40px rgba(0,0,0,0.15);
         display: flex; flex-direction: column; overflow: hidden;
@@ -133,6 +139,8 @@
     const fab = document.createElement("button");
     fab.id = "__chatbot-fab";
     fab.setAttribute("aria-label", "채팅 열기");
+    fab.setAttribute("aria-expanded", "false");
+    fab.setAttribute("aria-controls", "__chatbot-panel");
     const fabLogoEl = document.createElement("img");
     fabLogoEl.className = "fab-logo";
     fabLogoEl.src = fabLogo;
@@ -146,6 +154,8 @@
 
     const panel = document.createElement("div");
     panel.id = "__chatbot-panel";
+    panel.setAttribute("aria-hidden", "true");
+    panel.inert = true;
     panel.innerHTML = `
       <div id="__chatbot-header">
         <span class="title">${logo ? `<img class="logo" src="${logo}" alt="" />` : "💬"}<span>${title}</span></span>
@@ -182,6 +192,84 @@
     let lastSeen = 0;
     let pollTimer = null;
     const displayedMessageIds = new Set();
+
+    // 견적·상담 신청은 실시간 상담과 별개로 접수합니다.
+    const requestBar = document.createElement("div");
+    requestBar.style.cssText = "display:none;flex-wrap:wrap;gap:8px;padding:8px 12px;border-top:1px solid #eee";
+    panel.insertBefore(requestBar, supportBar);
+    let requestSettings = null;
+    async function loadRequestSettings() {
+      try {
+        const response = await fetch(`${endpoint}/api/chat/${botId}/requests`, {headers:{"X-Bot-Token":botToken}});
+        if (!response.ok) return;
+        requestSettings = await response.json();
+        requestBar.replaceChildren();
+        // 견적 폼은 관리자에서 활성화하고 고객이 견적 의사를 말했을 때만 엽니다.
+        for (const [kind,label] of [["consultation","상담 신청"]]) {
+          if (!requestSettings[kind]) continue;
+          const button = document.createElement("button"); button.type="button"; button.className="cb-choice"; button.textContent=label;
+          button.addEventListener("click",()=>openRequestForm(kind,label));requestBar.appendChild(button);
+        }
+        requestBar.style.display = requestBar.childElementCount ? "flex" : "none";
+      } catch { requestBar.style.display="none"; }
+    }
+    function openRequestForm(kind,label,initialMessage = "") {
+      panel.querySelector(".cb-request-form")?.remove();
+      const form=document.createElement("form");form.className="cb-request-form";form.setAttribute("role","dialog");form.setAttribute("aria-modal","true");form.setAttribute("aria-label",label);
+      form.style.cssText="position:absolute;inset:58px 0 0;background:white;z-index:5;padding:16px;overflow:auto;display:flex;flex-direction:column;gap:10px";
+      const heading=document.createElement("h3");heading.textContent=label;heading.style.margin="0";form.appendChild(heading);
+      const close=document.createElement("button");close.type="button";close.textContent="닫기";close.className="cb-choice";close.style.alignSelf="flex-end";close.onclick=()=>{form.remove();inputEl.focus()};form.appendChild(close);
+      const fields={};
+      for(const [key,name,type,required,max] of [["name","이름","text",true,100],["company","회사명 (선택)","text",false,200],["email","이메일","email",requestSettings.contact==="email",254],["phone","전화번호","tel",requestSettings.contact==="phone",40],["message","문의 내용","textarea",true,5000]]) {
+        if(key==="company"&&!requestSettings.company)continue;
+        const wrapper=document.createElement("label");wrapper.textContent=name+(required?" *":"");wrapper.style.cssText="display:flex;flex-direction:column;gap:4px;font-size:13px";
+        const field=document.createElement(type==="textarea"?"textarea":"input");if(type!=="textarea")field.type=type;else field.rows=4;
+        field.required=required;field.maxLength=max;field.name=key;field.style.cssText="border:1px solid #ddd;border-radius:8px;padding:9px;font:inherit;min-width:0";wrapper.appendChild(field);form.appendChild(wrapper);fields[key]=field;
+      }
+      fields.message.value = initialMessage.slice(0, 5000);
+      if(requestSettings.contact==="either"){const hint=document.createElement("small");hint.textContent="이메일 또는 전화번호 중 하나를 입력해주세요.";form.appendChild(hint)}
+      const policy=document.createElement("p");policy.textContent=requestSettings.consentText;policy.style.cssText="white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:10px";form.appendChild(policy);
+      const agreement=document.createElement("label"),consent=document.createElement("input");consent.type="checkbox";consent.required=true;agreement.append(consent,document.createTextNode(" 개인정보 수집·이용에 동의합니다."));agreement.style.fontSize="12px";form.appendChild(agreement);
+      const notice=document.createElement("p");notice.setAttribute("role","status");notice.style.cssText="font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere";form.appendChild(notice);
+      const submit=document.createElement("button");submit.type="submit";submit.className="cb-choice";submit.textContent="신청 접수";form.appendChild(submit);
+      let pending=false;let key=crypto.randomUUID();let previousPayload="";
+      form.addEventListener("submit",async event=>{
+        event.preventDefault();if(pending)return;
+        const values=Object.fromEntries(Object.entries(fields).map(([name,input])=>[name,input.value.trim()]));
+        if(!values.email&&!values.phone){notice.textContent="이메일 또는 전화번호를 입력해주세요.";fields.email.focus();return}
+        const payload=JSON.stringify(values);if(previousPayload&&payload!==previousPayload)key=crypto.randomUUID();previousPayload=payload;
+        pending=true;submit.disabled=true;notice.textContent="접수 중...";
+        try{
+          // 첫 대화 전에는 존재하지 않는 세션을 연결하지 않습니다.
+          const check=await fetch(`${endpoint}/api/chat/${botId}/handoff?sessionId=${encodeURIComponent(sessionId)}&after=0`,{headers:{"X-Bot-Token":botToken}});
+          const session=check.ok?await check.json():null;
+          const res=await fetch(`${endpoint}/api/chat/${botId}/requests`,{method:"POST",headers:{"Content-Type":"application/json","X-Bot-Token":botToken},body:JSON.stringify({...values,kind,consent:consent.checked,consentVersion:requestSettings.consentVersion,idempotencyKey:key,sessionId:session?.exists?sessionId:null})});
+          const data=await res.json();if(!res.ok)throw Error(data.error||"접수하지 못했습니다.");
+          notice.textContent=`신청을 접수했습니다.\n접수번호: ${data.receipt}`;submit.remove();for(const input of Object.values(fields))input.disabled=true;consent.disabled=true;
+        }catch(error){notice.textContent=error.message||"접수에 실패했습니다. 다시 시도해주세요.";submit.disabled=false}finally{pending=false}
+      });
+      form.addEventListener("keydown",event=>{
+        if(event.key==="Escape"){event.preventDefault();form.remove();inputEl.focus()}
+        if(event.key==="Tab"){
+          const elements=Array.from(form.querySelectorAll("input,textarea,button")).filter(el=>!el.disabled);
+          const first=elements[0],last=elements[elements.length-1];
+          if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus()}
+          if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}
+        }
+      });
+      panel.appendChild(form);fields.name.focus();
+    }
+    const requestSettingsReady = loadRequestSettings();
+    async function offerQuoteFromMessage(text) {
+      if (!wantsQuote(text)) return;
+      await requestSettingsReady;
+      if (requestSettings?.quote && !panel.querySelector(".cb-request-form")) {
+        openRequestForm("quote", "견적 요청", text);
+      }
+    }
+    function focusComposer() {
+      if (!panel.querySelector(".cb-request-form")) inputEl.focus();
+    }
 
     function setComposerVisible(visible) {
       inputEl.parentElement.style.display = visible ? "flex" : "none";
@@ -222,8 +310,13 @@
         fab.replaceChildren(restoredLogo);
       }
       panel.classList.toggle("open", open);
+      panel.setAttribute("aria-hidden", String(!open));
+      panel.inert = !open;
+      fab.setAttribute("aria-expanded", String(open));
+      fab.setAttribute("aria-label", open ? "채팅 닫기" : "채팅 열기");
       if (open) {
-        inputEl.focus();
+        if (inputEl.parentElement.style.display !== "none") inputEl.focus();
+        else (panel.querySelector(".cb-choice") || closeBtn).focus();
       } else {
         // 세션과 대화는 닫아도 유지합니다. 명시적인 상담 종료 후에만 새 세션을 시작합니다.
       }
@@ -353,6 +446,7 @@
     }
 
     async function sendSelectedQuestion(question) {
+      void offerQuoteFromMessage(question.question);
       if (handoffActive) {
         addMessage(question.question, "user");
         await sendHandoffMessage(question.question);
@@ -415,9 +509,10 @@
       inputEl.value = "";
       sendBtn.disabled = true;
       addMessage(text, "user");
+      void offerQuoteFromMessage(text);
       if (handoffActive) {
         try { await sendHandoffMessage(text); }
-        finally { sendBtn.disabled = false; inputEl.focus(); }
+        finally { sendBtn.disabled = false; focusComposer(); }
         return;
       }
       const typingEl = addMessage("입력 중...", "bot typing");
@@ -447,7 +542,7 @@
         typingEl.classList.remove("typing");
       } finally {
         sendBtn.disabled = false;
-        inputEl.focus();
+        focusComposer();
       }
     }
 

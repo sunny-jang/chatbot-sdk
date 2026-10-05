@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { processJobs } from "@/lib/operations/jobs";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
@@ -12,6 +14,8 @@ async function channelRefs(sessionId: string) {
   return rows[0] as { bot_id: string; telegram_topic_id: number | null; slack_thread_ts: string | null };
 }
 
+export const maxDuration = 60;
+
 export async function GET(req: Request) {
   const tenant = await tenantId();
   if (!tenant) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,12 +27,13 @@ export async function GET(req: Request) {
     return NextResponse.json(await sql`SELECT id, sender_type, sender_name, content, source, created_at FROM chat_messages WHERE session_id = ${sessionId} ORDER BY created_at ASC`);
   }
   const rows = await sql`
-    SELECT h.id, h.session_id, h.status, h.reason, h.telegram_topic_id, h.slack_thread_ts, h.requested_at, h.accepted_at, h.closed_at,
+    SELECT h.summary, h.summary_status, h.id, h.session_id, h.status, h.reason, h.telegram_topic_id, h.slack_thread_ts, h.requested_at, h.accepted_at, h.closed_at,
            s.customer_name, s.assigned_agent_name, s.updated_at, b.id AS bot_id, b.name AS bot_name,
            (SELECT content FROM chat_messages m WHERE m.session_id = s.id ORDER BY m.created_at DESC LIMIT 1) AS last_message
     FROM support_handoffs h JOIN chat_sessions s ON s.id = h.session_id JOIN bots b ON b.id = h.bot_id
     WHERE s.tenant_id = ${tenant} ORDER BY s.updated_at DESC LIMIT 200
   `;
+  after(async () => { await processJobs(4).catch(() => undefined); });
   return NextResponse.json(rows);
 }
 
