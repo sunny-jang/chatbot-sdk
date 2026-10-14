@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { normalizeProactive } from "@/lib/proactive";
 import { useRouter } from "next/navigation";
 import { Bot } from "@/lib/db";
 import HelpButton, { type HelpContent } from "@/app/HelpButton";
@@ -78,6 +79,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
   const model = bot.model || "gpt-4o-mini";
   const [widgetTitle, setWidgetTitle] = useState(bot.widget_title ?? "");
   const [widgetColor, setWidgetColor] = useState(bot.widget_color ?? "#2563eb");
+  const [proactive, setProactive] = useState(() => normalizeProactive(bot.proactive_settings));
   const [greeting, setGreeting] = useState(bot.greeting_message ?? "");
   const [supportMode, setSupportMode] = useState<"unattended" | "hybrid">(bot.support_mode ?? "unattended");
   const [qaHandoffAlways, setQaHandoffAlways] = useState(bot.qa_handoff_always !== false);
@@ -163,6 +165,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
         widget_title: widgetTitle || null,
         widget_color: widgetColor,
         greeting_message: greeting || null,
+        proactive_settings: proactive,
         support_mode: supportMode,
         qa_handoff_always: qaHandoffAlways,
         support_channel: supportChannel,
@@ -538,6 +541,24 @@ export default function BotSettings({ bot }: { bot: Bot }) {
           <p className="text-xs text-gray-400 mt-1">위젯을 열면 처음 표시되는 메시지</p>
         </div>
       </div>
+
+      <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h2 className="text-base font-semibold text-gray-900">먼저 말 걸기</h2>
+        <label className="flex items-center gap-2 text-sm text-gray-800">
+          <input type="checkbox" checked={proactive.enabled} onChange={e => setProactive({...proactive, enabled:e.target.checked})} />
+          방문자에게 먼저 도움 제안하기
+        </label>
+        <p className="text-sm text-gray-600">켜면 위젯이 페이지 방문·이동, 활성 체류 시간, 링크·버튼 클릭과 스크롤을 자동 감지합니다. 입력값은 수집하지 않고, 최근 행동은 현재 탭에만 잠시 보관합니다. 끄면 이 기능의 수집도 중단합니다.</p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <label className="block text-sm text-gray-700">제안 문구
+            <input disabled={!proactive.enabled} maxLength={120} value={proactive.message} onChange={e=>setProactive({...proactive,message:e.target.value})} className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 disabled:opacity-50" />
+          </label>
+          <label className="block text-sm text-gray-700">최소 활성 체류 시간 (초)
+            <input disabled={!proactive.enabled} type="number" min={5} max={300} value={proactive.delaySeconds} onChange={e=>setProactive({...proactive,delaySeconds:Number(e.target.value)})} className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 disabled:opacity-50" />
+          </label>
+        </div>
+        <p className="text-xs text-gray-500">체류 시간이 지나고 클릭·스크롤·페이지 이동이 있으면 작은 말풍선을 표시합니다. 행동이 없으면 설정 시간의 두 배 후에 제안합니다. 대화가 있거나 닫은 방문에서는 반복하지 않습니다. 현재는 규칙 기반이며 AI 분석·추가 모델 비용은 없습니다.</p>
+      </section>
 
       <div className="flex items-center justify-between">
         <button

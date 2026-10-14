@@ -7,7 +7,7 @@
   }
   // Remove any pre-existing widget to prevent duplicate instances
   const existing = document.getElementById("__chatbot-widget");
-  if (existing) existing.remove();
+  if (existing) { existing.cleanupProactive?.(); existing.remove(); }
   const existingStyle = document.getElementById("__chatbot-widget-style");
   if (existingStyle) existingStyle.remove();
 
@@ -184,6 +184,7 @@
     const supportBtn = supportBar.querySelector("button");
     let open = false;
     let history = [];
+    let stopProactive = () => {};
     const sessionStorageKey = `ideal-ai-session:${endpoint}:${botId}`;
     let sessionId = localStorage.getItem(sessionStorageKey) || crypto.randomUUID();
     localStorage.setItem(sessionStorageKey, sessionId);
@@ -192,6 +193,116 @@
     let lastSeen = 0;
     let pollTimer = null;
     const displayedMessageIds = new Set();
+    let conversationRestored = false;
+
+    function installProactive() {
+      const config = settings.proactive || {};
+      const storageKey = `ideal-ai-proactive:${endpoint}:${botId}`;
+      const read = () => { try { return JSON.parse(sessionStorage.getItem(storageKey) || "null"); } catch { return null; } };
+      const write = value => { try { sessionStorage.setItem(storageKey, JSON.stringify(value)); } catch { /* Storage unavailable: current page only. */ } };
+      if (config.enabled !== true) {
+        try { sessionStorage.removeItem(storageKey); } catch { /* optional storage */ }
+        return;
+      }
+      const delay = Math.min(300, Math.max(5, Number(config.delaySeconds) || 30));
+      const previous = read();
+      const now = Date.now();
+      const valid = previous && Number.isFinite(previous.updatedAt) && now - previous.updatedAt < 30 * 60 * 1000;
+      const visit = valid ? previous : { events: [], activeSeconds: 0, shown: false, engaged: false };
+      visit.events = Array.isArray(visit.events) ? visit.events.slice(-12) : [];
+      visit.activeSeconds = Math.max(0, Math.min(3600, Number(visit.activeSeconds) || 0));
+      visit.shown = visit.shown === true;
+      visit.engaged = visit.engaged === true;
+      const save = () => { visit.updatedAt = Date.now(); write(visit); };
+      if (visit.shown || visit.engaged) { save(); return; }
+      let cleaned = false;
+      let bubble = null;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        clearInterval(timer);
+        document.removeEventListener("click", onClick, true);
+        document.removeEventListener("scroll", onScroll);
+        document.removeEventListener("visibilitychange", onVisibility);
+        window.removeEventListener("pagehide", onPageHide);
+        window.removeEventListener("popstate", onNavigate);
+        if (window.history.pushState === wrappedPush) window.history.pushState = originalPush;
+        if (window.history.replaceState === wrappedReplace) window.history.replaceState = originalReplace;
+        bubble?.remove();
+      };
+      stopProactive = () => { visit.engaged = true; save(); cleanup(); };
+      root.cleanupProactive = cleanup;
+      let currentPath = "";
+      const safePath = () => location.pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":id").replace(/\d{4,}/g, ":id").slice(0, 160);
+      const record = (kind, detail) => {
+        if (cleaned || visit.engaged) return;
+        visit.events.push({ kind, detail, at: Date.now() });
+        visit.events = visit.events.slice(-12);
+        save();
+      };
+      const onNavigate = () => {
+        const path = safePath();
+        if (path === currentPath) return;
+        currentPath = path;
+        record("page", path);
+      };
+      const onClick = event => {
+        if (!event.isTrusted || document.visibilityState !== "visible" || root.contains(event.target)) return;
+        const target = event.target instanceof Element ? event.target.closest("a,button,[role='button']") : null;
+        if (!target || target.closest("form") || target.isContentEditable) return;
+        // Classify in memory; never store the clicked element's full text, URL or input value.
+        const label = (target.getAttribute("aria-label") || target.textContent || "").trim().slice(0, 100);
+        const category = /가격|요금|비용|price|pricing/i.test(label) ? "pricing"
+          : /문의|견적|상담|contact|quote/i.test(label) ? "contact"
+          : /서비스|상품|제품|service|product/i.test(label) ? "service" : "navigation";
+        record("click", category);
+      };
+      let scrollRecorded = false;
+      const onScroll = () => {
+        if (!scrollRecorded && document.visibilityState === "visible" && window.scrollY > 200) {
+          scrollRecorded = true; record("scroll", "page");
+        }
+      };
+      const originalPush = window.history.pushState;
+      const originalReplace = window.history.replaceState;
+      function wrappedPush(...args) { const result = originalPush.apply(this, args); onNavigate(); return result; }
+      function wrappedReplace(...args) { const result = originalReplace.apply(this, args); onNavigate(); return result; }
+      window.history.pushState = wrappedPush;
+      window.history.replaceState = wrappedReplace;
+      let lastTick = performance.now();
+      const onVisibility = () => { lastTick = performance.now(); save(); };
+      const onPageHide = () => { save(); cleanup(); };
+      const timer = setInterval(() => {
+        const tick = performance.now();
+        const elapsed = Math.min(2, Math.max(0, (tick - lastTick) / 1000));
+        lastTick = tick;
+        if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+        visit.activeSeconds += elapsed;
+        save();
+        if (!conversationRestored || open || handoffActive || history.length || panel.querySelector(".cb-request-form")) return;
+        const interactive = visit.events.some(e => e.kind === "click" || e.kind === "scroll") || visit.events.filter(e => e.kind === "page").length > 1;
+        if (visit.activeSeconds < delay || (!interactive && visit.activeSeconds < delay * 2)) return;
+        visit.shown = true; save(); cleanup();
+        bubble = document.createElement("div");
+        bubble.id = "__chatbot-proactive";
+        bubble.style.cssText = "position:fixed;bottom:88px;right:24px;z-index:9998;display:flex;align-items:start;gap:4px;max-width:calc(100vw - 48px);background:white;color:#242134;border:1px solid #dedbe8;border-radius:14px;padding:8px;box-shadow:0 6px 24px #0002";
+        const offer = document.createElement("button");offer.type = "button";
+        offer.textContent = String(config.message || "제가 좀 도와드릴까요?").slice(0, 120);
+        offer.style.cssText = "background:none;border:0;color:inherit;padding:9px 10px;text-align:left;white-space:normal;overflow-wrap:anywhere;font:inherit;font-size:14px;cursor:pointer";
+        const dismiss = document.createElement("button");dismiss.type = "button";dismiss.textContent = "✕";dismiss.setAttribute("aria-label", "도움 제안 닫기");
+        dismiss.style.cssText = "background:none;border:0;color:#555;padding:10px;cursor:pointer";
+        offer.addEventListener("click", () => { bubble.remove(); if (!open) togglePanel(); });
+        dismiss.addEventListener("click", () => bubble.remove());
+        bubble.append(offer, dismiss);root.appendChild(bubble);
+      }, 1000);
+      document.addEventListener("click", onClick, true);
+      document.addEventListener("scroll", onScroll, { passive: true });
+      document.addEventListener("visibilitychange", onVisibility);
+      window.addEventListener("pagehide", onPageHide);
+      window.addEventListener("popstate", onNavigate);
+      onNavigate();
+    }
+    installProactive();
 
     // 견적·상담 신청은 실시간 상담과 별개로 접수합니다.
     const requestBar = document.createElement("div");
@@ -297,6 +408,8 @@
     function togglePanel() {
       open = !open;
       if (open) {
+        stopProactive();
+        root.querySelector("#__chatbot-proactive")?.remove();
         fab.replaceChildren(document.createTextNode("✕"));
       } else if (!fab.querySelector(".fab-logo")) {
         const restoredLogo = document.createElement("img");
@@ -635,6 +748,10 @@
           showFolderChoices();
         }
       } catch { /* 복원 실패는 새 상담 이용을 막지 않습니다. */ }
+      finally {
+        conversationRestored = true;
+        if (history.length || handoffActive) stopProactive();
+      }
     }
 
     function renderStoredMessage(item) {

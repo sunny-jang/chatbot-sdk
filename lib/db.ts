@@ -60,6 +60,7 @@ async function _runInit() {
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS widget_title TEXT`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS widget_color TEXT DEFAULT '#2563eb'`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS greeting_message TEXT`;
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS proactive_settings JSONB`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS logo_url TEXT`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS support_mode TEXT NOT NULL DEFAULT 'unattended'`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS public_token TEXT`;
@@ -267,6 +268,7 @@ export type Bot = {
   widget_title: string | null;
   widget_color: string | null;
   greeting_message: string | null;
+  proactive_settings?: { enabled: boolean; message: string; delaySeconds: number } | null;
   logo_url: string | null;
   support_mode: "unattended" | "hybrid";
   public_token: string | null;

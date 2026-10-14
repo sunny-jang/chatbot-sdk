@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
-import { Bot } from "@/lib/db";
+import { Bot, initSchema } from "@/lib/db";
+import { normalizeProactive } from "@/lib/proactive";
 import { normalizeSupportHours } from "@/lib/supportHours";
 import { readTenantId } from "@/lib/auth";
 
@@ -12,6 +13,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const tenantId = await getTenantId();
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  await initSchema();
   const { id } = await params;
   const rows = await sql`SELECT * FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -22,13 +24,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const tenantId = await getTenantId();
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  await initSchema();
   const { id } = await params;
   const check = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   if (!check[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { name, system_prompt, model, widget_title, widget_color, greeting_message, support_mode, qa_handoff_always, support_channel, support_hours } = await req.json();
+  const { proactive_settings, name, system_prompt, model, widget_title, widget_color, greeting_message, support_mode, qa_handoff_always, support_channel, support_hours } = await req.json();
   const rows = await sql`
     UPDATE bots SET
+      proactive_settings = COALESCE(${proactive_settings === undefined ? null : sql.json(normalizeProactive(proactive_settings))}, proactive_settings),
       name = COALESCE(${name ?? null}, name),
       system_prompt = COALESCE(${system_prompt ?? null}, system_prompt),
       model = COALESCE(${model ?? null}, model),
@@ -55,6 +59,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const tenantId = await getTenantId();
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  await initSchema();
   const { id } = await params;
   await sql`DELETE FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   return NextResponse.json({ ok: true });

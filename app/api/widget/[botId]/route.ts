@@ -1,3 +1,4 @@
+import { normalizeProactive } from "@/lib/proactive";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
@@ -7,12 +8,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ botId: str
   const { botId } = await params;
   await initSchema();
   const rows = await sql`
-    SELECT widget_title, widget_color, greeting_message, logo_url, name, type, support_mode, qa_handoff_always, support_hours, force_unattended
+    SELECT proactive_settings, widget_title, widget_color, greeting_message, logo_url, name, type, support_mode, qa_handoff_always, support_hours, force_unattended
     FROM bots WHERE id = ${botId}
   `;
   if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const bot = rows[0] as {
+    proactive_settings: unknown;
     widget_title: string | null;
     widget_color: string | null;
     greeting_message: string | null;
@@ -37,6 +39,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ botId: str
   }
 
   return NextResponse.json({
+    proactive: normalizeProactive(bot.proactive_settings),
     title: bot.widget_title || bot.name,
     type: bot.type,
     supportMode: bot.support_mode || "unattended",
