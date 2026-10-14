@@ -107,6 +107,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
   const [serviceDesc, setServiceDesc] = useState("");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -116,7 +117,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
   }, []);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
+    const originTimer=setTimeout(()=>setOrigin(window.location.origin),0);
     fetch(`/api/bots/${bot.id}/integrations/telegram`)
       .then((res) => res.ok ? res.json() : null)
       .then((data) => {
@@ -134,6 +135,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
         if (data?.hasSecret) setSlackSecret(SECRET_MASK);
       })
       .catch(() => null);
+    return ()=>clearTimeout(originTimer);
   }, [bot.id]);
 
   async function handleGenerate() {
@@ -154,8 +156,10 @@ export default function BotSettings({ bot }: { bot: Bot }) {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    setSaveError("");
+    if(proactive.enabled&&proactive.mode==="ai"&&!normalizeProactive(proactive).siteOrigin){setSaveError("상황별 AI 제안을 사용할 사이트 주소를 입력해주세요.");return;}
     setSaving(true);
-    await fetch(`/api/bots/${bot.id}`, {
+    const savedResponse = await fetch(`/api/bots/${bot.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -173,6 +177,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
       }),
     });
     setSaving(false);
+    if(!savedResponse.ok){setSaveError("설정을 저장하지 못했습니다. 다시 시도해주세요.");return;}
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     router.refresh();
@@ -544,11 +549,30 @@ export default function BotSettings({ bot }: { bot: Bot }) {
 
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 className="text-base font-semibold text-gray-900">먼저 말 걸기</h2>
+        {saveError&&<p role="alert" className="text-sm text-red-700">{saveError}</p>}
         <label className="flex items-center gap-2 text-sm text-gray-800">
           <input type="checkbox" checked={proactive.enabled} onChange={e => setProactive({...proactive, enabled:e.target.checked})} />
           방문자에게 먼저 도움 제안하기
         </label>
+        <label className="block text-sm text-gray-700">방식
+          <select disabled={!proactive.enabled} value={proactive.mode} onChange={e=>setProactive({...proactive,mode:e.target.value === "ai" ? "ai" : "basic"})} className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2">
+            <option value="basic">기본 인사 — 설정 문구 표시</option>
+            <option value="ai">상황별 AI 제안 — 보고 있는 내용에 맞춰 상담 시작</option>
+          </select>
+        </label>
         <p className="text-sm text-gray-600">켜면 위젯이 페이지 방문·이동, 활성 체류 시간, 링크·버튼 클릭과 스크롤을 자동 감지합니다. 입력값은 수집하지 않고, 최근 행동은 현재 탭에만 잠시 보관합니다. 끄면 이 기능의 수집도 중단합니다.</p>
+        {proactive.enabled && proactive.mode === "ai" && <div className="rounded-lg bg-violet-50 p-4 space-y-3">
+          <p className="text-sm text-gray-700">설명 구간의 제목·짧은 공개 내용·노출 시간을 요약해 서버와 고객사 AI 모델에 전달합니다. 관련 등록 자료가 있는 경우에만 상황 확인 질문을 제안합니다. 고객사 API 키로 추가 모델 비용이 발생하고, 평가 횟수는 대화 세션과 별도로 집계합니다.</p>
+          <label className="block text-sm">설치 사이트 주소
+            <input type="url" value={proactive.siteOrigin} onChange={e=>setProactive({...proactive,siteOrigin:e.target.value})} placeholder="https://www.example.com" className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2" />
+          </label>
+          <label className="block text-sm">월 AI 평가 최대 횟수
+            <input type="number" min={1} max={10000} value={proactive.monthlyLimit} onChange={e=>setProactive({...proactive,monthlyLimit:Number(e.target.value)})} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2" />
+          </label>
+          <label className="block text-sm">분석 제외 경로 (한 줄에 하나)
+            <textarea value={proactive.excludedPaths} onChange={e=>setProactive({...proactive,excludedPaths:e.target.value})} placeholder="/private" rows={2} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2" />
+          </label>
+        </div>}
         <div className="grid sm:grid-cols-2 gap-4">
           <label className="block text-sm text-gray-700">제안 문구
             <input disabled={!proactive.enabled} maxLength={120} value={proactive.message} onChange={e=>setProactive({...proactive,message:e.target.value})} className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 disabled:opacity-50" />
@@ -557,7 +581,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
             <input disabled={!proactive.enabled} type="number" min={5} max={300} value={proactive.delaySeconds} onChange={e=>setProactive({...proactive,delaySeconds:Number(e.target.value)})} className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 disabled:opacity-50" />
           </label>
         </div>
-        <p className="text-xs text-gray-500">설정한 활성 체류 시간이 지나면 작은 말풍선을 표시합니다. 클릭이나 스크롤 없이도 표시됩니다. 대화가 있거나 닫은 방문에서는 반복하지 않습니다. 현재는 규칙 기반이며 AI 분석·추가 모델 비용은 없습니다.</p>
+        <p className="text-xs text-gray-500">기본 인사는 설정 시간 후 표시합니다. AI 제안은 방문 체류 최소 30초와 같은 내용의 안정된 노출 15초가 필요합니다. 한 방문 최대 2회 분석·1회 표시하며, 직접 채팅을 열거나 제안을 닫으면 반복하지 않습니다.</p>
       </section>
 
       <div className="flex items-center justify-between">

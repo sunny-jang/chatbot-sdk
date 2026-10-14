@@ -1,3 +1,4 @@
+import ProactiveTest from "@/app/components/ProactiveTest";
 import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
 import { Bot, initSchema, QaFolder, QaPair } from "@/lib/db";
@@ -57,6 +58,7 @@ export default async function TestPage({
       <BotHeader bot={bot} current="테스트" />
       <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
       <TestChat botId={id} folders={folders} qaPairs={qaPairs} logoUrl={bot.logo_url} themeColor={bot.widget_color ?? "#a855f7"} />
+      <ProactiveTest botId={id} />
       <WidgetPreview botId={id} botToken={bot.public_token || ""}/>
     </div>
   );

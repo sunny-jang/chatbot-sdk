@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { randomUUID } from 'node:crypto';
 import { normalizeProactive } from '../lib/proactive';
 const source = readFileSync(new URL('../public/chatbot-widget.js', import.meta.url), 'utf8');
 const collector = source.slice(source.indexOf('    function installProactive()'), source.indexOf('    installProactive();'));
@@ -29,7 +30,7 @@ function harness(enabled = true, saved: unknown = null) {
     addEventListener:(name:string,fn:(e:unknown)=>void)=>listeners[name]=fn,
     removeEventListener:(name:string)=>delete listeners[name],
   };
-  const context = {settings:{proactive:{enabled,delaySeconds:5,message:'도와드릴까요?'}}, endpoint:'https://api.example',botId:'test',
+  const context = {crypto:{randomUUID},settings:{proactive:{enabled,delaySeconds:5,message:'도와드릴까요?'}}, endpoint:'https://api.example',botId:'test',
     sessionStorage:{getItem:()=>stored,setItem:(_key:string,value:string)=>{stored=value;storageWrites++},removeItem:()=>{stored=null}},
     Date:{now:()=>clock},performance:{now:()=>clock},location:{pathname:'/services'},Element,
     document:doc,window:{scrollY:0,history:{pushState(){},replaceState(){}},addEventListener:(name:string,fn:(e:unknown)=>void)=>listeners[name]=fn,removeEventListener:(name:string)=>delete listeners[name]},

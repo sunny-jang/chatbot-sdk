@@ -1,6 +1,8 @@
 import sql from "../neon";
+import {initProactiveSchema} from "../proactive-db";
 
 export async function initOperationsSchema() {
+  await initProactiveSchema();
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS summary_enabled BOOLEAN NOT NULL DEFAULT FALSE`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS request_settings JSONB`;
   await sql`ALTER TABLE support_handoffs ADD COLUMN IF NOT EXISTS summary TEXT`;

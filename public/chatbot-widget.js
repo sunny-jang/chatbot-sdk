@@ -5,6 +5,65 @@
     if (/견적.{0,16}(필요없|원하지않|받고싶지않|받기싫|요청하지않|안받|괜찮|취소|받지않|안필요|불필요|안해|하지마)/.test(text) || /견적.{0,8}(이란|뜻|무슨뜻)/.test(text)) return false;
     return /견적.{0,16}(받고싶|받을수|받으려|받아보고|받아볼|받아야|받는방법|받으려면|받을래|받겠습니다|요청|문의|신청|부탁|주세요|주실|내줘|내주|알려|보내|가능|필요|원해|원합니다)/.test(text);
   }
+  function publicSnippet(value, max) {
+    return String(value || "").replace(/\b\S+@\S+\.\S+\b/g, "[연락처 제외]").replace(/(?:\+?\d[\d ()-]{7,}\d)/g, "[연락처 제외]").replace(/https?:\/\/\S+/g, "[주소 제외]").replace(/\s+/g, " ").trim().slice(0, max);
+  }
+  function observeContentSections() {
+    const nodes = new Map();
+    const visible = new Set();
+    let currentId = "", version = 0, lastMotion = performance.now(), scanTimer = null;
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) visible.add(entry.target); else visible.delete(entry.target);
+      }
+    });
+    const hash = text => { let h=2166136261;for(const c of text)h=Math.imul(h^c.charCodeAt(0),16777619);return `s-${(h>>>0).toString(36)}`; };
+    const excluded = el => el.closest("nav,header,footer,form,[role='dialog'],[contenteditable],#__chatbot-widget,[hidden],[aria-hidden='true']");
+    const scan = () => {
+      scanTimer = null;
+      for (const [el] of nodes) if (!el.isConnected) { observer.unobserve(el);nodes.delete(el);visible.delete(el); }
+      const container = document.querySelector("main") || document.body;
+      for (const heading of Array.from(container.querySelectorAll("h1,h2,h3")).slice(0,40)) {
+        if (excluded(heading) || !heading.getClientRects().length) continue;
+        let el = heading.parentElement;
+        for(let depth=0;depth<3;depth++){
+          const parent=el.parentElement;
+          if(!parent||parent===container||excluded(parent)||parent.querySelectorAll("h1,h2,h3").length>1)break;
+          el=parent;
+        }
+        if(el===container&&el.querySelectorAll("h1,h2,h3").length>1)continue;
+        if(nodes.has(el)||nodes.size>=40)continue;
+        const title=publicSnippet(heading.textContent,100);
+        if(title.length<3)continue;
+        const clone=el.cloneNode(true);clone.querySelectorAll("script,style,form,input,textarea,select,[hidden],[aria-hidden='true'],[contenteditable],nav,header,footer").forEach(n=>n.remove());
+        const summary=publicSnippet(clone.textContent,200);
+        const id=hash(`${location.pathname}:${title}`);
+        if([...nodes.values()].some(s=>s.id===id))continue;
+        nodes.set(el,{id,title,summary,seconds:0,returns:0});observer.observe(el);
+      }
+    };
+    const motion = () => { lastMotion=performance.now();version++; };
+    const mutations=new MutationObserver(records=>{
+      if(records.every(r=>r.target instanceof Element&&r.target.closest("#__chatbot-widget")))return;
+      if(!scanTimer)scanTimer=setTimeout(scan,1000);
+    });
+    mutations.observe(document.body,{childList:true,subtree:true});
+    document.addEventListener("scroll",motion,{passive:true});
+    scan();
+    return {
+      tick(elapsed) {
+        if(performance.now()-lastMotion<3000)return;
+        let best=null,bestArea=0;
+        for(const el of visible){if(!el.isConnected||excluded(el))continue;const rect=el.getBoundingClientRect();const area=Math.max(0,Math.min(rect.bottom,innerHeight)-Math.max(rect.top,0));if(area>=Math.min(rect.height*.5,innerHeight*.25)&&area>bestArea){best=nodes.get(el);bestArea=area}}
+        const next=best?.id||"";
+        if(next!==currentId){currentId=next;version++;if(best)best.returns++}
+        if(best)best.seconds=Math.min(3600,best.seconds+elapsed);
+      },
+      snapshot() { return {currentId,version,sections:[...nodes.values()].filter(s=>s.seconds>=5||s.id===currentId).sort((a,b)=>Number(b.id===currentId)-Number(a.id===currentId)||b.seconds-a.seconds).slice(0,6).map(s=>({...s,seconds:Math.floor(s.seconds)}))}; },
+      rescan() { visible.clear();currentId="";version++;nodes.forEach((_s,el)=>observer.unobserve(el));nodes.clear();scan();motion(); },
+      cleanup() { observer.disconnect();mutations.disconnect();clearTimeout(scanTimer);document.removeEventListener("scroll",motion); }
+    };
+  }
   // Remove any pre-existing widget to prevent duplicate instances
   const existing = document.getElementById("__chatbot-widget");
   if (existing) { existing.cleanupProactive?.(); existing.remove(); }
@@ -15,6 +74,9 @@
   const botId = script.getAttribute("data-bot-id");
   const endpoint = (script.getAttribute("data-endpoint") || "").replace(/\/$/, "");
   const botToken = script.getAttribute("data-bot-token") || "";
+  const proactivePreviewToken = script.getAttribute("data-proactive-preview") || "";
+  let proactivePreviewClaims = null;
+  try { if(proactivePreviewToken)proactivePreviewClaims=JSON.parse(atob(proactivePreviewToken.split(".")[0].replace(/-/g,"+").replace(/_/g,"/"))); } catch { /* Invalid preview is rejected by server. */ }
 
   if (!botId || !endpoint || !botToken) {
     console.error("[Ideal AI Chatbot SDK] data-bot-id, data-endpoint and data-bot-token are required");
@@ -202,10 +264,14 @@
     let pollTimer = null;
     const displayedMessageIds = new Set();
     let conversationRestored = false;
+    let proactiveContext = null;
 
     function installProactive() {
       const config = settings.proactive || {};
-      const storageKey = `ideal-ai-proactive:${endpoint}:${botId}`;
+      const isAi = config.mode === "ai";
+      const previewToken = isAi ? proactivePreviewToken : "";
+      const diagnose = (state, data) => { if(previewToken){root.setAttribute("data-proactive-state",state);if(data)root.setAttribute("data-proactive-detail",JSON.stringify(data));} };
+      const storageKey = `ideal-ai-proactive:${endpoint}:${botId}${isAi ? ':ai' : ''}${previewToken ? ':'+proactivePreviewClaims?.visitId : ''}`;
       const read = () => { try { return JSON.parse(sessionStorage.getItem(storageKey) || "null"); } catch { return null; } };
       const write = value => { try { sessionStorage.setItem(storageKey, JSON.stringify(value)); } catch { /* Storage unavailable: current page only. */ } };
       if (config.enabled !== true) {
@@ -222,13 +288,29 @@
       visit.shown = visit.shown === true;
       visit.engaged = visit.engaged === true;
       const save = () => { visit.updatedAt = Date.now(); write(visit); };
-      if (visit.shown || visit.engaged) { save(); return; }
+      if (visit.shown || visit.engaged) { save(); diagnose("already_shown_or_engaged"); return; }
+      const isExcluded = () => /\b(login|signin|signup|account|checkout|payment|mypage|admin|cart)\b|로그인|결제|회원/i.test(location.pathname) || String(config.excludedPaths||"").split("\n").map(p=>p.trim()).filter(Boolean).some(p=>location.pathname.startsWith(p));
+      if(isAi&&!previewToken&&config.siteOrigin!==location.origin){diagnose("unregistered_site");return;}
+      if(isAi&&isExcluded()){diagnose("excluded_page");return;}
+      const sections = isAi ? observeContentSections() : null;
+      const visitId = previewToken ? proactivePreviewClaims?.visitId : visit.visitId || crypto.randomUUID();visit.visitId = visitId;
+      visit.evaluations = Math.max(0, Math.min(2, Number(visit.evaluations)||0));
+      let pendingAnalysis = false, abortAnalysis = null, lastAnalysis = Number(visit.lastAnalysis)||0;
+      let lastInput = 0;
+      const onInput = () => { lastInput = performance.now(); };
+      const notify = (action, proposal) => {
+        if(!isAi||!proposal?.id)return;
+        fetch(`${endpoint}/api/chat/${botId}/proactive`,{method:"POST",headers:{"Content-Type":"application/json","X-Bot-Token":botToken},body:JSON.stringify({action,id:proposal.id,visitId,previewToken}),keepalive:true}).catch(()=>{});
+      };
       let cleaned = false;
       let bubble = null;
-      const cleanup = () => {
+      const cleanup = (removeOffer = true) => {
         if (cleaned) return;
         cleaned = true;
         clearInterval(timer);
+        abortAnalysis?.abort();
+        sections?.cleanup();
+        document.removeEventListener("input", onInput, true);
         document.removeEventListener("click", onClick, true);
         document.removeEventListener("scroll", onScroll);
         document.removeEventListener("visibilitychange", onVisibility);
@@ -236,7 +318,7 @@
         window.removeEventListener("popstate", onNavigate);
         if (window.history.pushState === wrappedPush) window.history.pushState = originalPush;
         if (window.history.replaceState === wrappedReplace) window.history.replaceState = originalReplace;
-        bubble?.remove();
+        if(removeOffer)bubble?.remove();
       };
       stopProactive = () => { visit.engaged = true; save(); cleanup(); };
       root.cleanupProactive = cleanup;
@@ -252,6 +334,8 @@
         const path = safePath();
         if (path === currentPath) return;
         currentPath = path;
+        if(sections){visit.sectionHistory=[...(visit.sectionHistory||[]),...sections.snapshot().sections].filter((s,i,a)=>a.findLastIndex(v=>v.id===s.id)===i).slice(-6);}
+        sections?.rescan();abortAnalysis?.abort();if(isAi&&isExcluded())stopProactive();
         record("page", path);
       };
       const onClick = event => {
@@ -287,27 +371,68 @@
         // A visible tab can be read without the document owning keyboard focus.
         if (document.visibilityState !== "visible") return;
         visit.activeSeconds += elapsed;
+        sections?.tick(elapsed);
         save();
         if (!conversationRestored || open || handoffActive || panel.querySelector(".cb-request-form")) return;
+        if (isAi) {
+          if(visit.shown)return;
+          if(!visit.evaluations)diagnose("collecting",{activeSeconds:Math.floor(visit.activeSeconds),...sections.snapshot()});
+          if (performance.now()-lastInput<5000 || pendingAnalysis || visit.evaluations>=2 || Date.now()-lastAnalysis<60000) return;
+          if(isExcluded())return;
+          const snapshot=sections.snapshot();const current=snapshot.sections.find(s=>s.id===snapshot.currentId);
+          const prior=Array.isArray(visit.sectionHistory)?visit.sectionHistory.filter(s=>!snapshot.sections.some(v=>v.id===s.id)):[];
+          snapshot.sections=[...snapshot.sections,...prior].slice(0,6);
+          if(!current || current.seconds<15 || visit.activeSeconds<Math.max(30,delay))return;
+          const fingerprint=JSON.stringify({path:currentPath,current:snapshot.currentId,sections:snapshot.sections.map(s=>s.id).sort()});
+          if(visit.lastFingerprint===fingerprint)return;
+          pendingAnalysis=true;lastAnalysis=Date.now();visit.lastAnalysis=lastAnalysis;visit.lastFingerprint=fingerprint;visit.evaluations++;save();
+          diagnose("analyzing");
+          const evaluationId=crypto.randomUUID();const path=currentPath;
+          abortAnalysis=new AbortController();
+          fetch(`${endpoint}/api/chat/${botId}/proactive`,{method:"POST",signal:abortAnalysis.signal,headers:{"Content-Type":"application/json","X-Bot-Token":botToken},body:JSON.stringify({visitId,evaluationId,sessionId,previewToken,path,currentId:snapshot.currentId,activeSeconds:Math.floor(visit.activeSeconds),sections:snapshot.sections})})
+            .then(async res=>{const data=await res.json().catch(()=>({reason:"network_error"}));if(!res.ok){diagnose("error",data);return null}return data}).then(proposal=>{
+              if(proposal?.decision==="skip")diagnose("skipped",{reason:proposal.reason});
+              if(cleaned || !proposal || proposal.decision!=="offer" || document.visibilityState!=="visible" || open || handoffActive || panel.querySelector(".cb-request-form") || performance.now()-lastInput<5000 || currentPath!==path || sections.snapshot().currentId!==snapshot.currentId || sections.snapshot().version!==snapshot.version)return;
+              displayOffer(proposal);
+            }).catch(()=>{}).finally(()=>{pendingAnalysis=false;});
+          return;
+        }
         // A proactive greeting should appear after the configured visible-tab
         // delay even when the visitor has not clicked or scrolled yet.
         if (visit.activeSeconds < delay) return;
-        visit.shown = true; save(); cleanup();
+        displayOffer({message:config.message});
+      }, 1000);
+      function displayOffer(proposal) {
+        diagnose("shown",{message:proposal.message,reason:proposal.reason,id:proposal.id});
+        visit.shown = true; save();
         bubble = document.createElement("div");
         bubble.id = "__chatbot-proactive";
         bubble.style.cssText = "position:fixed;bottom:88px;right:24px;z-index:9998;display:flex;align-items:start;gap:4px;max-width:calc(100vw - 48px);background:white;color:#242134;border:1px solid #dedbe8;border-radius:14px;padding:8px;box-shadow:0 6px 24px #0002";
         const offer = document.createElement("button");offer.type = "button";
-        offer.textContent = String(config.message || "제가 좀 도와드릴까요?").slice(0, 120);
+        offer.textContent = String(proposal.message || "제가 좀 도와드릴까요?").slice(0, 120);
         offer.style.cssText = "background:none;border:0;color:inherit;padding:9px 10px;text-align:left;white-space:normal;overflow-wrap:anywhere;font:inherit;font-size:14px;cursor:pointer";
         const dismiss = document.createElement("button");dismiss.type = "button";dismiss.textContent = "✕";dismiss.setAttribute("aria-label", "도움 제안 닫기");
         dismiss.style.cssText = "background:none;border:0;color:#555;padding:10px;cursor:pointer";
-        offer.addEventListener("click", () => { bubble.remove(); if (!open) togglePanel(); });
-        dismiss.addEventListener("click", () => bubble.remove());
+        offer.addEventListener("click", () => {
+          notify("clicked",proposal);bubble.remove();
+          if(isAi&&proposal.id){proactiveContext={id:proposal.id,visitId};if(!history.length&&!handoffActive)messagesEl.replaceChildren();addMessage(proposal.message,"bot");history.push({role:"assistant",content:proposal.message});if(isQaBot){qaAiMode=true;setComposerVisible(true);}}
+          if (!open) togglePanel();
+        });
+        dismiss.addEventListener("click", () => {notify("dismissed",proposal);stopProactive();bubble.remove();});
         bubble.append(offer, dismiss);root.appendChild(bubble);
-      }, 1000);
+        notify("shown",proposal);
+        // Keep a lightweight section watcher until the offer is acted on. It may
+        // disappear if the visitor moves to another topic, but never reappear.
+        if(isAi){const original=snapshotCurrent();const watcher=setInterval(()=>{if(open||document.visibilityState!=="visible")return;sections?.tick(0);if(snapshotCurrent()!==original){bubble?.remove();clearInterval(watcher)}},1000);const oldCleanup=root.cleanupProactive;root.cleanupProactive=()=>{clearInterval(watcher);oldCleanup?.()};stopProactive=()=>{visit.engaged=true;save();clearInterval(watcher);cleanup();};}
+        clearInterval(timer);
+        document.removeEventListener("click",onClick,true);document.removeEventListener("input",onInput,true);
+        if(!isAi)cleanup(false);
+      }
+      function snapshotCurrent(){return sections?.snapshot().currentId||"";}
       document.addEventListener("click", onClick, true);
       document.addEventListener("scroll", onScroll, { passive: true });
       document.addEventListener("visibilitychange", onVisibility);
+      if(isAi)document.addEventListener("input",onInput,true);
       window.addEventListener("pagehide", onPageHide);
       window.addEventListener("popstate", onNavigate);
       onNavigate();
@@ -644,7 +769,7 @@
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
-          body: JSON.stringify({ message: text, history, sessionId, mode: isQaBot && qaAiMode ? "rag-ai" : undefined }),
+          body: JSON.stringify({ message: text, history, sessionId, proactiveContext, mode: isQaBot && qaAiMode ? "rag-ai" : undefined }),
         });
         const data = await res.json();
         if (res.ok && data.handoffActive) {
