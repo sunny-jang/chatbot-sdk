@@ -34,7 +34,7 @@ function harness(enabled = true, saved: unknown = null) {
     sessionStorage:{getItem:()=>stored,setItem:(_key:string,value:string)=>{stored=value;storageWrites++},removeItem:()=>{stored=null}},
     Date:{now:()=>clock},performance:{now:()=>clock},location:{pathname:'/services'},Element,
     document:doc,window:{scrollY:0,history:{pushState(){},replaceState(){}},addEventListener:(name:string,fn:(e:unknown)=>void)=>listeners[name]=fn,removeEventListener:(name:string)=>delete listeners[name]},
-    root:{contains:()=>false,appendChild:(el:unknown)=>children.push(el)},
+    root:{setAttribute:()=>{},contains:()=>false,appendChild:(el:unknown)=>children.push(el)},
     conversationRestored:true,open:false,handoffActive:false,history:[],panel:{querySelector:()=>null},togglePanel:()=>{},stopProactive:()=>{},
     setInterval:(fn:()=>void)=>{interval=fn;return 1},clearInterval:()=>{interval=null},
   };
@@ -76,4 +76,23 @@ test('과거 대화 기록과 문서 포커스 없음은 보이는 탭의 제안
 });
 test('현재 상담 중에는 제안하지 않는다',()=>{
   const h=harness();h.context.handoffActive=true;h.tick(20);assert.equal(h.children.length,0);
+});
+
+test('스크롤하며 같은 구간을 읽으면 체류 누적, 다른 구간으로 이동하면 응답 무효화',()=>{
+  const observed: unknown[]=[];
+  let callback:(entries:unknown[])=>void=()=>{};
+  const makeBlock=(title:string)=>({isConnected:true,parentElement:null,closest:()=>null,querySelectorAll:()=>[],cloneNode:()=>({textContent:title,querySelectorAll:()=>[]}),getBoundingClientRect:()=>({top:0,bottom:600,height:600})});
+  const first=makeBlock('고객 응대 자동화');const second=makeBlock('홈페이지 제작');
+  const headings=[first,second].map((block,i)=>({parentElement:block,textContent:i?'홈페이지 제작':'고객 응대 자동화',closest:()=>null,getClientRects:()=>[{}]}));
+  const container={querySelectorAll:()=>headings};
+  const ctx={document:{querySelector:()=>container,body:{},addEventListener:()=>{},removeEventListener:()=>{}},location:{pathname:'/services'},innerHeight:800,performance:{now:()=>0},Element:class{},setTimeout:()=>1,clearTimeout:()=>{},
+    IntersectionObserver:class{constructor(fn:typeof callback){callback=fn;}observe(el:unknown){observed.push(el);}unobserve(){}disconnect(){}},MutationObserver:class{observe(){}disconnect(){}}};
+  const observerSource=source.slice(source.indexOf('  function publicSnippet('),source.indexOf('  // Remove any pre-existing widget'));
+  const reader=runInNewContext(`${observerSource};observeContentSections();`,ctx);
+  callback([{target:observed[0],isIntersecting:true}]);
+  for(let i=0;i<15;i++)reader.tick(1);
+  const before=reader.snapshot();assert.equal(before.sections[0].seconds,15);
+  reader.tick(1);assert.equal(reader.snapshot().version,before.version);
+  callback([{target:observed[0],isIntersecting:false},{target:observed[1],isIntersecting:true}]);reader.tick(1);
+  assert.notEqual(reader.snapshot().currentId,before.currentId);assert.ok(reader.snapshot().version>before.version);
 });

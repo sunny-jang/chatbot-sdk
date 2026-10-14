@@ -11,7 +11,7 @@
   function observeContentSections() {
     const nodes = new Map();
     const visible = new Set();
-    let currentId = "", version = 0, lastMotion = performance.now(), scanTimer = null;
+    let currentId = "", version = 0, scanTimer = null;
     const observer = new IntersectionObserver(entries => {
       for (const entry of entries) {
         if (entry.isIntersecting) visible.add(entry.target); else visible.delete(entry.target);
@@ -42,17 +42,14 @@
         nodes.set(el,{id,title,summary,seconds:0,returns:0});observer.observe(el);
       }
     };
-    const motion = () => { lastMotion=performance.now();version++; };
     const mutations=new MutationObserver(records=>{
       if(records.every(r=>r.target instanceof Element&&r.target.closest("#__chatbot-widget")))return;
       if(!scanTimer)scanTimer=setTimeout(scan,1000);
     });
     mutations.observe(document.body,{childList:true,subtree:true});
-    document.addEventListener("scroll",motion,{passive:true});
     scan();
     return {
       tick(elapsed) {
-        if(performance.now()-lastMotion<3000)return;
         let best=null,bestArea=0;
         for(const el of visible){if(!el.isConnected||excluded(el))continue;const rect=el.getBoundingClientRect();const area=Math.max(0,Math.min(rect.bottom,innerHeight)-Math.max(rect.top,0));if(area>=Math.min(rect.height*.5,innerHeight*.25)&&area>bestArea){best=nodes.get(el);bestArea=area}}
         const next=best?.id||"";
@@ -60,8 +57,8 @@
         if(best)best.seconds=Math.min(3600,best.seconds+elapsed);
       },
       snapshot() { return {currentId,version,sections:[...nodes.values()].filter(s=>s.seconds>=5||s.id===currentId).sort((a,b)=>Number(b.id===currentId)-Number(a.id===currentId)||b.seconds-a.seconds).slice(0,6).map(s=>({...s,seconds:Math.floor(s.seconds)}))}; },
-      rescan() { visible.clear();currentId="";version++;nodes.forEach((_s,el)=>observer.unobserve(el));nodes.clear();scan();motion(); },
-      cleanup() { observer.disconnect();mutations.disconnect();clearTimeout(scanTimer);document.removeEventListener("scroll",motion); }
+      rescan() { visible.clear();currentId="";version++;nodes.forEach((_s,el)=>observer.unobserve(el));nodes.clear();scan(); },
+      cleanup() { observer.disconnect();mutations.disconnect();clearTimeout(scanTimer); }
     };
   }
   // Remove any pre-existing widget to prevent duplicate instances
@@ -270,7 +267,7 @@
       const config = settings.proactive || {};
       const isAi = config.mode === "ai";
       const previewToken = isAi ? proactivePreviewToken : "";
-      const diagnose = (state, data) => { if(previewToken){root.setAttribute("data-proactive-state",state);if(data)root.setAttribute("data-proactive-detail",JSON.stringify(data));} };
+      const diagnose = (state, data) => { root.setAttribute("data-proactive-state",state);if(previewToken&&data)root.setAttribute("data-proactive-detail",JSON.stringify(data)); };
       const storageKey = `ideal-ai-proactive:${endpoint}:${botId}${isAi ? ':ai' : ''}${previewToken ? ':'+proactivePreviewClaims?.visitId : ''}`;
       const read = () => { try { return JSON.parse(sessionStorage.getItem(storageKey) || "null"); } catch { return null; } };
       const write = value => { try { sessionStorage.setItem(storageKey, JSON.stringify(value)); } catch { /* Storage unavailable: current page only. */ } };
@@ -363,7 +360,10 @@
       window.history.replaceState = wrappedReplace;
       let lastTick = performance.now();
       const onVisibility = () => { lastTick = performance.now(); save(); };
-      const onPageHide = () => { save(); cleanup(); };
+      const onPageHide = () => {
+        if(sections)visit.sectionHistory=[...(visit.sectionHistory||[]),...sections.snapshot().sections].filter((s,i,a)=>a.findLastIndex(v=>v.id===s.id)===i).slice(-6);
+        save(); cleanup();
+      };
       const timer = setInterval(() => {
         const tick = performance.now();
         const elapsed = Math.min(2, Math.max(0, (tick - lastTick) / 1000));
@@ -377,7 +377,9 @@
         if (isAi) {
           if(visit.shown)return;
           if(!visit.evaluations)diagnose("collecting",{activeSeconds:Math.floor(visit.activeSeconds),...sections.snapshot()});
-          if (performance.now()-lastInput<5000 || pendingAnalysis || visit.evaluations>=2 || Date.now()-lastAnalysis<60000) return;
+          if(pendingAnalysis)return;
+          if(visit.evaluations>=2){diagnose("evaluation_limit");return;}
+          if(performance.now()-lastInput<5000 || Date.now()-lastAnalysis<60000)return;
           if(isExcluded())return;
           const snapshot=sections.snapshot();const current=snapshot.sections.find(s=>s.id===snapshot.currentId);
           const prior=Array.isArray(visit.sectionHistory)?visit.sectionHistory.filter(s=>!snapshot.sections.some(v=>v.id===s.id)):[];
@@ -391,6 +393,7 @@
           abortAnalysis=new AbortController();
           fetch(`${endpoint}/api/chat/${botId}/proactive`,{method:"POST",signal:abortAnalysis.signal,headers:{"Content-Type":"application/json","X-Bot-Token":botToken},body:JSON.stringify({visitId,evaluationId,sessionId,previewToken,path,currentId:snapshot.currentId,activeSeconds:Math.floor(visit.activeSeconds),sections:snapshot.sections})})
             .then(async res=>{const data=await res.json().catch(()=>({reason:"network_error"}));if(!res.ok){diagnose("error",data);return null}return data}).then(proposal=>{
+              sections.tick(0);
               if(proposal?.decision==="skip")diagnose("skipped",{reason:proposal.reason});
               if(cleaned || !proposal || proposal.decision!=="offer" || document.visibilityState!=="visible" || open || handoffActive || panel.querySelector(".cb-request-form") || performance.now()-lastInput<5000 || currentPath!==path || sections.snapshot().currentId!==snapshot.currentId || sections.snapshot().version!==snapshot.version)return;
               displayOffer(proposal);
