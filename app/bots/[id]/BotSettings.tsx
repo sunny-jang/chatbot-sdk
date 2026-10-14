@@ -557,7 +557,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
             <input disabled={!proactive.enabled} type="number" min={5} max={300} value={proactive.delaySeconds} onChange={e=>setProactive({...proactive,delaySeconds:Number(e.target.value)})} className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 disabled:opacity-50" />
           </label>
         </div>
-        <p className="text-xs text-gray-500">체류 시간이 지나고 클릭·스크롤·페이지 이동이 있으면 작은 말풍선을 표시합니다. 행동이 없으면 설정 시간의 두 배 후에 제안합니다. 대화가 있거나 닫은 방문에서는 반복하지 않습니다. 현재는 규칙 기반이며 AI 분석·추가 모델 비용은 없습니다.</p>
+        <p className="text-xs text-gray-500">설정한 활성 체류 시간이 지나면 작은 말풍선을 표시합니다. 클릭이나 스크롤 없이도 표시됩니다. 대화가 있거나 닫은 방문에서는 반복하지 않습니다. 현재는 규칙 기반이며 AI 분석·추가 모델 비용은 없습니다.</p>
       </section>
 
       <div className="flex items-center justify-between">
