@@ -581,7 +581,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
             <input disabled={!proactive.enabled} type="number" min={5} max={300} value={proactive.delaySeconds} onChange={e=>setProactive({...proactive,delaySeconds:Number(e.target.value)})} className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 disabled:opacity-50" />
           </label>
         </div>
-        <p className="text-xs text-gray-500">기본 인사는 설정 시간 후 표시합니다. AI 제안은 방문 체류 최소 30초와 같은 내용의 안정된 노출 15초가 필요합니다. 한 방문 최대 2회 분석·1회 표시하며, 직접 채팅을 열거나 제안을 닫으면 반복하지 않습니다.</p>
+        <p className="text-xs text-gray-500">기본 인사는 설정 시간 후 표시합니다. AI 제안은 방문 체류 최소 30초와 같은 내용의 누적 노출 5초가 필요합니다. 한 방문 최대 2회 분석·1회 표시하며, 직접 채팅을 열거나 제안을 닫으면 반복하지 않습니다.</p>
       </section>
 
       <div className="flex items-center justify-between">

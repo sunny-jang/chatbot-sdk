@@ -10,7 +10,7 @@ test("연락처·주소·마크업 제거",()=>{const s=cleanPublicText('<b>문�
 test("관심 구간을 검증하고 개인정보를 지운다",()=>{const s=sample();s.sections[0].summary+=' user@example.com';const b=validateBehavior(s);assert.equal(b.sections.length,1);assert.ok(!b.sections[0].summary.includes('@'));assert.equal(candidateReason(b),"eligible");});
 for(const [label,change] of [
   ["짧은 방문",(s:ReturnType<typeof sample>)=>{s.activeSeconds=10}],
-  ["짧은 노출",(s:ReturnType<typeof sample>)=>{s.sections[0].seconds=5}],
+  ["짧은 노출",(s:ReturnType<typeof sample>)=>{s.sections[0].seconds=4}],
   ["결제 화면",(s:ReturnType<typeof sample>)=>{s.path='/checkout'}],
 ] as const)test(label,()=>{const s=sample();change(s);assert.notEqual(candidateReason(validateBehavior(s)),"eligible")});
 test("임의·과도한 요약 거절",()=>{for(const s of [{...sample(),currentId:'unknown'},{...sample(),path:'/x?secret=yes'},{...sample(),visitId:'bad'},{...sample(),sections:[{...sample().sections[0],seconds:Infinity}]},{...sample(),sections:Array(7).fill(sample().sections[0])}])assert.throws(()=>validateBehavior(s));});
@@ -19,3 +19,5 @@ test("출처 없는 제안·없는 문서·숫자 약속 거절",()=>{const good
 test("공개 구간과 관련 지식만 선택",()=>{const docs=rankKnowledge(sample().sections,[{id:'a',title:'RAG 챗봇',content:'고객 문의 응대 자동화와 사내 지식 검색을 지원합니다.'},{id:'b',title:'휴가',content:'회사 휴가 신청 기준입니다.'}]);assert.equal(docs[0].id,'a');assert.ok(!docs.some(d=>d.id==='b'));});
 test("민감 경로와 관리자 지정 제외 경로",()=>{assert.equal(excludedProactivePath('/account/orders'),true);assert.equal(excludedProactivePath('/private/report','/private'),true);assert.equal(excludedProactivePath('/services'),false);});
 test("테스트 토큰의 서명과 봇 범위 검증",()=>{const previous=process.env.AUTH_SECRET;process.env.AUTH_SECRET='test-signing-only';try{const token=createProactivePreview('a');assert.ok(readProactivePreview(token,'a'));assert.equal(readProactivePreview(token,'b'),null);assert.equal(readProactivePreview(token+'x','a'),null);}finally{if(previous===undefined)delete process.env.AUTH_SECRET;else process.env.AUTH_SECRET=previous;}});
+
+test("관심 구간 5초부터 평가 가능",()=>{const s=sample();s.sections[0].seconds=5;assert.equal(candidateReason(validateBehavior(s)),"eligible");});

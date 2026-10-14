@@ -35,7 +35,7 @@ export function candidateReason(summary: BehaviorSummary, delay = 30, excluded =
   if (excludedProactivePath(summary.path, excluded)) return "excluded_page";
   if (summary.activeSeconds < Math.max(30, delay)) return "short_visit";
   const current = summary.sections.find(s => s.id === summary.currentId)!;
-  if (current.seconds < 15) return "short_section";
+  if (current.seconds < 5) return "short_section";
   return "eligible";
 }
 

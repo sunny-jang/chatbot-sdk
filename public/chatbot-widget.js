@@ -384,7 +384,7 @@
           const snapshot=sections.snapshot();const current=snapshot.sections.find(s=>s.id===snapshot.currentId);
           const prior=Array.isArray(visit.sectionHistory)?visit.sectionHistory.filter(s=>!snapshot.sections.some(v=>v.id===s.id)):[];
           snapshot.sections=[...snapshot.sections,...prior].slice(0,6);
-          if(!current || current.seconds<15 || visit.activeSeconds<Math.max(30,delay))return;
+          if(!current || current.seconds<5 || visit.activeSeconds<Math.max(30,delay))return;
           const fingerprint=JSON.stringify({path:currentPath,current:snapshot.currentId,sections:snapshot.sections.map(s=>s.id).sort()});
           if(visit.lastFingerprint===fingerprint)return;
           pendingAnalysis=true;lastAnalysis=Date.now();visit.lastAnalysis=lastAnalysis;visit.lastFingerprint=fingerprint;visit.evaluations++;save();

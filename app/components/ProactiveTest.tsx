@@ -26,7 +26,7 @@ export default function ProactiveTest({botId}:{botId:string}){
   }
   return <section className="mt-6 bg-white border border-gray-200 rounded-xl p-5 space-y-4">
     <h2 className="text-lg font-semibold">상황별 AI 제안 테스트</h2>
-    <p className="text-sm text-gray-600">같은 설명 구간에 최소 15초, 전체 방문에 최소 30초 머물면 AI가 판단합니다. 테스트 다시 시작은 고객 대화를 삭제하지 않고 새 테스트 방문만 만듭니다. 테스트도 모델 비용과 AI 평가 한도에 포함됩니다.</p>
+    <p className="text-sm text-gray-600">같은 설명 구간에 최소 5초, 전체 방문에 최소 30초 머물면 AI가 판단합니다. 테스트 다시 시작은 고객 대화를 삭제하지 않고 새 테스트 방문만 만듭니다. 테스트도 모델 비용과 AI 평가 한도에 포함됩니다.</p>
     {usage&&<p className="text-sm">이번 달 평가 {usage.evaluations}회 · 노출 {usage.shown}회 · 클릭 {usage.clicked}회 · 입력/출력 토큰 {usage.input_tokens}/{usage.output_tokens}</p>}
     <div className="flex gap-2"><button type="button" onClick={start} disabled={busy||!enabled} className="bg-violet-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-50">{source?"테스트 다시 시작":"테스트 시작"}</button><button type="button" onClick={()=>void load()} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">사용량 새로고침</button></div>
     {!enabled&&<p className="text-sm text-gray-600">챗봇 설정에서 상황별 AI 제안을 켜고 저장한 뒤 사용하세요.</p>}
