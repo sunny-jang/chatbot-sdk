@@ -58,9 +58,9 @@ test('클릭 종류만 저장하고 원문·입력값 없이 지연 후 한 번 
   assert.ok(!JSON.stringify(h.stored()).includes('contact@example.com'));
   h.tick(5);assert.equal(h.children.length,1);h.tick(20);assert.equal(h.children.length,1);
 });
-test('숨겨진 탭 체류는 제외, 행동 없으면 두 배 지연',()=>{
+test('숨겨진 탭 체류는 제외, 행동이 없어도 설정한 지연 후 제안',()=>{
   const h=harness();h.doc.visibilityState='hidden';h.tick(20);assert.equal(h.stored().activeSeconds,0);
-  h.doc.visibilityState='visible';h.tick(5);assert.equal(h.children.length,0);h.tick(5);assert.equal(h.children.length,1);
+  h.doc.visibilityState='visible';h.tick(4);assert.equal(h.children.length,0);h.tick(1);assert.equal(h.children.length,1);
 });
 test('이미 제안했거나 대화를 시작한 방문에서는 수집·제안 반복 없음',()=>{
   for(const key of ['shown','engaged']){const h=harness(true,{updatedAt:0,[key]:true,events:[]});h.tick(20);assert.equal(h.children.length,0);assert.equal(Object.keys(h.listeners).length,0)}
@@ -68,4 +68,11 @@ test('이미 제안했거나 대화를 시작한 방문에서는 수집·제안 
 test('SPA 이동 감지, 최근 12개 제한, 수동 열기 후 수집 중단',()=>{
   const h=harness();for(let i=0;i<20;i++){h.context.location.pathname='/service/'+i;h.context.window.history.pushState()}
   assert.equal(h.stored().events.length,12);h.context.stopProactive();assert.equal(h.stored().engaged,true);assert.equal(Object.keys(h.listeners).length,0);h.tick(20);assert.equal(h.children.length,0);
+});
+test('과거 대화 기록과 문서 포커스 없음은 보이는 탭의 제안을 막지 않는다',()=>{
+  const h=harness();h.context.history.push({} as never);h.doc.hasFocus=()=>false;
+  h.tick(10);assert.equal(h.children.length,1);
+});
+test('현재 상담 중에는 제안하지 않는다',()=>{
+  const h=harness();h.context.handoffActive=true;h.tick(20);assert.equal(h.children.length,0);
 });

@@ -186,8 +186,16 @@
     let history = [];
     let stopProactive = () => {};
     const sessionStorageKey = `ideal-ai-session:${endpoint}:${botId}`;
-    let sessionId = localStorage.getItem(sessionStorageKey) || crypto.randomUUID();
-    localStorage.setItem(sessionStorageKey, sessionId);
+    // Keep a conversation across navigations/reloads in this tab, but do not
+    // resurrect an old conversation when the visitor opens a new tab/session.
+    // Legacy localStorage values are deliberately ignored.
+    let sessionId;
+    try {
+      sessionId = sessionStorage.getItem(sessionStorageKey) || crypto.randomUUID();
+      sessionStorage.setItem(sessionStorageKey, sessionId);
+    } catch {
+      sessionId = crypto.randomUUID();
+    }
     let handoffActive = false;
     let qaAiMode = false;
     let lastSeen = 0;
@@ -276,12 +284,14 @@
         const tick = performance.now();
         const elapsed = Math.min(2, Math.max(0, (tick - lastTick) / 1000));
         lastTick = tick;
-        if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+        // A visible tab can be read without the document owning keyboard focus.
+        if (document.visibilityState !== "visible") return;
         visit.activeSeconds += elapsed;
         save();
-        if (!conversationRestored || open || handoffActive || history.length || panel.querySelector(".cb-request-form")) return;
-        const interactive = visit.events.some(e => e.kind === "click" || e.kind === "scroll") || visit.events.filter(e => e.kind === "page").length > 1;
-        if (visit.activeSeconds < delay || (!interactive && visit.activeSeconds < delay * 2)) return;
+        if (!conversationRestored || open || handoffActive || panel.querySelector(".cb-request-form")) return;
+        // A proactive greeting should appear after the configured visible-tab
+        // delay even when the visitor has not clicked or scrolled yet.
+        if (visit.activeSeconds < delay) return;
         visit.shown = true; save(); cleanup();
         bubble = document.createElement("div");
         bubble.id = "__chatbot-proactive";
@@ -750,7 +760,8 @@
       } catch { /* 복원 실패는 새 상담 이용을 막지 않습니다. */ }
       finally {
         conversationRestored = true;
-        if (history.length || handoffActive) stopProactive();
+        // Restored bot history is not an ongoing conversation in this visit.
+        if (handoffActive) stopProactive();
       }
     }
 
