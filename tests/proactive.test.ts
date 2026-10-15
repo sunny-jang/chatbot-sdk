@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { normalizeProactive } from '../lib/proactive';
 const source = readFileSync(new URL('../public/chatbot-widget.js', import.meta.url), 'utf8');
 const collector = source.slice(source.indexOf('    function installProactive()'), source.indexOf('    installProactive();'));
-function harness(enabled = true, saved: unknown = null) {
+function harness(enabled = true, saved: unknown = null, mode = "basic") {
   let clock = 0;
   let stored = saved ? JSON.stringify(saved) : null;
   let interval: (() => void) | null = null;
@@ -30,9 +30,9 @@ function harness(enabled = true, saved: unknown = null) {
     addEventListener:(name:string,fn:(e:unknown)=>void)=>listeners[name]=fn,
     removeEventListener:(name:string)=>delete listeners[name],
   };
-  const context = {crypto:{randomUUID},settings:{proactive:{enabled,delaySeconds:5,message:'도와드릴까요?'}}, endpoint:'https://api.example',botId:'test',
+  const context = {crypto:{randomUUID},proactivePreviewToken:"",observeContentSections:()=>({rescan(){},tick(){},snapshot:()=>({currentId:"",sections:[],version:0}),cleanup(){}}),settings:{proactive:{enabled,mode,siteOrigin:"https://site.example",delaySeconds:5,message:'도와드릴까요?'}}, endpoint:'https://api.example',botId:'test',
     sessionStorage:{getItem:()=>stored,setItem:(_key:string,value:string)=>{stored=value;storageWrites++},removeItem:()=>{stored=null}},
-    Date:{now:()=>clock},performance:{now:()=>clock},location:{pathname:'/services'},Element,
+    Date:{now:()=>clock},performance:{now:()=>clock},location:{pathname:'/services',origin:'https://site.example'},Element,
     document:doc,window:{scrollY:0,history:{pushState(){},replaceState(){}},addEventListener:(name:string,fn:(e:unknown)=>void)=>listeners[name]=fn,removeEventListener:(name:string)=>delete listeners[name]},
     root:{setAttribute:()=>{},contains:()=>false,appendChild:(el:unknown)=>children.push(el)},
     conversationRestored:true,open:false,handoffActive:false,history:[],panel:{querySelector:()=>null},togglePanel:()=>{},stopProactive:()=>{},
@@ -95,4 +95,12 @@ test('스크롤하며 같은 구간을 읽으면 체류 누적, 다른 구간으
   reader.tick(1);assert.equal(reader.snapshot().version,before.version);
   callback([{target:observed[0],isIntersecting:false},{target:observed[1],isIntersecting:true}]);reader.tick(1);
   assert.notEqual(reader.snapshot().currentId,before.currentId);assert.ok(reader.snapshot().version>before.version);
+});
+
+test('AI 관심 구간이 없으면 방문 30초 후 기본 도움 제안을 한 번 표시',()=>{
+ const h=harness(true,null,"ai");h.tick(29);assert.equal(h.children.length,0);h.tick(1);assert.equal(h.children.length,1);h.tick(30);assert.equal(h.children.length,1);
+});
+test('기본 도움 제안도 제외 페이지와 상담 중에는 표시하지 않는다',()=>{
+ const excluded=harness(true,null,"ai");excluded.context.location.pathname='/checkout';excluded.tick(40);assert.equal(excluded.children.length,0);
+ const active=harness(true,null,"ai");active.context.handoffActive=true;active.tick(40);assert.equal(active.children.length,0);
 });

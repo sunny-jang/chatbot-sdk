@@ -378,7 +378,12 @@
           if(visit.shown)return;
           if(!visit.evaluations)diagnose("collecting",{activeSeconds:Math.floor(visit.activeSeconds),...sections.snapshot()});
           if(pendingAnalysis)return;
-          if(visit.evaluations>=2){diagnose("evaluation_limit");return;}
+          if(isExcluded() || performance.now()-lastInput<5000)return;
+          if(visit.activeSeconds>=Math.max(30,delay)){
+            const current=sections.snapshot().sections.find(s=>s.id===sections.snapshot().currentId);
+            if(!current || current.seconds<5){displayOffer({message:"제가 도와드릴까요?",intent:"generic_help",reason:"no_content_candidate"});return;}
+          }
+          if(visit.evaluations>=2){if(!isExcluded()&&performance.now()-lastInput>=5000&&visit.activeSeconds>=Math.max(30,delay))displayOffer({message:"제가 도와드릴까요?",intent:"generic_help",reason:"evaluation_limit"});return;}
           if(performance.now()-lastInput<5000 || Date.now()-lastAnalysis<60000)return;
           if(isExcluded())return;
           const snapshot=sections.snapshot();const current=snapshot.sections.find(s=>s.id===snapshot.currentId);
@@ -386,7 +391,7 @@
           snapshot.sections=[...snapshot.sections,...prior].slice(0,6);
           if(!current || current.seconds<5 || visit.activeSeconds<Math.max(30,delay))return;
           const fingerprint=JSON.stringify({path:currentPath,current:snapshot.currentId,sections:snapshot.sections.map(s=>s.id).sort()});
-          if(visit.lastFingerprint===fingerprint)return;
+          if(visit.lastFingerprint===fingerprint){displayOffer({message:"제가 도와드릴까요?",intent:"generic_help",reason:"no_new_topic"});return;}
           pendingAnalysis=true;lastAnalysis=Date.now();visit.lastAnalysis=lastAnalysis;visit.lastFingerprint=fingerprint;visit.evaluations++;save();
           diagnose("analyzing");
           const evaluationId=crypto.randomUUID();const path=currentPath;
@@ -426,10 +431,10 @@
         notify("shown",proposal);
         // Keep a lightweight section watcher until the offer is acted on. It may
         // disappear if the visitor moves to another topic, but never reappear.
-        if(isAi){const original=snapshotCurrent();const watcher=setInterval(()=>{if(open||document.visibilityState!=="visible")return;sections?.tick(0);if(snapshotCurrent()!==original){bubble?.remove();clearInterval(watcher)}},1000);const oldCleanup=root.cleanupProactive;root.cleanupProactive=()=>{clearInterval(watcher);oldCleanup?.()};stopProactive=()=>{visit.engaged=true;save();clearInterval(watcher);cleanup();};}
+        if(isAi&&proposal.intent!=="generic_help"){const original=snapshotCurrent();const watcher=setInterval(()=>{if(open||document.visibilityState!=="visible")return;sections?.tick(0);if(snapshotCurrent()!==original){bubble?.remove();clearInterval(watcher)}},1000);const oldCleanup=root.cleanupProactive;root.cleanupProactive=()=>{clearInterval(watcher);oldCleanup?.()};stopProactive=()=>{visit.engaged=true;save();clearInterval(watcher);cleanup();};}
         clearInterval(timer);
         document.removeEventListener("click",onClick,true);document.removeEventListener("input",onInput,true);
-        if(!isAi)cleanup(false);
+        if(!isAi||proposal.intent==="generic_help")cleanup(false);
       }
       function snapshotCurrent(){return sections?.snapshot().currentId||"";}
       document.addEventListener("click", onClick, true);

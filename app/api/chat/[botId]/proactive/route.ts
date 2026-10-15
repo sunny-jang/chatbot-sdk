@@ -73,8 +73,7 @@ export async function POST(req:Request,{params}:Context){
     const qa=await sql`SELECT id,question AS title,LEFT(answer,2000) AS content FROM qa_pairs WHERE bot_id=${botId} ORDER BY created_at DESC LIMIT 100`;
     const knowledge=rankKnowledge(behavior.sections.filter(s=>s.id===behavior.currentId),[...docs,...qa] as unknown as {id:string;title:string;content:string}[]);
     const result=await generateProactive(botId,String(bot.model||"gpt-4o-mini"),behavior,knowledge);
-    const fallbackReasons=["missing_key","provider_error","provider_timeout_or_invalid_output"];
-    if(fallbackReasons.includes(result.offer.reason))result.offer={decision:"offer",message:config.message.slice(0,60),intent:"generic_help",discoveryGoal:"",sourceIds:[],reason:result.offer.reason};
+    if(result.offer.decision==="skip")result.offer={decision:"offer",message:"제가 도와드릴까요?",intent:"generic_help",discoveryGoal:"",sourceIds:[],reason:result.offer.reason};
     await sql`UPDATE proactive_evaluations SET state='completed',result=${sql.json(result.offer)},input_tokens=${result.inputTokens},output_tokens=${result.outputTokens} WHERE id=${behavior.evaluationId}`;
     return Response.json({...result.offer,id:behavior.evaluationId});
   }catch(error){
