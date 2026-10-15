@@ -1,8 +1,8 @@
 import Link from "next/link";
 import CopyButton from "@/app/bots/[id]/CopyButton";
 
-const installCode = "npm install ideal-ai-chatbot-sdk";
-const basicCode = `import { initIdealAIChatbot } from "ideal-ai-chatbot-sdk";
+const installCode = "npm install ideal-ai-widget-sdk";
+const basicCode = `import { initIdealAIChatbot } from "ideal-ai-widget-sdk";
 
 const chatbot = await initIdealAIChatbot({
   botId: "YOUR_BOT_ID",
@@ -14,7 +14,7 @@ chatbot.destroy();`;
 const reactCode = `"use client";
 
 import { useEffect } from "react";
-import { initIdealAIChatbot } from "ideal-ai-chatbot-sdk";
+import { initIdealAIChatbot } from "ideal-ai-widget-sdk";
 
 export function IdealAIChatbot() {
   useEffect(() => {
@@ -138,6 +138,14 @@ export default function SdkGuidePage() {
         ))}
       </section>
 
+      <section className="mt-12 rounded-2xl border border-slate-200 bg-white p-7">
+        <h2 className="text-xl font-bold">먼저 말 걸기</h2>
+        <p className="mt-3 text-sm leading-7 text-slate-600">봇 설정에서 기능을 켜고 기본 인사 또는 AI 제안을 선택하세요. AI 제안은 실제 설치 주소(www 포함)를 등록해야 하며 추가 추적 코드는 필요하지 않습니다.</p>
+        <p className="mt-3 text-sm leading-7 text-slate-600">AI 제안은 누적 방문 30초 이상, 현재 본문 구간 노출 5초 이상일 때 분석합니다. 설정 지연이 30초보다 길면 그 시간을 따릅니다. 관련 지식이 있으면 상황을 묻고, 적절한 질문이 없거나 본문 구간을 잡지 못하면 “제가 도와드릴까요?”를 표시합니다.</p>
+        <p className="mt-3 text-sm leading-7 text-slate-600">방문당 한 번 표시하며 제안 닫기·직접 채팅·상담원 연결·제외 페이지에서는 반복하지 않습니다. 입력 폼 값은 수집하지 않습니다. AI 분석은 모델 비용과 월 한도를 사용하며 테스트 화면에서 진단할 수 있습니다.</p>
+        <p className="mt-3 text-sm leading-7 text-slate-600">기존 ideal-ai-chatbot-sdk 이용자는 새 패키지 설치 후 import 경로만 바꾸세요. 봇 ID·토큰·서버 주소는 유지합니다. HTML 스크립트 설치는 패키지 변경 없이 계속 사용할 수 있습니다.</p>
+      </section>
+
       <section className="mt-12 flex items-center justify-between rounded-2xl bg-gradient-to-r from-[#211d48] to-[#303d75] px-7 py-6 text-white">
         <div>
           <p className="text-xs font-semibold text-violet-200">설치 후 확인</p>
@@ -145,7 +153,7 @@ export default function SdkGuidePage() {
         </div>
         <div className="flex gap-3">
           <Link href="/analytics" className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-[#211d48]">분석 대시보드</Link>
-          <a href="https://www.npmjs.com/package/ideal-ai-chatbot-sdk" target="_blank" rel="noreferrer" className="rounded-lg border border-white/25 px-4 py-2.5 text-sm font-semibold text-white">npm 패키지 ↗</a>
+          <a href="https://www.npmjs.com/package/ideal-ai-widget-sdk" target="_blank" rel="noreferrer" className="rounded-lg border border-white/25 px-4 py-2.5 text-sm font-semibold text-white">npm 패키지 ↗</a>
         </div>
       </section>
     </div>

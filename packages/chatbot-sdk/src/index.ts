@@ -21,7 +21,9 @@ export interface IdealAIChatbotInstance {
 }
 
 function removeWidget() {
-  document.getElementById(WIDGET_ID)?.remove();
+  const widget = document.getElementById(WIDGET_ID) as (HTMLElement & { cleanupProactive?: () => void }) | null;
+  widget?.cleanupProactive?.();
+  widget?.remove();
   document.getElementById(STYLE_ID)?.remove();
   document.getElementById(SCRIPT_ID)?.remove();
 }

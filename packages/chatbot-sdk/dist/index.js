@@ -2,7 +2,9 @@ const SCRIPT_ID = "__ideal-ai-chatbot-sdk-script";
 const WIDGET_ID = "__chatbot-widget";
 const STYLE_ID = "__chatbot-widget-style";
 function removeWidget() {
-    document.getElementById(WIDGET_ID)?.remove();
+    const widget = document.getElementById(WIDGET_ID);
+    widget?.cleanupProactive?.();
+    widget?.remove();
     document.getElementById(STYLE_ID)?.remove();
     document.getElementById(SCRIPT_ID)?.remove();
 }
