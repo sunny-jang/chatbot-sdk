@@ -47,7 +47,7 @@ export default async function HomePage() {
       <section className="workspace-metrics" aria-label="현재 업무 현황">
         {[
           ["대기 중인 상담", stats.waiting, "/support", "waiting"],
-          ["진행 중인 상담", stats.active, "/support", "active"],
+          ["진행 중인 상담", stats.active, "/support?status=active", "active"],
           ["새 문의·견적", stats.requests, "/requests", "requests"],
           ["운영 챗봇", stats.bots, "/bots", "bots"],
         ].map(([label, count, href, key]) => (

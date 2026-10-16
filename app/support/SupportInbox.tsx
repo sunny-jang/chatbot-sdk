@@ -28,12 +28,14 @@ const labels: Record<string, string> = {
 };
 export default function SupportInbox({
   initialSession,
+  initialStatus,
 }: {
   initialSession: string;
+  initialStatus: string;
 }) {
   const [items, setItems] = useState<Handoff[]>([]),
     [selectedId, setSelectedId] = useState(initialSession),
-    [filter, setFilter] = useState("waiting"),
+    [filter, setFilter] = useState(initialStatus),
     [query, setQuery] = useState("");
   const [messages, setMessages] = useState<{
     session: string;

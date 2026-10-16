@@ -4,9 +4,18 @@ import SupportInbox from "./SupportInbox";
 export default async function SupportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ session?: string }>;
+  searchParams: Promise<{ session?: string; status?: string }>;
 }) {
   if (!(await getTenantId())) redirect("/login");
   const params = await searchParams;
-  return <SupportInbox initialSession={params.session || ""} />;
+  const status = ["waiting", "active", "closed"].includes(params.status || "")
+    ? params.status!
+    : "waiting";
+  return (
+    <SupportInbox
+      key={`${params.session || ""}:${status}`}
+      initialSession={params.session || ""}
+      initialStatus={status}
+    />
+  );
 }
