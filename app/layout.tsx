@@ -12,7 +12,11 @@ export const metadata: Metadata = {
   description: "Ideal AI Chatbot SDK Admin Panel",
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   // 모든 로그인 방식(Google·이메일·개발 로그인)이 Auth.js 세션 하나를 사용합니다.
   const session = await auth();
   const tenantId = session?.tenant_id ?? null;
@@ -25,7 +29,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       const rows = await sql`SELECT name FROM tenants WHERE id = ${tenantId}`;
       tenantName = (rows[0] as { name: string } | undefined)?.name ?? null;
       if (tenantName) {
-        bots = (await sql`SELECT id, name, type FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC`) as unknown as { id: string; name: string; type: string }[];
+        bots =
+          (await sql`SELECT id, name, type FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC`) as unknown as {
+            id: string;
+            name: string;
+            type: string;
+          }[];
       }
     } catch {
       // DB might not be ready yet (first load)
@@ -34,11 +43,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="ko" className={geist.className}>
-      <body className="min-h-screen" style={{ backgroundColor: "#f8f7ff" }}>
+      <body className="min-h-screen" style={{ backgroundColor: "#f3f6fb" }}>
         {tenantName ? (
-          <div className="flex min-h-screen">
+          <div className="workspace-shell">
+            <a className="workspace-skip" href="#main-content">
+              본문으로 이동
+            </a>
             <Sidebar tenantName={tenantName} bots={bots} isAdmin={isAdmin} />
-            <main className="flex-1 p-8">{children}</main>
+            <main id="main-content" className="workspace-main">
+              {children}
+            </main>
           </div>
         ) : (
           <>{children}</>

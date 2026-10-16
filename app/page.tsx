@@ -1,160 +1,178 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import sql from "@/lib/neon";
-import { initSchema, Bot } from "@/lib/db";
+import { initSchema } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
-import HelpButton from "./HelpButton";
-
-const HELP = {
-  title: "챗봇 목록 사용방법",
-  sections: [
-    {
-      heading: "챗봇 종류",
-      items: [
-        "📚 Q&A 봇 — 등록 Q&A로 빠르게 답하고, 필요하면 AI 모드로 전환해 RAG 문서를 기반으로 답변합니다.",
-        "✨ AI 봇 — 업로드한 문서를 기반으로 AI가 자유롭게 답변을 생성합니다.",
-      ],
-    },
-    {
-      heading: "시작하기",
-      items: [
-        "'새 챗봇 만들기' 버튼으로 챗봇을 생성합니다.",
-        "카드를 클릭하면 설정, 문서, 테스트 등 세부 관리 화면으로 이동합니다.",
-      ],
-    },
-    {
-      heading: "빠른 이동",
-      items: [
-        "카드 하단의 단축 버튼(설정·문서·Q&A·테스트·기록)으로 바로 이동할 수 있습니다.",
-      ],
-    },
-  ],
-};
-
 export const dynamic = "force-dynamic";
 
+type Work = {
+  id: string;
+  session_id: string;
+  customer_name: string | null;
+  bot_name: string;
+  reason: string | null;
+};
+type RequestItem = {
+  id: string;
+  bot_id: string;
+  name: string;
+  kind: string;
+  bot_name: string;
+};
 export default async function HomePage() {
   const tenantId = await getTenantId();
   if (!tenantId) redirect("/brochure.html");
-
   await initSchema();
-  const bots = (await sql`
-    SELECT * FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC
-  `) as unknown as Bot[];
-
+  const [counts, waiting, requests, bots] = await Promise.all([
+    sql`SELECT (SELECT COUNT(*)::int FROM support_handoffs h JOIN chat_sessions s ON s.id=h.session_id WHERE s.tenant_id=${tenantId} AND h.status='waiting') AS waiting,
+      (SELECT COUNT(*)::int FROM support_handoffs h JOIN chat_sessions s ON s.id=h.session_id WHERE s.tenant_id=${tenantId} AND h.status='active') AS active,
+      (SELECT COUNT(*)::int FROM customer_requests WHERE tenant_id=${tenantId} AND status='new') AS requests,
+      (SELECT COUNT(*)::int FROM bots WHERE tenant_id=${tenantId}) AS bots`,
+    sql`SELECT h.id,h.session_id,s.customer_name,b.name AS bot_name,h.reason FROM support_handoffs h JOIN chat_sessions s ON s.id=h.session_id JOIN bots b ON b.id=h.bot_id WHERE s.tenant_id=${tenantId} AND h.status='waiting' ORDER BY h.requested_at ASC LIMIT 5`,
+    sql`SELECT r.id,r.bot_id,r.name,r.kind,b.name AS bot_name FROM customer_requests r JOIN bots b ON b.id=r.bot_id WHERE r.tenant_id=${tenantId} AND r.status='new' ORDER BY r.created_at ASC LIMIT 5`,
+    sql`SELECT id,name,type FROM bots WHERE tenant_id=${tenantId} ORDER BY created_at DESC LIMIT 4`,
+  ]);
+  const stats = counts[0];
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
+    <div className="workspace-page">
+      <header className="workspace-page-heading">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">내 챗봇</h2>
-          <p className="text-sm text-gray-500 mt-1">챗봇을 선택해 관리하세요</p>
+          <h1>오늘의 업무</h1>
+          <p>기다리는 고객부터 확인하고, 필요한 업무를 이어가세요.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <HelpButton content={HELP} />
+        <Link className="workspace-primary" href="/support">
+          상담함 열기
+        </Link>
+      </header>
+      <section className="workspace-metrics" aria-label="현재 업무 현황">
+        {[
+          ["대기 중인 상담", stats.waiting, "/support", "waiting"],
+          ["진행 중인 상담", stats.active, "/support?status=active", "active"],
+          ["새 문의·견적", stats.requests, "/requests", "requests"],
+          ["운영 챗봇", stats.bots, "/bots", "bots"],
+        ].map(([label, count, href, key]) => (
           <Link
-            href="/bots/new"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            href={String(href)}
+            key={key}
+            className={`workspace-metric ${key}`}
           >
-            + 새 챗봇 만들기
+            <span>{label}</span>
+            <strong>
+              {count}
+              <small>{key === "bots" ? "개" : "건"}</small>
+            </strong>
+            <span className="workspace-metric-action">확인하기</span>
           </Link>
-        </div>
-      </div>
-
-      {bots.length === 0 ? (
-        <div className="text-center py-24 text-gray-400">
-          <div className="text-6xl mb-4">🤖</div>
-          <p className="text-lg font-medium text-gray-600">아직 챗봇이 없어요</p>
-          <p className="text-sm mt-1 mb-6">첫 번째 챗봇을 만들어보세요</p>
-          <Link
-            href="/bots/new"
-            className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            챗봇 만들기
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {bots.map((bot) => (
-            <div
-              key={bot.id}
-              className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md hover:border-gray-300 transition-all"
-            >
-              {/* Card header — clickable */}
-              <Link href={`/bots/${bot.id}`} className="block p-5 pb-4 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">{bot.type === "qa" ? "📚" : "✨"}</span>
-                    <div>
-                      <h3 className="font-semibold text-gray-900 leading-tight">{bot.name}</h3>
-                      <span
-                        className={`inline-block mt-0.5 px-2 py-0.5 text-xs font-medium rounded-full ${
-                          bot.type === "qa"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-purple-100 text-purple-700"
-                        }`}
-                      >
-                        {bot.type === "qa" ? "Q&A 봇" : "AI 봇"}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-300">→</span>
-                </div>
-                {bot.system_prompt ? (
-                  <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
-                    {bot.system_prompt}
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-300 italic">시스템 프롬프트 없음</p>
-                )}
-              </Link>
-
-              {/* Quick actions */}
-              <div className="border-t border-gray-100 px-4 py-3 flex items-center gap-1.5 flex-wrap">
-                <Link
-                  href={`/bots/${bot.id}`}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  ⚙️ 설정
-                </Link>
-                {(bot.type === "ai" || bot.type === "qa") && (
-                  <Link
-                    href={`/bots/${bot.id}/docs`}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    📄 문서
-                  </Link>
-                )}
-                {bot.type === "qa" && (
-                  <Link
-                    href={`/bots/${bot.id}/qa`}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    💬 Q&A
-                  </Link>
-                )}
-                <Link
-                  href={`/bots/${bot.id}/analytics`}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
-                >
-                  📊 분석
-                </Link>
-                <Link
-                  href={`/bots/${bot.id}/test`}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  ▶ 테스트
-                </Link>
-                <Link
-                  href={`/bots/${bot.id}/logs`}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  📋 기록
-                </Link>
-              </div>
+        ))}
+      </section>
+      <div className="workspace-work-grid">
+        <section className="workspace-panel">
+          <header>
+            <div>
+              <h2>답변을 기다리고 있어요</h2>
+              <p>오래 기다린 상담부터 표시합니다.</p>
             </div>
-          ))}
-        </div>
-      )}
+            <Link href="/support">전체 보기</Link>
+          </header>
+          {waiting.length ? (
+            <div>
+              {(waiting as unknown as Work[]).map((item) => (
+                <Link
+                  className="workspace-work-row"
+                  key={item.id}
+                  href={`/support?session=${encodeURIComponent(item.session_id)}`}
+                >
+                  <span className="workspace-customer-initial">
+                    {(item.customer_name || "고객").slice(0, 1)}
+                  </span>
+                  <div>
+                    <strong>{item.customer_name || "방문 고객"}</strong>
+                    <p>
+                      {item.bot_name} · {item.reason || "담당자 연결 요청"}
+                    </p>
+                  </div>
+                  <span className="workspace-status waiting">상담 대기</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="workspace-empty">
+              <strong>대기 중인 상담이 없어요</strong>
+              <p>고객이 담당자 연결을 요청하면 여기에 표시됩니다.</p>
+            </div>
+          )}
+        </section>
+        <section className="workspace-panel">
+          <header>
+            <div>
+              <h2>새로 접수된 문의</h2>
+              <p>확인이 필요한 견적·상담 신청입니다.</p>
+            </div>
+            <Link href="/requests">전체 보기</Link>
+          </header>
+          {requests.length ? (
+            <div>
+              {(requests as unknown as RequestItem[]).map((item) => (
+                <Link
+                  className="workspace-work-row"
+                  key={item.id}
+                  href={`/bots/${item.bot_id}/requests`}
+                >
+                  <div>
+                    <strong>{item.name}</strong>
+                    <p>{item.bot_name}</p>
+                  </div>
+                  <span className="workspace-status">
+                    {item.kind === "quote" ? "견적 요청" : "상담 신청"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="workspace-empty">
+              <strong>새로 접수된 문의가 없어요</strong>
+              <p>챗봇에서 신청한 견적과 상담 문의를 모아 보여드려요.</p>
+            </div>
+          )}
+        </section>
+      </div>
+      <section className="workspace-panel workspace-bots-overview">
+        <header>
+          <div>
+            <h2>챗봇 바로가기</h2>
+            <p>답변 지식을 보완하거나 실제 동작을 확인하세요.</p>
+          </div>
+          <Link href="/bots">챗봇 관리</Link>
+        </header>
+        {bots.length ? (
+          <div className="workspace-bot-rows">
+            {bots.map((bot) => (
+              <div key={String(bot.id)}>
+                <span className="workspace-bot-symbol" aria-hidden="true">
+                  ◇
+                </span>
+                <div>
+                  <strong>{String(bot.name)}</strong>
+                  <p>{bot.type === "qa" ? "질문과 답변 중심" : "AI 상담"}</p>
+                </div>
+                <Link href={`/bots/${bot.id}/test`}>테스트</Link>
+                <Link href={`/bots/${bot.id}`}>관리</Link>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="workspace-empty">
+            <strong>첫 챗봇을 만들어 보세요</strong>
+            <p>
+              답변할 내용을 등록하고 홈페이지에 설치하면 고객을 응대할 수
+              있어요.
+            </p>
+            <Link className="workspace-primary" href="/bots/new">
+              챗봇 만들기
+            </Link>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
