@@ -1,6 +1,10 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import { filterInbox, draftAfterSend } from "@/lib/workspace-inbox";
+import { useCallback, useEffect, useState, useRef } from "react";
+import {
+  filterInbox,
+  draftAfterSend,
+  createRequestSequence,
+} from "@/lib/workspace-inbox";
 type Handoff = {
   id: string;
   session_id: string;
@@ -44,50 +48,71 @@ export default function SupportInbox({
   const [drafts, setDrafts] = useState<Record<string, string>>({}),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
+    [listError, setListError] = useState(""),
     [messageError, setMessageError] = useState("");
   const [acting, setActing] = useState(false),
     [sending, setSending] = useState(false),
     [revision, setRevision] = useState(0);
-  const load = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const r = await fetch("/api/support/handoffs", {
-        cache: "no-store",
-        signal,
-      });
-      if (!r.ok)
-        throw new Error("상담 목록을 불러오지 못했어요. 다시 시도해 주세요.");
-      const rows: Handoff[] = await r.json();
-      setItems(rows);
-      setError("");
-    } catch (e) {
-      if (!signal?.aborted)
-        setError(
-          e instanceof Error ? e.message : "상담 목록을 불러오지 못했어요.",
-        );
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, []);
+  const listSequence = useRef(createRequestSequence());
+  const messagesBox = useRef<HTMLDivElement>(null);
+  const followLatest = useRef(true);
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      const latest = listSequence.current.start();
+      try {
+        const params = new URLSearchParams({
+          status: filter,
+          q: query.trim().slice(0, 100),
+          selectedSession: selectedId,
+        });
+        const r = await fetch(`/api/support/handoffs?${params}`, {
+          cache: "no-store",
+          signal,
+        });
+        if (!r.ok)
+          throw new Error("상담 목록을 불러오지 못했어요. 다시 시도해 주세요.");
+        const rows: Handoff[] = await r.json();
+        if (!signal?.aborted && latest()) {
+          setItems(rows);
+          setListError("");
+        }
+      } catch (e) {
+        if (!signal?.aborted && latest())
+          setListError(
+            e instanceof Error ? e.message : "상담 목록을 불러오지 못했어요.",
+          );
+      } finally {
+        if (!signal?.aborted && latest()) setLoading(false);
+      }
+    },
+    [filter, query, selectedId],
+  );
   useEffect(() => {
     const controller = new AbortController();
-    const first = setTimeout(() => void load(controller.signal), 0);
-    const timer = setInterval(() => void load(controller.signal), 5000);
+    const sequence = listSequence.current;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      await load(controller.signal);
+      if (!controller.signal.aborted) timer = setTimeout(poll, 5000);
+    }
+    timer = setTimeout(poll, 250);
     return () => {
       controller.abort();
-      clearTimeout(first);
-      clearInterval(timer);
+      clearTimeout(timer);
+      sequence.invalidate();
     };
-  }, [load]);
+  }, [load, revision]);
   useEffect(() => {
     if (!selectedId) return;
     const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
       try {
         const r = await fetch(
           `/api/support/handoffs?sessionId=${encodeURIComponent(selectedId)}`,
           { cache: "no-store", signal: controller.signal },
         );
-        if (!r.ok) throw new Error("대화를 불러오지 못했어요.");
+        if (!r.ok) throw new Error();
         const rows: Message[] = await r.json();
         if (!controller.signal.aborted) {
           setMessages({ session: selectedId, rows });
@@ -96,22 +121,33 @@ export default function SupportInbox({
       } catch {
         if (!controller.signal.aborted)
           setMessageError("대화를 불러오지 못했어요. 잠시 후 다시 시도합니다.");
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(refresh, 2500);
       }
     }
-    const first = setTimeout(refresh, 0),
-      timer = setInterval(refresh, 2500);
+    const first = setTimeout(() => {
+      setMessageError("");
+      followLatest.current = true;
+      void refresh();
+    }, 0);
     return () => {
       controller.abort();
       clearTimeout(first);
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [selectedId, revision]);
+  useEffect(() => {
+    const box = messagesBox.current;
+    if (box && messages.session === selectedId && followLatest.current)
+      box.scrollTop = box.scrollHeight;
+  }, [messages, selectedId]);
   const current = items.find((i) => i.session_id === selectedId);
   const text = drafts[selectedId] || "";
   const visible = filterInbox(items, filter, query);
   async function action(action: "accept" | "close") {
     if (!current || acting) return;
     setActing(true);
+    setError("");
     try {
       const r = await fetch("/api/support/handoffs", {
         method: "PATCH",
@@ -120,7 +156,6 @@ export default function SupportInbox({
       });
       if (!r.ok)
         throw new Error("상담 상태를 변경하지 못했어요. 다시 시도해 주세요.");
-      await load();
       setRevision((v) => v + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "상태를 변경하지 못했어요.");
@@ -134,6 +169,7 @@ export default function SupportInbox({
     const session = current.session_id,
       message = text;
     setSending(true);
+    setError("");
     try {
       const r = await fetch("/api/support/handoffs", {
         method: "POST",
@@ -146,7 +182,6 @@ export default function SupportInbox({
         ...d,
         [session]: draftAfterSend(d[session], message),
       }));
-      await load();
       setRevision((v) => v + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "전송하지 못했어요.");
@@ -163,10 +198,16 @@ export default function SupportInbox({
         </div>
         <span className="inbox-live">5초마다 목록 갱신</span>
       </header>
+      {listError && (
+        <div className="inbox-error" role="alert">
+          {listError}
+          <button onClick={() => void load()}>다시 불러오기</button>
+        </div>
+      )}
       {error && (
         <div className="inbox-error" role="alert">
           {error}
-          <button onClick={() => void load()}>다시 불러오기</button>
+          <button onClick={() => setError("")}>닫기</button>
         </div>
       )}
       <div className={`inbox-layout ${current ? "has-selection" : ""}`}>
@@ -192,10 +233,11 @@ export default function SupportInbox({
             <input
               aria-label="고객 또는 챗봇 검색"
               placeholder="고객 또는 챗봇 검색"
+              maxLength={100}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <p>목록 {visible.length}건 · 최근 상담 200건에서 조회</p>
+            <p>목록 {visible.length}건 · 조건에 맞는 상담 최대 200건</p>
           </div>
           {loading ? (
             <div className="workspace-empty" role="status">
@@ -290,7 +332,16 @@ export default function SupportInbox({
                   {messageError}
                 </p>
               )}
-              <div className="inbox-messages" aria-label="대화 내용">
+              <div
+                className="inbox-messages"
+                aria-label="대화 내용"
+                ref={messagesBox}
+                onScroll={(e) => {
+                  const box = e.currentTarget;
+                  followLatest.current =
+                    box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+                }}
+              >
                 {messages.session !== selectedId ? (
                   <p role="status">대화를 불러오는 중이에요.</p>
                 ) : (
@@ -352,9 +403,10 @@ export default function SupportInbox({
                     rows={3}
                     value={text}
                     placeholder="고객에게 답변을 작성하세요"
-                    onChange={(e) =>
-                      setDrafts((d) => ({ ...d, [selectedId]: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setDrafts((d) => ({ ...d, [selectedId]: value }));
+                    }}
                   />
                   <div>
                     <small>답변은 전송 버튼을 눌러 보내세요.</small>

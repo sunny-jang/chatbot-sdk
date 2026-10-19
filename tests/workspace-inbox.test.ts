@@ -46,3 +46,20 @@ test("전송 성공 시 해당 초안만 비우고 전송 중 새로 작성한 �
   assert.equal(draftAfterSend("추가 답변", "이전 답변"), "추가 답변");
   assert.equal(draftAfterSend(undefined, "이전 답변"), "");
 });
+
+test("중복 URL 검색 인자를 첫 값으로 정규화한다", async () => {
+  const { queryValue } = await import("../lib/workspace-inbox");
+  assert.equal(queryValue(["견적", "상담"]), "견적");
+  assert.equal(queryValue([]), "");
+  assert.equal(queryValue(undefined), "");
+});
+test("새 조회 뒤 늦게 도착한 이전 성공·실패 응답은 화면을 바꾸지 않는다", async () => {
+  const { createRequestSequence } = await import("../lib/workspace-inbox");
+  const requests = createRequestSequence();
+  const old = requests.start(),
+    current = requests.start();
+  assert.equal(old(), false);
+  assert.equal(current(), true);
+  requests.invalidate();
+  assert.equal(current(), false);
+});

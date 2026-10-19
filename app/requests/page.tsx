@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import sql from "@/lib/neon";
 import { getTenantId } from "@/lib/auth";
 import { initSchema } from "@/lib/db";
+import { queryValue } from "@/lib/workspace-inbox";
 export const dynamic = "force-dynamic";
 const labels: Record<string, string> = {
   new: "신규",
@@ -12,15 +13,15 @@ const labels: Record<string, string> = {
 export default async function RequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string | string[]; q?: string | string[] }>;
 }) {
   const tenant = await getTenantId();
   if (!tenant) redirect("/login");
   await initSchema();
   const params = await searchParams;
-  const status =
-    params.status && Object.hasOwn(labels, params.status) ? params.status : "";
-  const q = (params.q || "").trim().slice(0, 100);
+  const requestedStatus = queryValue(params.status);
+  const status = Object.hasOwn(labels, requestedStatus) ? requestedStatus : "";
+  const q = queryValue(params.q).trim().slice(0, 100);
   const rows =
     await sql`SELECT r.id,r.bot_id,r.name,r.kind,r.status,r.message,r.created_at,b.name AS bot_name FROM customer_requests r JOIN bots b ON b.id=r.bot_id WHERE r.tenant_id=${tenant} AND (${status}='' OR r.status=${status}) AND (${q}='' OR r.name ILIKE ${"%" + q + "%"} OR r.message ILIKE ${"%" + q + "%"}) ORDER BY r.created_at DESC LIMIT 100`;
   return (

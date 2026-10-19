@@ -27,3 +27,22 @@ export function filterInbox<
 export function draftAfterSend(current: string | undefined, sent: string) {
   return current === sent ? "" : current || "";
 }
+
+/** Next search parameters can contain arrays when a query key is repeated. */
+export function queryValue(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] || "" : value || "";
+}
+
+/** Only the latest response may update a polling view, including its error state. */
+export function createRequestSequence() {
+  let sequence = 0;
+  return {
+    start() {
+      const ticket = ++sequence;
+      return () => ticket === sequence;
+    },
+    invalidate() {
+      sequence++;
+    },
+  };
+}
