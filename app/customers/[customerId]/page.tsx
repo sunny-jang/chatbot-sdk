@@ -1,3 +1,4 @@
+import Settings from "./Settings";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import sql from "@/lib/neon";
@@ -18,7 +19,7 @@ export default async function CustomerManagement({
     redirect("/customers");
   }
   const [customer] =
-    await sql`SELECT id,name,website FROM customers WHERE id=${customerId} AND tenant_id=${owner.tenantId}`;
+    await sql`SELECT id,name,website,status FROM customers WHERE id=${customerId} AND tenant_id=${owner.tenantId}`;
   if (!customer) notFound();
   const bots = await sql<
     { id: string; name: string; customer_id: string | null }[]
@@ -42,6 +43,13 @@ export default async function CustomerManagement({
           고객사 상담함 열기
         </Link>
       </header>
+      <Settings
+        customerId={customerId}
+        initialName={String(customer.name)}
+        initialWebsite={customer.website ? String(customer.website) : null}
+        status={String(customer.status)}
+        owner
+      />
       <Bots customerId={customerId} bots={bots} />
       <Members customerId={customerId} owner />
     </div>

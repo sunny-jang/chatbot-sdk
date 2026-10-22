@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import sql from "@/lib/neon";
 import type { AccessDatabase } from "@/lib/access/schema";
 import { agencyOwner, lockAccess } from "@/lib/customer-portal/auth";
@@ -33,6 +34,7 @@ export async function POST(
           409,
         );
       await tx`UPDATE bots SET customer_id=${customerId} WHERE id=${botId}`;
+      await tx`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${user.id},${grant.tenant_id},${customerId},'bot.move',${botId},'success')`;
     });
     return Response.json({ ok: true });
   } catch (e) {

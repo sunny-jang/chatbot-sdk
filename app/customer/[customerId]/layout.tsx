@@ -37,7 +37,10 @@ export default async function CustomerWorkspace({
           <Link href={`/customer/${customerId}/requests`}>문의·견적</Link>
           <Link href="/customer">고객사 선택</Link>
           {access.grant.role !== "agent" && (
-            <Link href={`/customer/${customerId}/members`}>담당자 관리</Link>
+            <>
+              <Link href={`/customer/${customerId}/settings`}>고객사 설정</Link>
+              <Link href={`/customer/${customerId}/members`}>담당자 관리</Link>
+            </>
           )}
           {access.grant.role === "owner" && (
             <a href={`${process.env.AUTH_URL || ""}/customers`}>

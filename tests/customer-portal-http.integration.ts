@@ -279,6 +279,122 @@ async function main() {
       }
     },
   );
+  await check("고객사 정보 수정은 관리자만·다른 회사 차단", async () => {
+    const [before] =
+      await sql`SELECT name,website FROM customers WHERE id='qa-cafe'`;
+    try {
+      assert.equal(
+        (
+          await api("/api/customer/qa-cafe/settings", desk, agent, "PATCH", {
+            name: "변조",
+          })
+        ).status,
+        404,
+      );
+      assert.equal(
+        (
+          await api("/api/customer/qa-shop/settings", desk, admin, "PATCH", {
+            name: "변조",
+          })
+        ).status,
+        404,
+      );
+      assert.equal(
+        (
+          await api("/api/customer/qa-cafe/settings", desk, admin, "PATCH", {
+            name: "수정된 카페",
+            website: "https://example.test/cafe",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await api("/api/customer/qa-cafe/settings", desk, admin)).data.name,
+        "수정된 카페",
+      );
+      assert.equal(
+        (
+          await api("/api/customer/qa-cafe/settings", desk, admin, "PATCH", {
+            status: "inactive",
+          })
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await api("/api/customers/qa-cafe", agency, owner, "PATCH", {
+            status: "inactive",
+          })
+        ).status,
+        409,
+      );
+    } finally {
+      await sql`UPDATE customers SET name=${before.name},website=${before.website} WHERE id='qa-cafe'`;
+    }
+  });
+  await check("빈 고객사는 비활성·재활성 가능하고 변경 감사 기록", async () => {
+    const r = await api("/api/customers", agency, owner, "POST", {
+      name: "삭제 가능한 QA 고객사",
+    });
+    assert.equal(r.status, 201);
+    const id = r.data.id;
+    try {
+      assert.equal(
+        (
+          await api("/api/customers/" + id, agency, owner, "PATCH", {
+            status: "inactive",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await api("/api/customers/" + id, agency, owner, "PATCH", {
+            status: "active",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await sql`SELECT count(*)::int AS n FROM access_audit_logs WHERE customer_id=${id} AND outcome='success'`
+        )[0].n,
+        3,
+      );
+    } finally {
+      await sql`DELETE FROM access_audit_logs WHERE customer_id=${id}`;
+      await sql`DELETE FROM customers WHERE id=${id}`;
+    }
+  });
+  await check("동시 봇 생성도 에이전시 합산 플랜 한도 준수", async () => {
+    const [tenant] =
+      await sql`SELECT plan,enterprise_bot_limit FROM tenants WHERE id='portal-agency-qa'`;
+    const [count] =
+      await sql`SELECT count(*)::int AS n FROM bots WHERE tenant_id='portal-agency-qa'`;
+    const name = "limit-" + randomUUID();
+    try {
+      await sql`UPDATE tenants SET plan='enterprise',enterprise_bot_limit=${Number(count.n) + 1} WHERE id='portal-agency-qa'`;
+      const rs = await Promise.all(
+        [1, 2].map(() =>
+          api("/api/bots", agency, owner, "POST", {
+            name,
+            type: "qa",
+            customer_id: "qa-cafe",
+          }),
+        ),
+      );
+      assert.deepEqual(rs.map((r) => r.status).sort(), [201, 403]);
+      assert.equal(
+        (
+          await sql`SELECT count(*)::int AS n FROM bots WHERE tenant_id='portal-agency-qa' AND name=${name}`
+        )[0].n,
+        1,
+      );
+    } finally {
+      await sql`DELETE FROM bots WHERE tenant_id='portal-agency-qa' AND name=${name}`;
+      await sql`UPDATE tenants SET plan=${tenant.plan},enterprise_bot_limit=${tenant.enterprise_bot_limit} WHERE id='portal-agency-qa'`;
+    }
+  });
   await check("전용 상담함에 에이전시/결제/키 메뉴 미노출", async () => {
     const r = await api("/customer/qa-cafe/support", desk, agent);
     assert.equal(r.status, 200);

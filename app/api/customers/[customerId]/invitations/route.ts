@@ -1,3 +1,5 @@
+import { recordDenied } from "@/lib/customer-portal/customers";
+import { PortalError } from "@/lib/customer-portal/input";
 import sql from "@/lib/neon";
 import type { AccessDatabase } from "@/lib/access/schema";
 import { portalUser } from "@/lib/customer-portal/auth";
@@ -7,11 +9,15 @@ import { customerPortalOrigin } from "@/lib/customer-portal/mail";
 import { enforceRateLimit } from "@/lib/support";
 type Context = { params: Promise<{ customerId: string }> };
 export async function POST(req: Request, { params }: Context) {
+  let actor: { id: string } | undefined;
+  let target: string | undefined;
   try {
     sameOrigin(req);
     const { customerId } = await params,
       user = await portalUser(),
       input = await body(req);
+    actor = user;
+    target = customerId;
     if (!(await enforceRateLimit("customer-invite:" + user.id, req, 10)))
       return Response.json(
         { error: "잠시 후 다시 시도해주세요." },
@@ -31,6 +37,15 @@ export async function POST(req: Request, { params }: Context) {
       { status: 201 },
     );
   } catch (e) {
+    if (
+      actor &&
+      target &&
+      e instanceof PortalError &&
+      [403, 404].includes(e.status)
+    )
+      await recordDenied(sql, actor.id, target, "member.invite").catch(
+        () => {},
+      );
     return failure(e);
   }
 }
