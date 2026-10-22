@@ -4,21 +4,37 @@ import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { randomUUID } from "crypto";
 import { isAdminEmail } from "@/lib/admin";
+import { provisionAgencyOwner } from "@/lib/access/provision";
+import type { AccessDatabase } from "@/lib/access/schema";
 
 export async function POST(req: Request) {
   const { name, email, password, phone } = await req.json();
   if (!name || !email || !password || !phone) {
-    return NextResponse.json({ error: "모든 항목을 입력해주세요." }, { status: 400 });
+    return NextResponse.json(
+      { error: "모든 항목을 입력해주세요." },
+      { status: 400 },
+    );
   }
   if (password.length < 8) {
-    return NextResponse.json({ error: "비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
+    return NextResponse.json(
+      { error: "비밀번호는 8자 이상이어야 합니다." },
+      { status: 400 },
+    );
   }
 
   await initSchema();
 
-  const existing = await sql`SELECT id FROM tenants WHERE email = ${email}`;
-  if (existing.length > 0) {
-    return NextResponse.json({ error: "이미 사용 중인 이메일입니다." }, { status: 409 });
+  const existing =
+    await sql`SELECT id FROM tenants WHERE lower(btrim(email)) = ${String(email).trim().toLowerCase()}`;
+  const [ready] = await sql`SELECT to_regclass('users') AS users`;
+  const userExists = ready.users
+    ? await sql`SELECT id FROM users WHERE email=${String(email).trim().toLowerCase()}`
+    : [];
+  if (existing.length > 0 || userExists.length > 0) {
+    return NextResponse.json(
+      { error: "이미 사용 중인 이메일입니다." },
+      { status: 409 },
+    );
   }
 
   const id = randomUUID();
@@ -27,10 +43,14 @@ export async function POST(req: Request) {
   const normalizedPhone = phone.replace(/-/g, "");
   const admin = isAdminEmail(email);
 
-  await sql`
+  await sql.begin(async (tx) => {
+    await tx`
     INSERT INTO tenants (id, name, api_key, email, password_hash, phone, is_admin)
     VALUES (${id}, ${name}, ${apiKey}, ${email}, ${passwordHash}, ${normalizedPhone}, ${admin})
   `;
+
+    await provisionAgencyOwner(tx as unknown as AccessDatabase, id);
+  });
 
   // 가입만 처리합니다. 로그인 세션은 화면에서 Auth.js signIn("credentials")으로 발급합니다.
 

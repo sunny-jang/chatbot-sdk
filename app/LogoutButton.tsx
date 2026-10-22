@@ -2,12 +2,14 @@
 
 import { signOut } from "next-auth/react";
 
-export default function LogoutButton() {
+export default function LogoutButton({
+  destination = "/",
+}: { destination?: string } = {}) {
   async function handleLogout() {
     // signOut 직후 App Router의 캐시된 로그인 레이아웃이 잠깐 남지 않도록
     // 클라이언트 라우팅 대신 전체 문서 이동으로 공개 루트를 다시 로드합니다.
     await signOut({ redirect: false });
-    window.location.replace("/");
+    window.location.replace(destination);
   }
 
   return (

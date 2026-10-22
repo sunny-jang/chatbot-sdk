@@ -69,7 +69,7 @@ export default function Sidebar({
           </span>
           <div>
             <strong>{tenantName}</strong>
-            <small>내 작업 공간</small>
+            <small>에이전시 관리</small>
           </div>
         </div>
         <nav aria-label="주 메뉴" className="workspace-navigation">
@@ -78,6 +78,7 @@ export default function Sidebar({
           {link("/support", "상담함", "☏")}
           {link("/requests", "문의·견적", "▤")}
           <p className="workspace-nav-label">관리</p>
+          {link("/customers", "고객사 관리", "▣")}
           {link("/bots", "챗봇 관리", "◇")}
           {link("/analytics", "이용 현황", "▥")}
           {link("/settings", "공간 설정", "⚙")}

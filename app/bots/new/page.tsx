@@ -9,13 +9,22 @@ type PlanUsage = {
   subscription_status: string;
   bot_count: number;
   bot_limit: number | null;
-  monthly_session_usage: { used: number; limit: number; percent: number; warningLevel: string } | null;
+  monthly_session_usage: {
+    used: number;
+    limit: number;
+    percent: number;
+    warningLevel: string;
+  } | null;
 };
 
 export default function NewBotPage() {
   const router = useRouter();
   const [type, setType] = useState<"qa" | "ai">("qa");
   const [name, setName] = useState("");
+  const [customers, setCustomers] = useState<
+    { id: string; name: string; status: string }[]
+  >([]);
+  const [customerId, setCustomerId] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const model = "gpt-4o-mini";
   const [serviceDesc, setServiceDesc] = useState("");
@@ -25,8 +34,12 @@ export default function NewBotPage() {
   const [usage, setUsage] = useState<PlanUsage | null>(null);
 
   useEffect(() => {
+    fetch("/api/customers")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCustomers(d?.items || []))
+      .catch(() => {});
     fetch("/api/tenant/plan")
-      .then((res) => res.ok ? res.json() : null)
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => setUsage(data))
       .catch(() => setUsage(null));
   }, []);
@@ -55,7 +68,13 @@ export default function NewBotPage() {
       const res = await fetch("/api/bots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, type, system_prompt: systemPrompt, model }),
+        body: JSON.stringify({
+          name,
+          type,
+          system_prompt: systemPrompt,
+          model,
+          customer_id: customerId || undefined,
+        }),
       });
       const bot = await res.json();
       if (!res.ok) {
@@ -71,38 +90,83 @@ export default function NewBotPage() {
   return (
     <div className="max-w-xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-1">새 챗봇 만들기</h2>
-      <p className="text-sm text-gray-500 mb-6">챗봇 유형과 기본 설정을 입력하세요</p>
+      <p className="text-sm text-gray-500 mb-6">
+        챗봇 유형과 기본 설정을 입력하세요
+      </p>
 
       {usage && (
         <div className="mb-5 flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm">
           <div>
-            <span className="font-semibold text-violet-900">{usage.plan_name} 플랜</span>
+            <span className="font-semibold text-violet-900">
+              {usage.plan_name} 플랜
+            </span>
             <span className="ml-2 text-violet-600">
               챗봇 {usage.bot_count} / {usage.bot_limit ?? "한도 설정 필요"}
             </span>
-            {usage.monthly_session_usage && <span className="ml-2 text-violet-600">· 이번 달 세션 {usage.monthly_session_usage.used.toLocaleString("ko-KR")} / {usage.monthly_session_usage.limit.toLocaleString("ko-KR")}</span>}
+            {usage.monthly_session_usage && (
+              <span className="ml-2 text-violet-600">
+                · 이번 달 세션{" "}
+                {usage.monthly_session_usage.used.toLocaleString("ko-KR")} /{" "}
+                {usage.monthly_session_usage.limit.toLocaleString("ko-KR")}
+              </span>
+            )}
           </div>
-          <Link href="/plan" className="font-medium text-violet-700 hover:text-violet-900">플랜 보기</Link>
+          <Link
+            href="/plan"
+            className="font-medium text-violet-700 hover:text-violet-900"
+          >
+            플랜 보기
+          </Link>
         </div>
       )}
 
-      {usage?.monthly_session_usage && usage.monthly_session_usage.warningLevel !== "none" && (
-        <div className={`mb-5 rounded-xl border px-4 py-3 text-sm ${usage.monthly_session_usage.warningLevel === "notice" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-700"}`}>
-          이번 달 대화 세션을 {usage.monthly_session_usage.percent}% 사용했습니다.
-          {usage.monthly_session_usage.warningLevel === "blocked" ? " 새 세션은 다음 달까지 시작할 수 없습니다." : " 한도 도달 전에 플랜 변경을 검토해주세요."}
-        </div>
-      )}
+      {usage?.monthly_session_usage &&
+        usage.monthly_session_usage.warningLevel !== "none" && (
+          <div
+            className={`mb-5 rounded-xl border px-4 py-3 text-sm ${usage.monthly_session_usage.warningLevel === "notice" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-700"}`}
+          >
+            이번 달 대화 세션을 {usage.monthly_session_usage.percent}%
+            사용했습니다.
+            {usage.monthly_session_usage.warningLevel === "blocked"
+              ? " 새 세션은 다음 달까지 시작할 수 없습니다."
+              : " 한도 도달 전에 플랜 변경을 검토해주세요."}
+          </div>
+        )}
 
       {error && (
         <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error} <Link href="/plan" className="font-semibold underline">플랜 확인하기</Link>
+          {error}{" "}
+          <Link href="/plan" className="font-semibold underline">
+            플랜 확인하기
+          </Link>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {customers.length > 0 && (
+          <label className="block text-sm font-medium text-gray-700">
+            소속 고객사
+            <select
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              className="block w-full border border-gray-300 rounded-lg p-3 mt-2"
+            >
+              <option value="">기본 고객사</option>
+              {customers
+                .filter((c) => c.status === "active")
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         {/* 타입 선택 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">챗봇 유형</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            챗봇 유형
+          </label>
           <div className="grid grid-cols-2 gap-3">
             {(["qa", "ai"] as const).map((t) => (
               <button
@@ -120,9 +184,7 @@ export default function NewBotPage() {
                   {t === "qa" ? "Q&A 봇" : "AI 봇"}
                 </div>
                 <div className="text-xs text-gray-500 mt-0.5">
-                  {t === "qa"
-                    ? "질문/답변 세트로 응답"
-                    : "AI가 자유롭게 응답"}
+                  {t === "qa" ? "질문/답변 세트로 응답" : "AI가 자유롭게 응답"}
                 </div>
               </button>
             ))}
@@ -148,7 +210,9 @@ export default function NewBotPage() {
         {type === "ai" && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">서비스 설명</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                서비스 설명
+              </label>
               <div className="flex gap-2">
                 <textarea
                   value={serviceDesc}
@@ -194,7 +258,16 @@ export default function NewBotPage() {
 
         <button
           type="submit"
-          disabled={loading || !name || Boolean(usage && (usage.subscription_status !== "active" || usage.bot_limit === null || usage.bot_count >= usage.bot_limit))}
+          disabled={
+            loading ||
+            !name ||
+            Boolean(
+              usage &&
+              (usage.subscription_status !== "active" ||
+                usage.bot_limit === null ||
+                usage.bot_count >= usage.bot_limit),
+            )
+          }
           className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? "생성 중..." : "챗봇 생성"}

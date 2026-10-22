@@ -13,6 +13,7 @@ type Handoff = {
   bot_name: string;
   customer_name: string | null;
   assigned_agent_name: string | null;
+  assigned_agent_user_id?: string | null;
   requested_at: number;
   summary: string | null;
   summary_status: string;
@@ -33,9 +34,15 @@ const labels: Record<string, string> = {
 export default function SupportInbox({
   initialSession,
   initialStatus,
+  endpoint = "/api/support/handoffs",
+  portalUserId,
+  canReassign = false,
 }: {
   initialSession: string;
   initialStatus: string;
+  endpoint?: string;
+  portalUserId?: string;
+  canReassign?: boolean;
 }) {
   const [items, setItems] = useState<Handoff[]>([]),
     [selectedId, setSelectedId] = useState(initialSession),
@@ -53,6 +60,8 @@ export default function SupportInbox({
   const [acting, setActing] = useState(false),
     [sending, setSending] = useState(false),
     [revision, setRevision] = useState(0);
+  const [denied, setDenied] = useState(false);
+  const sendKeys = useRef<Record<string, { message: string; key: string }>>({});
   const listSequence = useRef(createRequestSequence());
   const messagesBox = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
@@ -65,10 +74,17 @@ export default function SupportInbox({
           q: query.trim().slice(0, 100),
           selectedSession: selectedId,
         });
-        const r = await fetch(`/api/support/handoffs?${params}`, {
+        const r = await fetch(`${endpoint}?${params}`, {
           cache: "no-store",
           signal,
         });
+        if (portalUserId && [401, 403, 404].includes(r.status)) {
+          setDenied(true);
+          setItems([]);
+          setMessages({ session: "", rows: [] });
+          setDrafts({});
+          return;
+        }
         if (!r.ok)
           throw new Error("상담 목록을 불러오지 못했어요. 다시 시도해 주세요.");
         const rows: Handoff[] = await r.json();
@@ -85,9 +101,10 @@ export default function SupportInbox({
         if (!signal?.aborted && latest()) setLoading(false);
       }
     },
-    [filter, query, selectedId],
+    [filter, query, selectedId, endpoint, portalUserId],
   );
   useEffect(() => {
+    if (denied) return;
     const controller = new AbortController();
     const sequence = listSequence.current;
     let timer: ReturnType<typeof setTimeout>;
@@ -101,17 +118,24 @@ export default function SupportInbox({
       clearTimeout(timer);
       sequence.invalidate();
     };
-  }, [load, revision]);
+  }, [load, revision, denied]);
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || denied) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
       try {
         const r = await fetch(
-          `/api/support/handoffs?sessionId=${encodeURIComponent(selectedId)}`,
+          `${endpoint}?sessionId=${encodeURIComponent(selectedId)}`,
           { cache: "no-store", signal: controller.signal },
         );
+        if (portalUserId && [401, 403, 404].includes(r.status)) {
+          setDenied(true);
+          setItems([]);
+          setDrafts({});
+          setMessages({ session: "", rows: [] });
+          return;
+        }
         if (!r.ok) throw new Error();
         const rows: Message[] = await r.json();
         if (!controller.signal.aborted) {
@@ -135,7 +159,7 @@ export default function SupportInbox({
       clearTimeout(first);
       clearTimeout(timer);
     };
-  }, [selectedId, revision]);
+  }, [selectedId, revision, endpoint, portalUserId, denied]);
   useEffect(() => {
     const box = messagesBox.current;
     if (box && messages.session === selectedId && followLatest.current)
@@ -144,16 +168,27 @@ export default function SupportInbox({
   const current = items.find((i) => i.session_id === selectedId);
   const text = drafts[selectedId] || "";
   const visible = filterInbox(items, filter, query);
-  async function action(action: "accept" | "close") {
+  async function action(action: "accept" | "close" | "assign") {
     if (!current || acting) return;
     setActing(true);
     setError("");
     try {
-      const r = await fetch("/api/support/handoffs", {
+      const r = await fetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: current.session_id, action }),
+        body: JSON.stringify({
+          sessionId: current.session_id,
+          action,
+          ...(action === "assign" ? { assignee: portalUserId } : {}),
+        }),
       });
+      if (portalUserId && [401, 403, 404].includes(r.status)) {
+        setDenied(true);
+        setItems([]);
+        setMessages({ session: "", rows: [] });
+        setDrafts({});
+        return;
+      }
       if (!r.ok)
         throw new Error("상담 상태를 변경하지 못했어요. 다시 시도해 주세요.");
       setRevision((v) => v + 1);
@@ -164,18 +199,36 @@ export default function SupportInbox({
     }
   }
   async function send() {
-    if (!current || current.status === "closed" || sending || !text.trim())
+    if (
+      !current ||
+      denied ||
+      current.status === "closed" ||
+      sending ||
+      !text.trim() ||
+      (portalUserId && current.assigned_agent_user_id !== portalUserId)
+    )
       return;
     const session = current.session_id,
       message = text;
+    const previousKey = sendKeys.current[session];
+    const idempotencyKey =
+      previousKey?.message === message ? previousKey.key : crypto.randomUUID();
+    sendKeys.current[session] = { message, key: idempotencyKey };
     setSending(true);
     setError("");
     try {
-      const r = await fetch("/api/support/handoffs", {
+      const r = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session, message }),
+        body: JSON.stringify({ sessionId: session, message, idempotencyKey }),
       });
+      if (portalUserId && [401, 403, 404].includes(r.status)) {
+        setDenied(true);
+        setItems([]);
+        setMessages({ session: "", rows: [] });
+        setDrafts({});
+        return;
+      }
       if (!r.ok)
         throw new Error("전송하지 못했어요. 작성한 답변은 유지됩니다.");
       setDrafts((d) => ({
@@ -189,6 +242,14 @@ export default function SupportInbox({
       setSending(false);
     }
   }
+  if (denied)
+    return (
+      <div className="workspace-page">
+        <h1>상담 접근 권한이 변경되었습니다</h1>
+        <p>현재 고객사에 다시 접근하려면 담당 관리자에게 확인해주세요.</p>
+        <a href="/customer">고객사 다시 선택</a>
+      </div>
+    );
   return (
     <div className="workspace-page">
       <header className="workspace-page-heading">
@@ -299,15 +360,40 @@ export default function SupportInbox({
                   </p>
                 </div>
                 <div className="inbox-actions">
+                  {portalUserId &&
+                    canReassign &&
+                    current.status !== "closed" &&
+                    current.assigned_agent_user_id &&
+                    current.assigned_agent_user_id !== portalUserId && (
+                      <button
+                        disabled={acting}
+                        onClick={() => void action("assign")}
+                      >
+                        내가 이어받기
+                      </button>
+                    )}
                   <button
                     className="workspace-primary"
-                    disabled={acting || current.status !== "waiting"}
+                    disabled={
+                      acting ||
+                      (portalUserId
+                        ? current.status === "closed" ||
+                          Boolean(current.assigned_agent_user_id)
+                        : current.status !== "waiting")
+                    }
                     onClick={() => void action("accept")}
                   >
                     {acting ? "처리 중" : "상담 시작"}
                   </button>
                   <button
-                    disabled={acting || current.status === "closed"}
+                    disabled={
+                      acting ||
+                      current.status === "closed" ||
+                      Boolean(
+                        portalUserId &&
+                        current.assigned_agent_user_id !== portalUserId,
+                      )
+                    }
                     onClick={() => void action("close")}
                   >
                     상담 종료
@@ -409,10 +495,22 @@ export default function SupportInbox({
                     }}
                   />
                   <div>
-                    <small>답변은 전송 버튼을 눌러 보내세요.</small>
+                    <small>
+                      {portalUserId &&
+                      current.assigned_agent_user_id !== portalUserId
+                        ? "상담을 시작하거나 인계를 받으면 답변할 수 있어요."
+                        : "답변은 전송 버튼을 눌러 보내세요."}
+                    </small>
                     <button
                       className="workspace-primary"
-                      disabled={sending || !text.trim()}
+                      disabled={
+                        sending ||
+                        !text.trim() ||
+                        Boolean(
+                          portalUserId &&
+                          current.assigned_agent_user_id !== portalUserId,
+                        )
+                      }
                       type="submit"
                     >
                       {sending ? "전송 중" : "답변 전송"}

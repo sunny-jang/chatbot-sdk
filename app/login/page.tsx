@@ -55,6 +55,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-md shadow-sm">
+        <Link href="/customer/login" className="block text-sm text-blue-700 mb-4">고객사 상담함 로그인</Link>
         <div className="mb-6">
           <Image src="/logo.png" alt="Ideal AI" width={140} height={42} priority unoptimized className="mb-3" style={{ width: 140, height: "auto" }} />
           <h1 className="text-xl font-bold text-gray-900">Ideal AI Chatbot SDK</h1>

@@ -5,7 +5,7 @@ import sql from "@/lib/neon";
 /** 로그인한 계정 ID. 모든 로그인 방식이 Auth.js 세션을 사용합니다. */
 export async function getTenantId(): Promise<string | null> {
   const session = await auth();
-  return session?.tenant_id ?? null;
+  return session?.customer_user_id ? null : session?.tenant_id ?? null;
 }
 
 /** 라우트마다 있는 지역 함수 getTenantId와 이름이 겹치지 않도록 둔 별칭입니다. */

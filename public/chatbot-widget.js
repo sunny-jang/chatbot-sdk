@@ -81,7 +81,7 @@
   }
 
   // ── Fetch bot settings then initialize ──────────────────────────────────────
-  fetch(`${endpoint}/api/widget/${botId}`)
+  fetch(`${endpoint}/api/widget/${botId}`, { cache: "no-store" })
     .then((r) => r.ok ? r.json() : {})
     .then((settings) => init(settings))
     .catch(() => init({}));
@@ -90,18 +90,18 @@
     const color = settings.color || "#2563eb";
     const title = settings.title || "💬 Ideal AI";
     const greeting = settings.greeting || null;
-    const logo = settings.logo || null;
-    const fabLogo = logo || `${endpoint}/logo.png`;
+    const logo = settings.logo || `${endpoint}/chatbot-default.svg`;
+    const fabLogo = logo;
     const qaFolders = settings.qaFolders || [];
     const isQaBot = settings.type === "qa";
-    const supportMode = settings.supportMode || "unattended";
+    let supportMode = settings.supportMode || "unattended";
     // 설정이 없던 기존 응답도 켜짐으로 취급합니다.
     const qaHandoffAlways = settings.qaHandoffAlways !== false;
     // 운영 시간 밖이면 새 상담원 연결을 제공하지 않습니다. 이미 진행 중인 상담은 계속 이어집니다.
-    const supportAvailable = settings.supportAvailable !== false;
-    const supportHoursText = settings.supportHoursText || null;
-    const supportUnavailableReason = settings.supportUnavailableReason || null;
-    const canRequestHandoff = supportMode === "hybrid" && supportAvailable;
+    let supportAvailable = settings.supportAvailable !== false;
+    let supportHoursText = settings.supportHoursText || null;
+    let supportUnavailableReason = settings.supportUnavailableReason || null;
+    let canRequestHandoff = supportMode === "hybrid" && supportAvailable;
 
     // ── Styles ────────────────────────────────────────────────────────────────
     const css = `
@@ -116,7 +116,7 @@
       }
       #__chatbot-fab .fab-logo {
         width: 52px; height: 52px; padding: 0; border-radius: 50%;
-        object-fit: cover; display: block;
+        object-fit: contain; display: block; flex: 0 0 52px; min-width: 52px; max-width: 52px; min-height: 52px; max-height: 52px; box-sizing: border-box; background: white;
       }
       #__chatbot-fab:hover { transform: scale(1.05); box-shadow: 0 6px 20px ${color}88; }
       #__chatbot-panel {
@@ -135,8 +135,10 @@
         flex-shrink: 0;
       }
       #__chatbot-header .title { font-weight: 600; font-size: 15px; }
-      #__chatbot-header .title { display: flex; align-items: center; gap: 9px; }
-      #__chatbot-header .logo { width: 30px; height: 30px; border-radius: 8px; background: white; object-fit: contain; }
+      #__chatbot-header .title { display: flex; align-items: center; gap: 9px; min-width: 0; }
+      #__chatbot-header .title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #__chatbot-header .close { flex-shrink: 0; margin-left: 12px; }
+      #__chatbot-header .logo { width: 30px; height: 30px; border-radius: 8px; background: white; object-fit: contain; flex: 0 0 30px; min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; display: block; }
       #__chatbot-header .close { background: none; border: none; color: white; cursor: pointer; font-size: 18px; line-height: 1; opacity: 0.8; }
       #__chatbot-header .close:hover { opacity: 1; }
       #__chatbot-messages {
@@ -540,6 +542,33 @@
       if (!supportAvailable) showOutsideHoursBar();
     }
 
+    let supportRefresh = null;
+    async function refreshSupportStatus() {
+      if (supportRefresh) return supportRefresh;
+      supportRefresh = (async () => {
+        try {
+          const response = await fetch(`${endpoint}/api/widget/${botId}`, { cache: "no-store" });
+          if (!response.ok) return;
+          const latest = await response.json();
+          const changed = supportMode !== latest.supportMode || supportAvailable !== (latest.supportAvailable !== false);
+          supportMode = latest.supportMode || "unattended";
+          supportAvailable = latest.supportAvailable !== false;
+          supportHoursText = latest.supportHoursText || null;
+          supportUnavailableReason = latest.supportUnavailableReason || null;
+          canRequestHandoff = supportMode === "hybrid" && supportAvailable;
+          if (handoffActive || !root.isConnected) return;
+          supportBar.style.display = supportMode === "hybrid" ? "flex" : "none";
+          supportBtn.style.display = canRequestHandoff ? "inline" : "none";
+          if (!supportAvailable) showOutsideHoursBar();
+          else supportBar.querySelector("span").textContent = "상담원 연결";
+          if (changed) {
+            messagesEl.querySelectorAll(".cb-choices").forEach(el => el.remove());
+            if (isQaBot && !qaAiMode && !panel.querySelector(".cb-request-form")) showFolderChoices();
+          }
+        } catch { /* Keep the last known state; the handoff API checks the current schedule. */ }
+      })().finally(() => { supportRefresh = null; });
+      return supportRefresh;
+    }
     function showOutsideHoursBar() {
       supportBar.querySelector("span").textContent = supportUnavailableReason === "forced"
         ? "현재 챗봇 상담만 운영 중입니다"
@@ -551,6 +580,7 @@
     function togglePanel() {
       open = !open;
       if (open) {
+        void refreshSupportStatus();
         stopProactive();
         root.querySelector("#__chatbot-proactive")?.remove();
         fab.replaceChildren(document.createTextNode("✕"));
@@ -804,6 +834,8 @@
 
     async function requestHandoff(reason) {
       if (handoffActive) return;
+      await refreshSupportStatus();
+      if (!canRequestHandoff) { showOutsideHoursBar(); return; }
       supportBtn.disabled = true;
       // 요청이 처리되는 동안 입력한 메시지가 챗봇으로 가지 않도록 입력을 잠급니다.
       inputEl.disabled = true;
@@ -929,6 +961,11 @@
       }, 2500);
     }
 
+    const supportTimer = setInterval(() => {
+      if (open && document.visibilityState === "visible") void refreshSupportStatus();
+    }, 30000);
+    const previousCleanup = root.cleanupProactive;
+    root.cleanupProactive = () => { clearInterval(supportTimer); previousCleanup?.(); };
     fab.addEventListener("click", togglePanel);
     closeBtn.addEventListener("click", togglePanel);
     sendBtn.addEventListener("click", sendMessage);

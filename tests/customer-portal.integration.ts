@@ -1,0 +1,336 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { compare } from "bcryptjs";
+import sql from "../lib/neon";
+import type { AccessDatabase } from "../lib/access/schema";
+import { createAccessSchema } from "../lib/access/schema";
+import {
+  readCustomerInbox,
+  readCustomerMessages,
+  mutateCustomerSupport,
+} from "../lib/customer-portal/support";
+import {
+  createInvitation,
+  activateInvitation,
+  updateMember,
+} from "../lib/customer-portal/management";
+import { mutateCustomerRequest } from "../lib/customer-portal/requests";
+import { resetCustomerPassword } from "../lib/customer-portal/password-reset";
+import { tokenHash } from "../lib/customer-portal/input";
+async function main() {
+  if (process.env.PORTAL_DB_CHECK !== "1") {
+    console.log("미실행: PORTAL_DB_CHECK=1 필요");
+    return;
+  }
+  const url = new URL(process.env.POSTGRES_URL || "");
+  if (
+    !["127.0.0.1", "localhost"].includes(url.hostname) ||
+    url.pathname != "/chatbot_qa"
+  )
+    throw Error("전용 로컬 QA DB만 허용");
+  const rollback = new Error("verification rollback");
+  let checks = 0;
+  try {
+    await sql.begin(async (tx) => {
+      const db = tx as unknown as AccessDatabase;
+      await createAccessSchema(db);
+      const suffix = randomUUID(),
+        tenant = "portal-" + suffix,
+        foreign = "portal-other-" + suffix,
+        customer = "customer-" + suffix,
+        other = "customer-other-" + suffix,
+        bot = "bot-" + suffix,
+        otherBot = "bot-other-" + suffix,
+        owner = "owner-" + suffix,
+        agent = "agent-" + suffix,
+        second = "second-" + suffix,
+        admin = "admin-" + suffix,
+        session = "session-" + suffix,
+        otherSession = "session-other-" + suffix;
+      await tx`INSERT INTO tenants(id,name,api_key) VALUES(${tenant},'테스트 에이전시',${randomUUID()}),(${foreign},'다른 에이전시',${randomUUID()})`;
+      await tx`INSERT INTO users(id,name,email) VALUES(${owner},'에이전시 담당자',${owner + "@example.test"}),(${agent},'담당자 A',${agent + "@example.test"}),(${second},'담당자 B',${second + "@example.test"}),(${admin},'고객사 관리자',${admin + "@example.test"})`;
+      await tx`INSERT INTO partner_memberships(tenant_id,user_id) VALUES(${tenant},${owner})`;
+      await tx`INSERT INTO customers(id,tenant_id,name) VALUES(${customer},${tenant},'카페 A'),(${other},${tenant},'쇼핑몰 B')`;
+      await tx`INSERT INTO customer_memberships(customer_id,user_id,role) VALUES(${customer},${agent},'agent'),(${customer},${second},'agent'),(${customer},${admin},'admin')`;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type,public_token) VALUES(${bot},${tenant},${customer},'A 봇','qa',${randomUUID()}),(${otherBot},${tenant},${other},'B 봇','qa',${randomUUID()})`;
+      await tx`INSERT INTO chat_sessions(id,tenant_id,bot_id,status) VALUES(${session},${tenant},${bot},'waiting'),(${otherSession},${tenant},${otherBot},'waiting')`;
+      await tx`INSERT INTO support_handoffs(id,session_id,bot_id,status) VALUES(${randomUUID()},${session},${bot},'waiting'),(${randomUUID()},${otherSession},${otherBot},'waiting')`;
+      const a = { id: agent, name: "담당자 A" },
+        b = { id: second, name: "담당자 B" };
+      assert.equal(
+        (await readCustomerInbox(agent, customer, "", "", "", db)).length,
+        1,
+      );
+      checks++;
+      assert.equal(
+        (await readCustomerInbox(agent, other, "", "", otherSession, db))
+          .length,
+        0,
+      );
+      checks++;
+      await assert.rejects(
+        () => readCustomerMessages(agent, customer, otherSession, db),
+        { status: 404 },
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          mutateCustomerSupport(db, a, customer, {
+            sessionId: session,
+            action: "message",
+            message: "먼저 수락",
+            idempotencyKey: "early",
+          }),
+        { status: 409 },
+      );
+      checks++;
+      await mutateCustomerSupport(db, a, customer, {
+        sessionId: session,
+        action: "accept",
+        agentName: "위조 이름",
+      });
+      await assert.rejects(
+        () =>
+          mutateCustomerSupport(db, b, customer, {
+            sessionId: session,
+            action: "accept",
+          }),
+        { status: 409 },
+      );
+      checks++;
+      const first = await mutateCustomerSupport(db, a, customer, {
+        sessionId: session,
+        action: "message",
+        message: "고객님 안내드립니다.",
+        idempotencyKey: "one",
+        sender_user_id: second,
+      });
+      const again = await mutateCustomerSupport(db, a, customer, {
+        sessionId: session,
+        action: "message",
+        message: "고객님 안내드립니다.",
+        idempotencyKey: "one",
+      });
+      assert.equal(
+        "message" in first && first.message?.id,
+        "message" in again && again.message?.id,
+      );
+      assert.equal(
+        (
+          await tx`SELECT sender_user_id FROM chat_messages WHERE id=${"message" in first ? String(first.message?.id) : ""}`
+        )[0].sender_user_id,
+        agent,
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          mutateCustomerSupport(db, a, customer, {
+            sessionId: session,
+            action: "message",
+            message: "다른 내용",
+            idempotencyKey: "one",
+          }),
+        { status: 409 },
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          mutateCustomerSupport(db, b, customer, {
+            sessionId: session,
+            action: "assign",
+            assignee: second,
+          }),
+        { status: 403 },
+      );
+      checks++;
+      await mutateCustomerSupport(
+        db,
+        { id: admin, name: "고객사 관리자" },
+        customer,
+        { sessionId: session, action: "assign", assignee: second },
+      );
+      await assert.rejects(
+        () =>
+          mutateCustomerSupport(db, a, customer, {
+            sessionId: session,
+            action: "close",
+          }),
+        { status: 409 },
+      );
+      checks++;
+      await mutateCustomerSupport(db, b, customer, {
+        sessionId: session,
+        action: "close",
+      });
+      await assert.rejects(
+        () =>
+          mutateCustomerSupport(db, b, customer, {
+            sessionId: session,
+            action: "message",
+            message: "늦은 전송",
+            idempotencyKey: "late",
+          }),
+        { status: 409 },
+      );
+      assert.equal(
+        (await tx`SELECT status FROM chat_sessions WHERE id=${session}`)[0]
+          .status,
+        "closed",
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          createInvitation(db, admin, customer, {
+            email: "evil@example.test",
+            role: "admin",
+          }),
+        { status: 403 },
+      );
+      checks++;
+      const invite = await createInvitation(db, owner, customer, {
+          email: "new-" + suffix + "@example.test",
+          role: "agent",
+        }),
+        challenge = "challenge-" + suffix;
+      assert.equal(
+        (
+          await tx`SELECT token_hash FROM customer_invitations WHERE id=${invite.id}`
+        )[0].token_hash,
+        tokenHash(invite.token),
+      );
+      checks++;
+      await tx`INSERT INTO customer_invite_challenges(token_hash,invitation_id,expires_at) VALUES(${tokenHash(challenge)},${invite.id},EXTRACT(EPOCH FROM NOW())::BIGINT+900)`;
+      const tenantsBefore = Number(
+        (await tx`SELECT count(*)::int AS n FROM tenants`)[0].n,
+      );
+      await activateInvitation(
+        db,
+        challenge,
+        { name: "새 담당자", password: "valid-test-password" },
+        null,
+      );
+      assert.equal(
+        Number((await tx`SELECT count(*)::int AS n FROM tenants`)[0].n),
+        tenantsBefore,
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          activateInvitation(
+            db,
+            challenge,
+            { name: "중복", password: "other-test-password" },
+            null,
+          ),
+        { status: 410 },
+      );
+      checks++;
+      const user = (
+        await tx`SELECT id,password_hash FROM users WHERE email=${"new-" + suffix + "@example.test"}`
+      )[0];
+      assert.equal(
+        await compare("valid-test-password", String(user.password_hash)),
+        true,
+      );
+      checks++;
+      const old = await createInvitation(db, owner, customer, {
+        email: "reinvite-" + suffix + "@example.test",
+        role: "agent",
+      });
+      await createInvitation(db, owner, customer, {
+        email: "reinvite-" + suffix + "@example.test",
+        role: "agent",
+      });
+      assert.equal(
+        (
+          await tx`SELECT status FROM customer_invitations WHERE id=${old.id}`
+        )[0].status,
+        "revoked",
+      );
+      checks++;
+      const existingInvite = await createInvitation(db, owner, customer, {
+          email: admin + "@example.test",
+          role: "agent",
+        }),
+        existingChallenge = "existing-" + suffix;
+      await tx`INSERT INTO customer_invite_challenges(token_hash,invitation_id,expires_at) VALUES(${tokenHash(existingChallenge)},${existingInvite.id},EXTRACT(EPOCH FROM NOW())::BIGINT+900)`;
+      await assert.rejects(
+        () =>
+          activateInvitation(
+            db,
+            existingChallenge,
+            { password: "overwrite-password" },
+            agent,
+          ),
+        { status: 401 },
+      );
+      checks++;
+      const request = "request-" + suffix;
+      await tx`INSERT INTO customer_requests(id,receipt,bot_id,tenant_id,kind,name,email,message,consent_text,consent_version,retention_days,idempotency_key,payload_hash) VALUES(${request},${randomUUID()},${bot},${tenant},'quote','테스트 고객','qa@example.test','견적 확인','테스트','v1',1,${randomUUID()},'hash')`;
+      await mutateCustomerRequest(db, agent, customer, {
+        requestId: request,
+        status: "in_progress",
+      });
+      assert.equal(
+        (await tx`SELECT status FROM customer_requests WHERE id=${request}`)[0]
+          .status,
+        "in_progress",
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          mutateCustomerRequest(db, owner, other, {
+            requestId: request,
+            status: "completed",
+          }),
+        { status: 404 },
+      );
+      checks++;
+      await updateMember(db, owner, customer, { userId: agent, revoke: true });
+      assert.equal(
+        (await readCustomerInbox(agent, customer, "", "", "", db)).length,
+        0,
+      );
+      await assert.rejects(
+        () =>
+          mutateCustomerSupport(db, a, customer, {
+            sessionId: session,
+            action: "accept",
+          }),
+        { status: 403 },
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          updateMember(db, admin, customer, { userId: admin, revoke: true }),
+        { status: 403 },
+      );
+      checks++;
+      const reset = "reset-" + suffix;
+      await tx`INSERT INTO customer_password_reset_tokens(token_hash,user_id,expires_at) VALUES(${tokenHash(reset)},${user.id},EXTRACT(EPOCH FROM NOW())::BIGINT+900)`;
+      await resetCustomerPassword(db, reset, "new-valid-password");
+      assert.equal(
+        (await tx`SELECT auth_version FROM users WHERE id=${user.id}`)[0]
+          .auth_version,
+        2,
+      );
+      await assert.rejects(
+        () => resetCustomerPassword(db, reset, "another-password"),
+        { status: 410 },
+      );
+      checks++;
+      throw rollback;
+    });
+  } catch (e) {
+    if (e !== rollback) throw e;
+  }
+  console.log(
+    `고객사 격리·담당 수락·멱등 전송·종료 재개 차단·인계·초대/검증/회수·비밀번호 재설정 ${checks}개 검증 통과. 전체 롤백.`,
+  );
+}
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exitCode = 1;
+  })
+  .finally(() => sql.end());

@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import sql from "@/lib/neon";
 import Sidebar from "./Sidebar";
+import WorkspaceFrame from "./WorkspaceFrame";
+import { headers } from "next/headers";
+import { isCustomerPortalHost } from "@/lib/customer-portal/host";
 import { auth } from "@/auth";
 import "./globals.css";
 
@@ -18,6 +21,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   // 모든 로그인 방식(Google·이메일·개발 로그인)이 Auth.js 세션 하나를 사용합니다.
+  const customerHost = isCustomerPortalHost((await headers()).get("host"));
   const session = await auth();
   const tenantId = session?.tenant_id ?? null;
   const isAdmin = session?.is_admin === true;
@@ -45,15 +49,14 @@ export default async function RootLayout({
     <html lang="ko" className={geist.className}>
       <body className="min-h-screen" style={{ backgroundColor: "#f3f6fb" }}>
         {tenantName ? (
-          <div className="workspace-shell">
-            <a className="workspace-skip" href="#main-content">
-              본문으로 이동
-            </a>
-            <Sidebar tenantName={tenantName} bots={bots} isAdmin={isAdmin} />
-            <main id="main-content" className="workspace-main">
-              {children}
-            </main>
-          </div>
+          <WorkspaceFrame
+            customerHost={customerHost}
+            navigation={
+              <Sidebar tenantName={tenantName} bots={bots} isAdmin={isAdmin} />
+            }
+          >
+            {children}
+          </WorkspaceFrame>
         ) : (
           <>{children}</>
         )}
