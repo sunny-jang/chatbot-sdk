@@ -1,25 +1,24 @@
+import { agencyOwner } from "@/lib/customer-portal/auth";
+import {
+  body,
+  failure,
+  sameOrigin,
+  text,
+  PortalError,
+} from "@/lib/customer-portal/input";
+import { mutateCustomerSupport } from "@/lib/customer-portal/support";
+import type { AccessDatabase } from "@/lib/access/schema";
 import { after } from "next/server";
 import { processJobs } from "@/lib/operations/jobs";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
-import { fanOutToSupportChannels, saveChatMessage } from "@/lib/support";
+import { fanOutToSupportChannels } from "@/lib/support";
 import { readTenantId } from "@/lib/auth";
 import { readSupportInbox } from "@/lib/support-inbox-query";
 
 async function tenantId() {
   return (await readTenantId()) ?? null;
-}
-
-async function channelRefs(sessionId: string) {
-  const rows =
-    await sql`SELECT bot_id, telegram_topic_id, slack_thread_ts FROM support_handoffs WHERE session_id = ${sessionId}`;
-  if (!rows[0]) return null;
-  return rows[0] as {
-    bot_id: string;
-    telegram_topic_id: number | null;
-    slack_thread_ts: string | null;
-  };
 }
 
 export const maxDuration = 60;
@@ -56,84 +55,47 @@ export async function GET(req: Request) {
   return NextResponse.json(rows);
 }
 
-export async function POST(req: Request) {
-  const tenant = await tenantId();
-  if (!tenant)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { sessionId, message, agentName = "관리자" } = await req.json();
-  const sessions =
-    await sql`SELECT id FROM chat_sessions WHERE id = ${sessionId} AND tenant_id = ${tenant}`;
-  if (!sessions[0] || !message?.trim())
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-  await sql`UPDATE chat_sessions SET status = 'human', assigned_agent_name = ${agentName}, updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = ${sessionId}`;
-  await sql`UPDATE support_handoffs SET status = 'active', accepted_at = COALESCE(accepted_at, EXTRACT(EPOCH FROM NOW())::BIGINT) WHERE session_id = ${sessionId}`;
-  const saved = await saveChatMessage(
-    sessionId,
-    "agent",
-    message.trim(),
-    "admin",
-    agentName,
-  );
-  // DB에는 한 번만 저장하고, 연결된 외부 상담원 채널에는 표시용으로 미러링합니다.
-  const refs = await channelRefs(sessionId);
-  if (refs)
-    await fanOutToSupportChannels(
-      refs.bot_id,
-      refs,
-      `상담원(${agentName}): ${message.trim()}`,
-    );
-  return NextResponse.json(saved);
-}
-
-export async function PATCH(req: Request) {
-  const tenant = await tenantId();
-  if (!tenant)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { sessionId, action, agentName = "관리자" } = await req.json();
-  const sessions =
-    await sql`SELECT id FROM chat_sessions WHERE id = ${sessionId} AND tenant_id = ${tenant}`;
-  if (!sessions[0])
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (action === "accept") {
-    // 대기 중인 상담만 시작합니다. 버튼을 여러 번 눌러도 연결 안내가 한 번만 저장되도록 조건부로 갱신합니다.
-    const accepted = await sql`
-      UPDATE support_handoffs SET status = 'active', accepted_at = COALESCE(accepted_at, EXTRACT(EPOCH FROM NOW())::BIGINT)
-      WHERE session_id = ${sessionId} AND status = 'waiting'
-      RETURNING session_id
-    `;
-    if (accepted.length === 0)
-      return NextResponse.json({ ok: true, alreadyAccepted: true });
-    await sql`UPDATE chat_sessions SET status = 'human', assigned_agent_name = ${agentName}, updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = ${sessionId}`;
-    await saveChatMessage(
-      sessionId,
-      "system",
-      `${agentName} 상담원이 연결되었습니다.`,
-      "system",
-    );
-  } else if (action === "close") {
-    const now = Math.floor(Date.now() / 1000);
-    // 아직 닫히지 않은 상담만 종료합니다. 중복 요청에도 종료 안내와 채널 알림이 한 번만 나가도록 조건부로 갱신합니다.
-    const closed = await sql`
-      UPDATE support_handoffs SET status = 'closed', closed_at = ${now}
-      WHERE session_id = ${sessionId} AND status <> 'closed'
-      RETURNING session_id
-    `;
-    if (closed.length === 0)
-      return NextResponse.json({ ok: true, alreadyClosed: true });
-    await sql`UPDATE chat_sessions SET status = 'closed', closed_at = ${now}, updated_at = ${now} WHERE id = ${sessionId}`;
-    await saveChatMessage(
-      sessionId,
-      "system",
-      "상담이 종료되었습니다.",
-      "system",
-    );
-    const refs = await channelRefs(sessionId);
-    if (refs)
-      await fanOutToSupportChannels(
-        refs.bot_id,
-        refs,
-        "✅ 상담이 종료되었습니다. (상담함)",
+/** Agency and customer portals use the same locked state machine and actor identity. */
+async function mutate(req: Request, isMessage: boolean) {
+  try {
+    sameOrigin(req);
+    const { user, tenantId } = await agencyOwner();
+    const input = await body(req);
+    const sessionId = text(input.sessionId, "상담", 200);
+    const result = await sql.begin(async (tx) => {
+      const [target] =
+        await tx`SELECT b.customer_id FROM chat_sessions s JOIN bots b ON b.id=s.bot_id AND b.tenant_id=s.tenant_id WHERE s.id=${sessionId} AND s.tenant_id=${tenantId}`;
+      if (!target) throw new PortalError("상담을 찾을 수 없습니다.", 404);
+      if (!target.customer_id)
+        throw new PortalError("고객사 이관 후 상담할 수 있습니다.", 503);
+      return mutateCustomerSupport(
+        tx as unknown as AccessDatabase,
+        user,
+        String(target.customer_id),
+        { ...input, action: isMessage ? "message" : input.action },
       );
-  } else return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  return NextResponse.json({ ok: true });
+    });
+    if (result.refs) {
+      const refs = result.refs;
+      after(async () => {
+        await fanOutToSupportChannels(
+          String(refs.bot_id),
+          {
+            telegram_topic_id: refs.telegram_topic_id as number | null,
+            slack_thread_ts: refs.slack_thread_ts as string | null,
+          },
+          isMessage
+            ? `담당자(${user.name}): ${String(input.message).trim()}`
+            : "상담이 종료되었습니다.",
+        ).catch(() => {});
+      });
+    }
+    return NextResponse.json(
+      "message" in result ? result.message : { ok: true },
+    );
+  } catch (e) {
+    return failure(e);
+  }
 }
+export const POST = (req: Request) => mutate(req, true);
+export const PATCH = (req: Request) => mutate(req, false);

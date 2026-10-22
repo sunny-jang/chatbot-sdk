@@ -1,0 +1,1016 @@
+{
+  "baseBranch": "codex/workspace-redesign",
+  "updated": "2026-10-22",
+  "items": [
+    {
+      "id": "QA-01",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "기간·미처리/보완 완료/제외 필터와 페이지 이동 지원",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-02",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "질문 원문·일시·세션 대화 확인",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-03",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "질문·답변·폴더 입력과 기존 임베딩 처리 재사용",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-04",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "미응답 로그와 생성 Q&A 연결 기록",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-05",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "등록 중 재제출 방지 및 동일 항목 중복 등록 방지",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-06",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "기존 동일 질문이 있으면 안내하고 기존 Q&A 연결 허용",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-07",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "동일 질문의 발생 횟수 표시 및 빈도순 정렬",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "QA-08",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "의미가 비슷한 질문 묶기와 AI 답변 초안",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-QA-01",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "분석 화면에서 이동 없이 등록하고 테스트 질문에서 검색된다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-QA-02",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "동시에 두 번 요청해도 Q&A가 중복 생성되지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-QA-03",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "등록 실패 시 Q&A와 처리 상태가 불일치하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-QA-04",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "다른 고객사의 로그·Q&A·폴더 지정은 거절된다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "SUM-01",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "봇별 요약 활성화 설정, 기본값 비활성",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "SUM-02",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "서버에 저장된 최근 대화로 구조화 요약 생성",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "SUM-03",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "요약 상태·결과를 인계 기록에 저장",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "SUM-04",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "관리자 화면 및 Slack·Telegram에 동일 결과 표시",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "SUM-05",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "키 없음·시간 초과·오류 시 최근 대화 발췌 제공",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "SUM-06",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "같은 인계 요청의 중복 생성·전송 방지",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "SUM-07",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "상담 종료 요약 및 Q&A 초안 연결",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-SUM-01",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "원문에 없는 주문번호·고객 사실·처리 완료 여부를 생성하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-SUM-02",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "요약 생성 오류·시간 초과 시에도 인계가 접수된다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-SUM-03",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "두 채널 중 하나가 실패해도 다른 채널의 전송과 저장은 완료된다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-SUM-04",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "재요청해도 동일 인계에 요약 알림이 중복되지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-SUM-05",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "짧은 대화·빈 대화·긴 대화에 각각 적절한 요약 또는 발췌가 나온다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "URL-01",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "공개 단일 HTTP/HTTPS HTML 페이지 가져오기",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "URL-02",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "메뉴·푸터·스크립트 등 제외하고 본문 추출",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "URL-03",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "저장 전 미리보기·편집·폴더 선택",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "URL-04",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "동일 봇에서 동일 URL 중복 안내",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "URL-05",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "재수집·변경 비교·관리자 승인 반영",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "URL-06",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "실패 사유 및 기존 문서 보존",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "URL-07",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "같은 사이트 하위 페이지·사이트맵 수집",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "URL-08",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "정기 재수집·변경 알림·선택적 자동 반영",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-URL-01",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "일반 공개 FAQ를 가져와 검토 후 저장하고 챗봇 검색에 활용한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-URL-02",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "변경 없는 재수집은 문서·임베딩을 다시 생성하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-URL-03",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "추출·임베딩·저장 실패 시 기존 지식은 유지된다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-URL-04",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "차단 주소로 직접 요청하거나 리디렉션해도 내부망에 연결하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-URL-05",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "빈 본문·비HTML·시간 초과·크기 초과·지원하지 않는 페이지를 구분해 안내한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-01",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "봇별 견적·상담 유형 활성화 및 폼 설정",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-02",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "이름·회사명·이메일·전화번호·문의 내용 제공",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-03",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "항목 사용 여부·필수 여부 설정",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-04",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "개인정보 안내·명시적 동의·동의 버전 저장",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-05",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "위젯 폼·SDK 제출 API·접수번호 반환",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-06",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "접수 목록·검색·유형/상태/기간 필터·상세 화면",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-07",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "신규/처리 중/완료 상태와 내부 메모",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-08",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "연결 대화·2단계 요약·채널별 알림 및 재시도",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-09",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "중복 제출 방지·속도 제한·입력 검증",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "LEAD-10",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "CSV·담당자 배정·이메일·CRM·자연어 폼 제안",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-LEAD-01",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "견적·상담 신청이 저장되고 고유 접수번호를 반환한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-LEAD-02",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "알림 실패·요약 실패에도 접수 성공이 유지된다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-LEAD-03",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "중복 클릭·동시 요청·재시도에서 신청이 한 건만 생성된다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-LEAD-04",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "다른 고객사의 신청·세션에 접근하거나 연결할 수 없다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-LEAD-05",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "필수값·연락처·동의 검증을 서버에서도 수행한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-LEAD-06",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "관리자가 목록과 대화를 확인하고 상태·메모를 관리한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "AC-LEAD-07",
+      "source": "PRD-chatbot-operations-expansion.md",
+      "requirement": "보유 기간 만료 데이터가 정리되고 개인정보가 알림·로그에 불필요하게 남지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L01",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "일반 신규 가입 / 초대 가입 비교",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L02",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "기존 소유자 이메일/Google 로그인",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L03",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "상담 담당자 로그인",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L04",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "고객사 관리자 로그인",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L05",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "A 담당자가 B 고객사의 봇·세션·신청 ID로 직접 요청",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L06",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "다른 파트너 공간 ID를 선택하거나 초대 범위를 변조",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L07",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "다른 이메일·만료·취소·사용 완료 초대 수락",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L08",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "동일 초대를 동시에 수락 / 재초대 후 이전 링크 사용",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L09",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "역할 변경·멤버십 해제 후 열린 화면에서 다시 요청",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L10",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "A 관리자/B 담당자인 한 사용자가 공간 전환",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L11",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "두 담당자 동시 수락 / 종료와 답변 전송 경합",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L12",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "요청 본문의 sender_user_id·agentName·역할 변조",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L13",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "비로그인 / 일반 사용자 / 플랫폼 마스터의 관리자 접근",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L14",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "기존 위젯 코드로 Q&A·AI·견적·상담원 연결",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L15",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "모든 고객사 봇 합계로 플랜 한도 확인",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L16",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "일반 담당자에게 고권한 역할 초대 요청 전송",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L17",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "모바일·접근성",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "L18",
+      "source": "PRD-agent-login-and-customer-access.md",
+      "requirement": "이관 도중 실패·이관 재실행·전환 전후 복구",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-01",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "끄기 모드에서는 이벤트 감지와 평가 요청이 발생하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-02",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "기본 모드에서는 모델 호출 없이 기존 문구를 표시한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-03",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "서비스 구간 노출 시나리오에서는 해당 업체의 실제 주제와 연결된 질문으로 접근하고, 클릭 후 첫 질문과 고객 답변을 이어서 상황을 확인한다. 비교를 제안한 경우에는 실제 대상의 비교를 제공한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-04",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "단순 짧은 방문·민감 페이지·현재 상담·직접 채팅 시작에는 제안하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-05",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "클릭 원문에 이메일·전화번호가 있어도 모델 입력이나 DB 메타데이터에 남지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-06",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "페이지·주 관심 구간 변경, 탭 숨김, 채팅 열기 중 도착한 오래된 응답을 표시하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-07",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "한 페이지에서 여러 서비스 설명을 스크롤해도 구간별 노출과 재진입을 구분한다. 빠른 스크롤에는 구체적 관심을 단정하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-08",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "첫 질문은 한 번에 하나이며 연락처·예산부터 요구하지 않는다. 클릭만으로 구매 의도를 확인했다고 처리하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-09",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "같은 구간만 잠깐 보거나 구간 자동 분할이 실패하면 상황별 제안을 생략하거나 낮은 수준의 신호로 처리한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-10",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "한 방문 최대 2회 평가·1회 표시, 새로고침·SPA·일반 이동에서도 닫기 상태 유지.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-11",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "timeout·키 없음·한도 초과는 안전한 기본 문구로 처리하며 이유를 관리자에게 설명한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-12",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "서버에서 봇 권한·구독·기능 설정·속도·월 한도를 다시 검증한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-13",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "네트워크 재시도·동시 요청은 같은 평가 ID로 중복 비용 예약과 기록을 방지한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-14",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "실제 상담이나 신청을 만들지 않고 관리자 테스트를 반복할 수 있다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "PRO-15",
+      "source": "PRD-behavior-aware-proactive-chat.md",
+      "requirement": "실제 위젯 모바일/데스크톱에서 구간 감지·노출 시간·제안 표시, 클릭, 닫기와 다음 페이지 이동을 검증한다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WS-01",
+      "source": "PRD-workspace-redesign.md",
+      "requirement": "업무 화면 정리: 실제 데이터의 업무 홈, 대기 우선 상담함, 통합 문의·견적 목록, 독립 챗봇 목록, 모바일 메뉴, 요금제 접근. 기존 모든 봇별 기능은 유지. 오류·빈 상태·중복 전송·대화 전환 중 오래된 응답 노출을 확인.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WS-02",
+      "source": "PRD-workspace-redesign.md",
+      "requirement": "고객사·구성원 권한: 파트너 소유 고객사, 봇 연결, 초대 수락·만료·취소, 고객사 관리자/담당자. 모든 조회·수정·내보내기·상담 API에 고객사 범위 검사. URL 직접 접근과 다른 고객사 ID 교체 차단 테스트. 작은 사업장은 한 사람이 두 역할을 겸한다. 화면 전환은 권한 검사를 대신하지 않는다.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WS-03",
+      "source": "PRD-workspace-redesign.md",
+      "requirement": "가입·요금제 연결: 현재 가입 시 생성되는 tenant를 파트너 공간으로 활용. 기존 플랜의 봇·세션 한도를 유지하고 고객사/구성원 한도는 상품 결정 후 적용. 기존 고객사·봇 이관은 사전 매핑과 복구 가능한 절차로 처리.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WS-04",
+      "source": "PRD-workspace-redesign.md",
+      "requirement": "고객사 데모: 사이트 배경 + 실제 위젯. iframe 차단 시 대체 미리보기. 공유 링크 만료·해제, 운영 대화와 테스트 구분.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WS-05",
+      "source": "PRD-workspace-redesign.md",
+      "requirement": "먼저 말 걸기 운영: 표시·클릭·대화 전환 지표, 기본 인사와 AI 제안, 조건·월 한도 조절.",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-01",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "위젯 제목·로고·색상 주입 막기",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-02",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "Shadow DOM으로 격리",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-03",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "안 읽음 알림",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-04",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "접근성 마무리",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-05",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "채널 프로필·운영시간",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-06",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "링크 버튼·자동 링크",
+      "scope": "required",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-07",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "대화 목록·지난 대화",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-08",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "사진·파일 첨부",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    },
+    {
+      "id": "WIDGET-09",
+      "source": "TODO-widget-upgrades.md",
+      "requirement": "실시간",
+      "scope": "deferred",
+      "status": "pending",
+      "pr": null,
+      "review": null,
+      "evidence": []
+    }
+  ]
+}

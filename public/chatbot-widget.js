@@ -87,10 +87,17 @@
     .catch(() => init({}));
 
   function init(settings) {
-    const color = settings.color || "#2563eb";
+    const color = typeof settings.color === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(settings.color) ? settings.color : "#2563eb";
     const title = settings.title || "💬 Ideal AI";
     const greeting = settings.greeting || null;
-    const logo = settings.logo || `${endpoint}/chatbot-default.svg`;
+    const defaultLogo = `${endpoint}/chatbot-default.svg`;
+    function safeLogo(value) {
+      if (typeof value !== "string" || value.length > 2800000) return defaultLogo;
+      if (/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) return value;
+      try { const u = new URL(value); if (["http:", "https:"].includes(u.protocol) && !u.username && !u.password) return u.href; } catch {}
+      return defaultLogo;
+    }
+    const logo = safeLogo(settings.logo);
     const fabLogo = logo;
     const qaFolders = settings.qaFolders || [];
     const isQaBot = settings.type === "qa";
@@ -219,7 +226,7 @@
     panel.inert = true;
     panel.innerHTML = `
       <div id="__chatbot-header">
-        <span class="title">${logo ? `<img class="logo" src="${logo}" alt="" />` : "💬"}<span>${title}</span></span>
+        <span class="title"><img class="logo" alt="" /><span></span></span>
         <button class="close" aria-label="닫기">✕</button>
       </div>
       <div id="__chatbot-messages"></div>
@@ -234,6 +241,10 @@
         </button>
       </div>
     `;
+    panel.querySelector(".title > span").textContent = String(title).slice(0, 100);
+    const headerLogo = panel.querySelector(".title > img");
+    headerLogo.src = logo;
+    headerLogo.addEventListener("error", () => { headerLogo.src = defaultLogo; }, { once: true });
     root.appendChild(panel);
 
     // ── Logic ─────────────────────────────────────────────────────────────────

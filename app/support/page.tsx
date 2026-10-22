@@ -1,3 +1,4 @@
+import { portalUser } from "@/lib/customer-portal/auth";
 import { redirect } from "next/navigation";
 import { getTenantId } from "@/lib/auth";
 import SupportInbox from "./SupportInbox";
@@ -11,6 +12,7 @@ export default async function SupportPage({
   }>;
 }) {
   if (!(await getTenantId())) redirect("/login");
+  const user = await portalUser();
   const params = await searchParams;
   const requestedStatus = queryValue(params.status);
   const status = ["waiting", "active", "closed"].includes(requestedStatus)
@@ -20,6 +22,8 @@ export default async function SupportPage({
   return (
     <SupportInbox
       key={`${session}:${status}`}
+      portalUserId={user.id}
+      canReassign
       initialSession={session}
       initialStatus={status}
     />
