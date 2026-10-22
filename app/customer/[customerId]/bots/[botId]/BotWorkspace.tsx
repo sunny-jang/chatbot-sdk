@@ -458,6 +458,7 @@ export default function BotWorkspace({
         <WebSourceManager
           botId={bot.id}
           apiBase={base}
+          onApplied={() => setRevision((v) => v + 1)}
           folders={folders.map((f) => ({ id: f.id, name: f.name || "" }))}
         />
       )}
