@@ -395,6 +395,115 @@ async function main() {
       await sql`UPDATE tenants SET plan=${tenant.plan},enterprise_bot_limit=${tenant.enterprise_bot_limit} WHERE id='portal-agency-qa'`;
     }
   });
+  await check("고객사 관리자 챗봇 조회·수정·지식·통계 범위", async () => {
+    const base = "/api/customer/qa-cafe/bots/portal-cafe-bot";
+    assert.equal((await api(base, desk, agent)).status, 404);
+    assert.equal(
+      (await api("/api/customer/qa-cafe/bots/portal-shop-bot", desk, admin))
+        .status,
+      404,
+    );
+    const original = (await api(base, desk, admin)).data;
+    assert.equal(original.id, "portal-cafe-bot");
+    assert.ok(!("api_key" in original));
+    assert.ok(!("slack_bot_token" in original));
+    try {
+      assert.equal(
+        (
+          await api(base, desk, admin, "PATCH", {
+            widget_title: "고객사 설정 테스트",
+            tenant_id: "forged",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await api(base, desk, admin)).data.widget_title,
+        "고객사 설정 테스트",
+      );
+      for (const resource of [
+        "docs",
+        "qa",
+        "folders",
+        "qa-folders",
+        "analytics",
+        "logs",
+      ])
+        assert.equal(
+          (await api(base + "/" + resource, desk, admin)).status,
+          200,
+          resource,
+        );
+      assert.equal(
+        (
+          await api(
+            "/api/customer/qa-shop/bots/portal-shop-bot/qa",
+            desk,
+            admin,
+          )
+        ).status,
+        404,
+      );
+    } finally {
+      await sql`UPDATE bots SET widget_title=${original.widget_title} WHERE id='portal-cafe-bot'`;
+    }
+  });
+  await check("지식 폴더와 Q&A 항목 ID 변조 차단", async () => {
+    const base = "/api/customer/qa-cafe/bots/portal-cafe-bot";
+    const folder = await api(base + "/qa-folders", desk, admin, "POST", {
+      name: "QA 폴더",
+    });
+    assert.equal(folder.status, 201);
+    const foreign = "foreign-" + randomUUID();
+    try {
+      await sql`INSERT INTO qa_pairs(id,bot_id,question,answer) VALUES(${foreign},'portal-shop-bot','다른 고객사 질문','다른 고객사 답변')`;
+      assert.equal(
+        (await api(base + "/qa/" + foreign, desk, admin, "DELETE")).status,
+        404,
+      );
+      assert.equal(
+        (
+          await api(
+            "/api/bots/portal-cafe-bot/qa/" + foreign,
+            agency,
+            owner,
+            "DELETE",
+          )
+        ).status,
+        404,
+      );
+      assert.equal(
+        (
+          await api(
+            "/api/bots/portal-cafe-bot/qa/" + foreign,
+            agency,
+            owner,
+            "PUT",
+            { answer: "변조" },
+          )
+        ).status,
+        404,
+      );
+      assert.equal(
+        (await sql`SELECT answer FROM qa_pairs WHERE id=${foreign}`)[0].answer,
+        "다른 고객사 답변",
+      );
+      assert.equal(
+        (
+          await api(
+            base + "/qa-folders/" + folder.data.id,
+            desk,
+            admin,
+            "DELETE",
+          )
+        ).status,
+        200,
+      );
+    } finally {
+      await sql`DELETE FROM qa_pairs WHERE id=${foreign}`;
+      await sql`DELETE FROM qa_folders WHERE id=${folder.data.id}`;
+    }
+  });
   await check("전용 상담함에 에이전시/결제/키 메뉴 미노출", async () => {
     const r = await api("/customer/qa-cafe/support", desk, agent);
     assert.equal(r.status, 200);

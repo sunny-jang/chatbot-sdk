@@ -1,3 +1,9 @@
+import {
+  customerBot,
+  configureCustomerBot,
+  mutateKnowledge,
+  listKnowledge,
+} from "../lib/customer-portal/bots";
 import { updateCustomer, recordDenied } from "../lib/customer-portal/customers";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -392,6 +398,125 @@ async function main() {
           await tx`SELECT count(*)::int AS n FROM access_audit_logs WHERE action='member.invite.revoke' AND target_id=${cancel.id}`
         )[0].n,
         1,
+      );
+      checks++;
+      await assert.rejects(
+        () => customerBot(db, second, customer, bot, "bot.configure"),
+        { status: 404 },
+      );
+      checks++;
+      await assert.rejects(
+        () => customerBot(db, admin, customer, otherBot, "bot.configure"),
+        { status: 404 },
+      );
+      checks++;
+      await configureCustomerBot(db, admin, customer, bot, {
+        widget_title: "고객사 설정",
+        support_mode: "hybrid",
+        greeting_message: "안녕하세요",
+      });
+      assert.equal(
+        (await tx`SELECT widget_title FROM bots WHERE id=${bot}`)[0]
+          .widget_title,
+        "고객사 설정",
+      );
+      checks++;
+      const vec = Array.from({ length: 1536 }, () => 0.01);
+      const qa = await mutateKnowledge(
+        db,
+        admin,
+        customer,
+        bot,
+        "qa",
+        "POST",
+        { question: "관리자 질문", answer: "관리자 답변" },
+        null,
+        vec,
+      );
+      assert.ok(
+        (await listKnowledge(db, admin, customer, bot, "qa")).some(
+          (r) => r.id === qa.id,
+        ),
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          mutateKnowledge(
+            db,
+            admin,
+            customer,
+            otherBot,
+            "qa",
+            "DELETE",
+            {},
+            qa.id,
+            null,
+          ),
+        { status: 404 },
+      );
+      checks++;
+      const foreignQa = "foreign-qa-" + suffix;
+      await tx`INSERT INTO qa_pairs(id,bot_id,question,answer) VALUES(${foreignQa},${otherBot},'다른 질문','다른 답변')`;
+      await assert.rejects(
+        () =>
+          mutateKnowledge(
+            db,
+            admin,
+            customer,
+            bot,
+            "qa",
+            "DELETE",
+            {},
+            foreignQa,
+            null,
+          ),
+        { status: 404 },
+      );
+      checks++;
+      const otherFolder = "other-folder-" + suffix;
+      await tx`INSERT INTO qa_folders(id,bot_id,name) VALUES(${otherFolder},${otherBot},'다른 폴더')`;
+      await assert.rejects(
+        () =>
+          mutateKnowledge(
+            db,
+            admin,
+            customer,
+            bot,
+            "qa",
+            "POST",
+            { question: "변조", answer: "변조", folder_id: otherFolder },
+            null,
+            vec,
+          ),
+        { status: 404 },
+      );
+      checks++;
+      await mutateKnowledge(
+        db,
+        admin,
+        customer,
+        bot,
+        "qa",
+        "PUT",
+        { question: "수정 질문", answer: "수정 답변" },
+        qa.id,
+        vec,
+      );
+      await mutateKnowledge(
+        db,
+        admin,
+        customer,
+        bot,
+        "qa",
+        "DELETE",
+        {},
+        qa.id,
+        null,
+      );
+      assert.ok(
+        !(await listKnowledge(db, admin, customer, bot, "qa")).some(
+          (r) => r.id === qa.id,
+        ),
       );
       checks++;
       throw rollback;

@@ -439,3 +439,120 @@ button:focus-visible,
     padding: 32px 24px;
   }
 }
+
+.cp-page-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  margin: 12px 0;
+}
+.cp-bot-workspace {
+  max-width: 1120px;
+  margin: auto;
+}
+.cp-bot-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 22px 0;
+}
+.cp-bot-tabs button {
+  border: 1px solid #cbdbe1;
+  background: white;
+  border-radius: 7px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #456374;
+  cursor: pointer;
+}
+.cp-bot-tabs button[aria-pressed="true"] {
+  color: white;
+  background: #155e75;
+  border-color: #155e75;
+}
+.cp-check {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+}
+.cp-check input {
+  width: auto;
+}
+.cp-bot-workspace fieldset {
+  border: 1px solid #d6e2e6;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 20px 0;
+}
+.cp-bot-workspace legend {
+  font-size: 14px;
+  font-weight: 600;
+}
+.cp-logo-editor {
+  border-top: 1px solid #e1e8ec;
+  margin-top: 24px;
+  padding-top: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.cp-logo-editor img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex: none;
+}
+.cp-knowledge-text {
+  min-height: 200px !important;
+}
+.cp-knowledge-row {
+  border-top: 1px solid #e1e8ec;
+  padding: 18px 0;
+}
+.cp-knowledge-row p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 10px 0;
+  color: #506978;
+}
+.cp-install-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f1f6f8;
+  padding: 20px;
+  margin: 20px 0;
+  font-size: 13px;
+}
+.cp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 20px;
+}
+.cp-stats span {
+  display: block;
+  font-size: 13px;
+  color: #617684;
+}
+.cp-stats strong {
+  display: block;
+  font-size: 28px;
+  margin-top: 10px;
+}
+.cp-header nav {
+  overflow-x: auto;
+}
+@media (max-width: 760px) {
+  .cp-header nav {
+    gap: 16px;
+    white-space: nowrap;
+  }
+  .cp-bot-tabs button {
+    padding: 9px 12px;
+  }
+}

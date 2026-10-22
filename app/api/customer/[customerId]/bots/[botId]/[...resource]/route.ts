@@ -112,7 +112,7 @@ async function mutate(req: Request, { params }: C) {
         p.botId,
         "knowledge.manage",
       );
-    const input = req.method === "DELETE" ? {} : await body(req);
+    const input = req.method === "DELETE" ? {} : await body(req, 220000);
     let embedding: number[] | null = null;
     if (req.method !== "DELETE" && ["docs", "qa"].includes(kind)) {
       const content =
