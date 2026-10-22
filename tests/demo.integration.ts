@@ -7,6 +7,7 @@ import {
   createDemo,
   readPublicDemo,
   reserveDemoTurn,
+  reserveDemoModelCall,
   revokeDemo,
 } from "../lib/demo/store";
 async function main() {
@@ -58,6 +59,37 @@ async function main() {
         null,
       );
       assert.equal(turn.duplicate, false);
+      checks++;
+      // Static/failed-before-provider turns do not reserve paid model budget.
+      await tx`INSERT INTO demo_turns(id,demo_id,session_id,request_id,payload_hash,question,state) SELECT ${suffix}||'-static-'||n,${created.id},'old',n::text,'hash','정적 질문','failed' FROM generate_series(1,1000) n`;
+      await reserveDemoModelCall(db, created.token, turn.id);
+      await reserveDemoModelCall(db, created.token, turn.id);
+      assert.equal(
+        (
+          await tx`SELECT count(*)::int AS n FROM demo_turns WHERE demo_id=${created.id} AND model_started_at IS NOT NULL`
+        )[0].n,
+        1,
+      );
+      checks++;
+      await tx`UPDATE demo_turns SET model_started_at=EXTRACT(EPOCH FROM NOW())::bigint WHERE demo_id=${created.id} AND id<>${turn.id}`;
+      const staticTurn = await reserveDemoTurn(
+        db,
+        created.token,
+        "static-new",
+        "static-new",
+        "선택 질문",
+        "qa-id",
+      );
+      await assert.rejects(
+        () => reserveDemoModelCall(db, created.token, staticTurn.id),
+        { status: 429 },
+      );
+      assert.equal(
+        (
+          await tx`SELECT model_started_at FROM demo_turns WHERE id=${staticTurn.id}`
+        )[0].model_started_at,
+        null,
+      );
       checks++;
       await tx`UPDATE demo_turns SET state='completed',reply='답변' WHERE id=${turn.id}`;
       const retry = await reserveDemoTurn(

@@ -64,8 +64,8 @@ export async function checkDemoSite(value: unknown) {
 }
 export async function requireDemoSchema(db: AccessDatabase) {
   const [s] =
-    await db`SELECT to_regclass('customer_demos') AS demos,to_regclass('demo_turns') AS turns`;
-  if (!s.demos || !s.turns)
+    await db`SELECT to_regclass('customer_demos') AS demos,to_regclass('demo_turns') AS turns,EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='demo_turns' AND column_name='model_started_at') AS model_ready`;
+  if (!s.demos || !s.turns || !s.model_ready)
     throw new PortalError("데모 데이터 준비가 필요합니다.", 503);
 }
 export async function readPublicDemo(
@@ -185,12 +185,30 @@ export async function reserveDemoTurn(
     await db`SELECT request_count FROM customer_demos WHERE id=${demo.id}`;
   if (Number(usage.request_count) >= Number(demo.max_requests))
     throw new PortalError("데모 체험 한도에 도달했습니다.", 429);
-  const [daily] =
-    await db`SELECT count(*)::int AS n FROM demo_turns m JOIN customer_demos d ON d.id=m.demo_id WHERE d.tenant_id=${demo.tenant_id} AND m.created_at>EXTRACT(EPOCH FROM NOW())-86400`;
-  if (Number(daily.n) >= 1000)
-    throw new PortalError("에이전시의 일일 데모 한도에 도달했습니다.", 429);
   const id = randomUUID();
   await db`INSERT INTO demo_turns(id,demo_id,session_id,request_id,payload_hash,question) VALUES(${id},${demo.id},${sessionId},${requestId},${digest},${message})`;
   await db`UPDATE customer_demos SET request_count=request_count+1 WHERE id=${demo.id}`;
   return { demo, id, reply: null, duplicate: false };
+}
+
+/** Reserve paid model work separately from static Q&A turns. Caller supplies a transaction. */
+export async function reserveDemoModelCall(
+  db: AccessDatabase,
+  token: string,
+  turnId: string,
+) {
+  const demo = await readPublicDemo(db, token);
+  await db`SELECT id FROM tenants WHERE id=${demo.tenant_id} FOR NO KEY UPDATE`;
+  await db`SELECT id FROM customer_demos WHERE id=${demo.id} FOR UPDATE`;
+  await readPublicDemo(db, token);
+  const [turn] =
+    await db`SELECT model_started_at,state FROM demo_turns WHERE id=${turnId} AND demo_id=${demo.id} FOR UPDATE`;
+  if (!turn || turn.state !== "pending")
+    throw new PortalError("처리할 데모 질문을 찾을 수 없습니다.", 409);
+  if (turn.model_started_at) return;
+  const [daily] =
+    await db`SELECT count(*)::int AS n FROM demo_turns m JOIN customer_demos d ON d.id=m.demo_id WHERE d.tenant_id=${demo.tenant_id} AND m.model_started_at>EXTRACT(EPOCH FROM NOW())-86400`;
+  if (Number(daily.n) >= 1000)
+    throw new PortalError("에이전시의 일일 AI 데모 한도에 도달했습니다.", 429);
+  await db`UPDATE demo_turns SET model_started_at=EXTRACT(EPOCH FROM NOW())::bigint WHERE id=${turnId}`;
 }

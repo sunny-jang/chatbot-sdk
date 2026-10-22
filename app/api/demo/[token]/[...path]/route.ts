@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import sql from "@/lib/neon";
 import type { AccessDatabase } from "@/lib/access/schema";
-import { readPublicDemo, reserveDemoTurn } from "@/lib/demo/store";
+import {
+  readPublicDemo,
+  reserveDemoTurn,
+  reserveDemoModelCall,
+} from "@/lib/demo/store";
 import { answerDemo } from "@/lib/demo/answer";
 import { body, failure, PortalError, text } from "@/lib/customer-portal/input";
 import {
@@ -180,7 +184,20 @@ export async function POST(req: Request, { params }: C) {
     );
     if (reserved.duplicate) return json({ reply: reserved.reply, demo: true });
     turnId = reserved.id;
-    const result = await answerDemo(reserved.demo, message, qaId, sessionId);
+    const result = await answerDemo(
+      reserved.demo,
+      message,
+      qaId,
+      sessionId,
+      () =>
+        sql.begin((tx) =>
+          reserveDemoModelCall(
+            tx as unknown as AccessDatabase,
+            token,
+            reserved.id,
+          ),
+        ),
+    );
     await sql.begin(async (tx) => {
       await tx`SELECT id FROM customer_demos WHERE id=${demo.id} FOR UPDATE`;
       await readPublicDemo(tx as unknown as AccessDatabase, token);

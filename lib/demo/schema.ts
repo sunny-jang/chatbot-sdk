@@ -15,6 +15,7 @@ export async function createDemoSchema(db: AccessDatabase) {
  created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
  UNIQUE(demo_id,session_id,request_id)
  )`;
+  await db`ALTER TABLE demo_turns ADD COLUMN IF NOT EXISTS model_started_at BIGINT`;
   await db`CREATE TABLE IF NOT EXISTS demo_requests(
  id TEXT PRIMARY KEY,demo_id TEXT NOT NULL REFERENCES customer_demos(id) ON DELETE CASCADE,
  request_key TEXT NOT NULL,payload_hash TEXT NOT NULL,kind TEXT NOT NULL,receipt TEXT NOT NULL,
