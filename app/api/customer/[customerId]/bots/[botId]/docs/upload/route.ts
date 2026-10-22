@@ -1,7 +1,10 @@
 import sql from "@/lib/neon";
 import type { AccessDatabase } from "@/lib/access/schema";
 import { portalUser } from "@/lib/customer-portal/auth";
-import { customerBot, mutateKnowledge } from "@/lib/customer-portal/bots";
+import {
+  customerBot,
+  uploadCustomerDocument,
+} from "@/lib/customer-portal/bots";
 import {
   failure,
   sameOrigin,
@@ -71,19 +74,18 @@ export async function POST(
       await getTenantApiKeyByTenantId(grant.tenant_id),
     );
     const result = await sql.begin((tx) =>
-      mutateKnowledge(
+      uploadCustomerDocument(
         tx as unknown as AccessDatabase,
         user.id,
         p.customerId,
         p.botId,
-        "docs",
-        "POST",
         { title, content, folder_id: folderId || null },
-        null,
         vec,
       ),
     );
-    return Response.json(result, { status: 201 });
+    return Response.json(result, {
+      status: result.updated || result.skipped ? 200 : 201,
+    });
   } catch (e) {
     return failure(e);
   }

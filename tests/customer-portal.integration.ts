@@ -1,4 +1,5 @@
 import {
+  uploadCustomerDocument,
   customerBot,
   configureCustomerBot,
   mutateKnowledge,
@@ -422,6 +423,51 @@ async function main() {
       );
       checks++;
       const vec = Array.from({ length: 1536 }, () => 0.01);
+      const uploadInput = {
+        title: "재업로드 검증",
+        content: "초기 본문",
+        folder_id: null,
+      };
+      const firstDoc = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        uploadInput,
+        vec,
+      );
+      const repeated = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        uploadInput,
+        vec,
+      );
+      assert.equal(repeated.id, firstDoc.id);
+      assert.equal(repeated.skipped, true);
+      checks++;
+      const revised = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        { ...uploadInput, content: "수정 본문" },
+        vec,
+      );
+      assert.equal(revised.id, firstDoc.id);
+      assert.equal(revised.updated, true);
+      const matchingDocs =
+        await tx`SELECT content FROM documents WHERE bot_id=${bot} AND title=${uploadInput.title}`;
+      assert.equal(matchingDocs.length, 1);
+      assert.equal(matchingDocs[0].content, "수정 본문");
+      checks++;
+      await assert.rejects(
+        () =>
+          uploadCustomerDocument(db, agent, customer, bot, uploadInput, vec),
+        { status: 403 },
+      );
+      checks++;
       const qa = await mutateKnowledge(
         db,
         admin,

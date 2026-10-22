@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { parseQaWorkbook } from "@/lib/knowledge/qa-workbook";
 import sql from "@/lib/neon";
 import type { AccessDatabase } from "@/lib/access/schema";
 import { portalUser } from "@/lib/customer-portal/auth";
@@ -42,29 +43,14 @@ export async function POST(
       !/[.](xlsx|csv)$/i.test(file.name)
     )
       throw new PortalError("5MB 이하 XLSX·CSV 파일을 선택해주세요.");
-    const workbook = XLSX.read(await file.arrayBuffer(), {
-      type: "array",
-      sheetRows: 102,
-    });
-    const rows: { question: string; answer: string }[] = [];
-    for (const sheet of workbook.SheetNames.slice(0, 7)) {
-      const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(
-        workbook.Sheets[sheet],
-        { defval: "" },
-      );
-      for (const item of data) {
-        rows.push({
-          question: text(item["질문"] ?? item.question, "질문", 2000),
-          answer: text(
-            item["답변"] ?? item["질문상세"] ?? item.answer,
-            "답변",
-            20000,
-          ),
-        });
-        if (rows.length > 100)
-          throw new PortalError("한 번에 100개 이하 Q&A를 가져와주세요.");
-      }
-    }
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    const rows = parseQaWorkbook(workbook).map((item) => ({
+      ...item,
+      question: text(item.question, "질문", 2000),
+      answer: text(item.answer, "답변", 20000),
+    }));
+    if (rows.length > 100)
+      throw new PortalError("한 번에 100개 이하 Q&A를 가져와주세요.");
     if (!rows.length)
       throw new PortalError("질문·답변 열과 내용을 확인해주세요.");
     const vectors = await getEmbeddings(
