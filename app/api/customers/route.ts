@@ -21,12 +21,16 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     sameOrigin(req);
-    const { tenantId } = await agencyOwner(),
+    const { tenantId, user } = await agencyOwner(),
       input = await body(req),
       name = text(input.name, "고객사 이름"),
       site = website(input.website),
       id = randomUUID();
-    await sql`INSERT INTO customers(id,tenant_id,name,website) VALUES(${id},${tenantId},${name},${site})`;
+    await sql.begin(async (tx) => {
+      await tx`SELECT id FROM tenants WHERE id=${tenantId} FOR UPDATE`;
+      await tx`INSERT INTO customers(id,tenant_id,name,website) VALUES(${id},${tenantId},${name},${site})`;
+      await tx`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${user.id},${tenantId},${id},'customer.create',${id},'success')`;
+    });
     return Response.json({ id }, { status: 201 });
   } catch (e) {
     return failure(e);

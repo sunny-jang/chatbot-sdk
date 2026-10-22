@@ -21,3 +21,7 @@
 - 통합 검증은 격리 로컬 chatbot_qa DB에서만 수행.
 
 고객사 관리자 전체 기능·데모·Google·실메일/운영 이관은 이 PR의 완료 범위가 아니다. 인수 전체 항목을 통과 처리하지 않는다.
+
+## 독립 리뷰·머지 결과
+
+PR #2의 커밋 61874e9에 대해 GitHub Codex 리뷰 completed, has_any_findings=false, has_unresolved_findings=false 확인. Vercel chatbot/chatbot-sdk 두 체크 성공 후 기준 브랜치에 merge 519ba7b. 최종 전체 단위 121개·DB 22개·HTTP 26개 통과.

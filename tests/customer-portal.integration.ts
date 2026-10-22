@@ -1,3 +1,4 @@
+import { updateCustomer, recordDenied } from "../lib/customer-portal/customers";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { compare } from "bcryptjs";
@@ -317,6 +318,56 @@ async function main() {
       await assert.rejects(
         () => resetCustomerPassword(db, reset, "another-password"),
         { status: 410 },
+      );
+      checks++;
+      await updateCustomer(db, admin, customer, {
+        name: "수정된 카페",
+        website: "https://example.test/cafe",
+      });
+      assert.equal(
+        (await tx`SELECT name FROM customers WHERE id=${customer}`)[0].name,
+        "수정된 카페",
+      );
+      checks++;
+      await assert.rejects(
+        () => updateCustomer(db, second, customer, { name: "변조" }),
+        { status: 404 },
+      );
+      checks++;
+      await assert.rejects(
+        () => updateCustomer(db, admin, other, { name: "변조" }),
+        { status: 404 },
+      );
+      checks++;
+      await assert.rejects(
+        () => updateCustomer(db, owner, customer, { status: "inactive" }),
+        { status: 409 },
+      );
+      checks++;
+      const empty = "empty-" + suffix;
+      await tx`INSERT INTO customers(id,tenant_id,name) VALUES(${empty},${tenant},'비활성화 테스트')`;
+      await updateCustomer(db, owner, empty, { status: "inactive" });
+      assert.equal(
+        (await tx`SELECT status FROM customers WHERE id=${empty}`)[0].status,
+        "inactive",
+      );
+      await updateCustomer(db, owner, empty, { status: "active" });
+      assert.equal(
+        (await tx`SELECT status FROM customers WHERE id=${empty}`)[0].status,
+        "active",
+      );
+      checks++;
+      await assert.rejects(
+        () => updateCustomer(db, admin, customer, { status: "inactive" }),
+        { status: 403 },
+      );
+      checks++;
+      await recordDenied(db, second, customer, "member.invite");
+      assert.equal(
+        (
+          await tx`SELECT count(*)::int AS n FROM access_audit_logs WHERE actor_user_id=${second} AND action='member.invite' AND outcome='denied'`
+        )[0].n,
+        1,
       );
       checks++;
       throw rollback;

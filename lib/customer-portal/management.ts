@@ -52,6 +52,7 @@ export async function updateMember(
     if (invite.role === "admin" && grant.role !== "owner")
       throw new PortalError("초대 취소 권한이 없습니다.", 403);
     await db`UPDATE customer_invitations SET status='revoked' WHERE id=${id} AND status='pending'`;
+    await db`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${actorId},${grant.tenant_id},${customerId},'member.invite.revoke',${id},'success')`;
     return;
   }
   const target = text(input.userId, "담당자", 200),
