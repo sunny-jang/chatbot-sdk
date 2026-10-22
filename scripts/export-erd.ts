@@ -8,10 +8,10 @@ async function main(){
  WHERE c.table_schema='public' ORDER BY c.table_name,c.ordinal_position`;
  const relations=await sql`SELECT src.relname AS source_table,sa.attname AS source_column,dst.relname AS target_table,da.attname AS target_column,
  con.conname AS constraint_name,con.confdeltype AS on_delete FROM pg_constraint con
- JOIN pg_class src ON src.oid=con.conrelid JOIN pg_namespace ns ON ns.oid=src.relnamespace JOIN pg_class dst ON dst.oid=con.confrelid
+ JOIN pg_class src ON src.oid=con.conrelid JOIN pg_namespace ns ON ns.oid=src.relnamespace JOIN pg_class dst ON dst.oid=con.confrelid JOIN pg_namespace target_ns ON target_ns.oid=dst.relnamespace
  CROSS JOIN LATERAL unnest(con.conkey,con.confkey) WITH ORDINALITY AS keys(source_num,target_num,n)
  JOIN pg_attribute sa ON sa.attrelid=src.oid AND sa.attnum=keys.source_num JOIN pg_attribute da ON da.attrelid=dst.oid AND da.attnum=keys.target_num
- WHERE con.contype='f' AND ns.nspname='public' ORDER BY src.relname,con.conname,keys.n`;
+ WHERE con.contype='f' AND ns.nspname='public' AND target_ns.nspname='public' ORDER BY src.relname,con.conname,keys.n`;
  const uniqueKeys=await sql`SELECT t.relname AS table_name,con.conname,ARRAY_AGG(a.attname ORDER BY k.n) AS columns FROM pg_constraint con JOIN pg_class t ON t.oid=con.conrelid JOIN pg_namespace ns ON ns.oid=t.relnamespace CROSS JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS k(num,n) JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum=k.num WHERE con.contype IN ('p','u') AND ns.nspname='public' GROUP BY t.relname,con.conname`;
  await mkdir('docs/architecture',{recursive:true});
  await writeFile('docs/architecture/schema-2026-10-22.json',JSON.stringify({date:'2026-10-22',scope:'public schema; isolated local QA database including pending customer/demo migrations; production migration not applied',columns,relations,uniqueKeys},null,2)+'\n');
