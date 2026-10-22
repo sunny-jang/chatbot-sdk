@@ -172,9 +172,113 @@ async function main() {
     const r = await api("/api/customers", agency, owner);
     assert.equal(r.status, 200);
     assert.ok(r.data.items.some((c: { id: string }) => c.id === "qa-cafe"));
-    const own = await sql`SELECT id FROM customers WHERE tenant_id='portal-agency-qa'`;
-    assert.deepEqual(r.data.items.map((c: {id: string}) => c.id).sort(), own.map(c => c.id).sort());
+    const own =
+      await sql`SELECT id FROM customers WHERE tenant_id='portal-agency-qa'`;
+    assert.deepEqual(
+      r.data.items.map((c: { id: string }) => c.id).sort(),
+      own.map((c) => c.id).sort(),
+    );
   });
+  await check("에이전시 상담도 실제 작성자·멱등·종료 정책 적용", async () => {
+    const id = "safety-" + randomUUID();
+    try {
+      await sql`INSERT INTO chat_sessions(id,tenant_id,bot_id,status) VALUES(${id},'portal-agency-qa','portal-cafe-bot','waiting')`;
+      await sql`INSERT INTO support_handoffs(id,session_id,bot_id,status) VALUES(${randomUUID()},${id},'portal-cafe-bot','waiting')`;
+      assert.equal(
+        (
+          await api("/api/support/handoffs", agency, owner, "PATCH", {
+            sessionId: id,
+            action: "accept",
+            agentName: "위조",
+          })
+        ).status,
+        200,
+      );
+      const key = randomUUID();
+      const input = {
+        sessionId: id,
+        message: "에이전시 실제 답변",
+        idempotencyKey: key,
+        agentName: "위조",
+        sender_user_id: "portal-other",
+      };
+      const replies = await Promise.all([
+        api("/api/support/handoffs", agency, owner, "POST", input),
+        api("/api/support/handoffs", agency, owner, "POST", input),
+      ]);
+      assert.ok(replies.every((r) => r.status === 200));
+      assert.equal(replies[0].data.id, replies[1].data.id);
+      const [saved] =
+        await sql`SELECT sender_user_id,sender_name FROM chat_messages WHERE id=${replies[0].data.id}`;
+      assert.equal(saved.sender_user_id, "portal-owner");
+      assert.notEqual(saved.sender_name, "위조");
+      assert.equal(
+        (
+          await api("/api/support/handoffs", agency, owner, "PATCH", {
+            sessionId: id,
+            action: "close",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await api("/api/support/handoffs", agency, owner, "POST", {
+            ...input,
+            idempotencyKey: randomUUID(),
+          })
+        ).status,
+        409,
+      );
+      assert.equal(
+        (await sql`SELECT status FROM chat_sessions WHERE id=${id}`)[0].status,
+        "closed",
+      );
+    } finally {
+      await sql`DELETE FROM chat_sessions WHERE id=${id}`;
+    }
+  });
+  await check(
+    "위젯 위험 입력 차단·기존 저장값 방어·폴더 없는 Q&A",
+    async () => {
+      const [before] =
+        await sql`SELECT widget_title,widget_color,logo_url FROM bots WHERE id='portal-cafe-bot'`;
+      const pair = randomUUID();
+      try {
+        for (const input of [
+          { widget_title: "<img src=x onerror=alert(1)>" },
+          { widget_color: "red;}body{display:none" },
+        ])
+          assert.equal(
+            (
+              await api(
+                "/api/bots/portal-cafe-bot",
+                agency,
+                owner,
+                "PUT",
+                input,
+              )
+            ).status,
+            400,
+          );
+        await sql`UPDATE bots SET widget_title='<img onerror=x>',widget_color='red;}body{display:none',logo_url='javascript:alert(1)' WHERE id='portal-cafe-bot'`;
+        await sql`INSERT INTO qa_pairs(id,bot_id,question,answer) VALUES(${pair},'portal-cafe-bot','폴더 없는 질문','폴더 없는 답변')`;
+        const response = await api("/api/widget/portal-cafe-bot", agency);
+        assert.equal(response.status, 200);
+        assert.equal(response.data.logo, null);
+        assert.equal(response.data.color, "#2563eb");
+        assert.ok(!response.data.title.includes("<"));
+        assert.ok(
+          response.data.qaFolders.some((f: { questions: { id: string }[] }) =>
+            f.questions.some((q) => q.id === pair),
+          ),
+        );
+      } finally {
+        await sql`DELETE FROM qa_pairs WHERE id=${pair}`;
+        await sql`UPDATE bots SET widget_title=${before.widget_title},widget_color=${before.widget_color},logo_url=${before.logo_url} WHERE id='portal-cafe-bot'`;
+      }
+    },
+  );
   await check("전용 상담함에 에이전시/결제/키 메뉴 미노출", async () => {
     const r = await api("/customer/qa-cafe/support", desk, agent);
     assert.equal(r.status, 200);
