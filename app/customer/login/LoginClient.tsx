@@ -3,14 +3,14 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 export default function CustomerLogin({
-  agencyOrigin,
+  agencyOrigin, next, googleAvailable, oauthError,
 }: {
-  agencyOrigin: string;
+  agencyOrigin: string; next: string; googleAvailable: boolean; oauthError: boolean;
 }) {
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(oauthError ? "Google 계정 또는 초대 정보를 확인해주세요. 기존 계정은 이메일 확인 후 연결할 수 있습니다." : "");
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -27,7 +27,7 @@ export default function CustomerLogin({
       }
       // Discard unauthenticated RSC prefetches after establishing the host-only session.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.assign("/customer");
+      window.location.assign(next);
     } catch {
       setError("로그인하지 못했습니다. 다시 시도해주세요.");
     } finally {
@@ -48,6 +48,7 @@ export default function CustomerLogin({
         <p className="cp-login-description">
           초대받은 담당자 계정으로 로그인해주세요.
         </p>
+        {googleAvailable && <button className="cp-button" disabled={busy} onClick={() => {setBusy(true); void signIn("customer-google", {redirectTo:next});}}>Google로 상담함 로그인</button>}
         <form onSubmit={submit}>
           <label>
             담당자 이메일
