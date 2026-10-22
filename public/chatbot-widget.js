@@ -90,8 +90,8 @@
     const color = settings.color || "#2563eb";
     const title = settings.title || "💬 Ideal AI";
     const greeting = settings.greeting || null;
-    const logo = settings.logo || null;
-    const fabLogo = logo || `${endpoint}/logo.png`;
+    const logo = settings.logo || `${endpoint}/chatbot-default.svg`;
+    const fabLogo = logo;
     const qaFolders = settings.qaFolders || [];
     const isQaBot = settings.type === "qa";
     let supportMode = settings.supportMode || "unattended";
