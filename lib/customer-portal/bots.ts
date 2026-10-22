@@ -214,3 +214,31 @@ export async function mutateKnowledge(
   );
   return { id: target, ok: true };
 }
+
+/** Caller supplies a transaction. The bot lock serializes matching-title uploads. */
+export async function uploadCustomerDocument(
+  db: AccessDatabase,
+  userId: string,
+  customerId: string,
+  botId: string,
+  input: { title: string; content: string; folder_id: unknown },
+  embedding: number[],
+) {
+  await customerBot(db, userId, customerId, botId, "knowledge.manage", true);
+  const [existing] =
+    await db`SELECT id,content FROM documents WHERE bot_id=${botId} AND title=${input.title} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
+  if (existing && existing.content === input.content)
+    return { id: String(existing.id), ok: true, skipped: true, updated: false };
+  const result = await mutateKnowledge(
+    db,
+    userId,
+    customerId,
+    botId,
+    "docs",
+    existing ? "PUT" : "POST",
+    input,
+    existing ? String(existing.id) : null,
+    embedding,
+  );
+  return { ...result, skipped: false, updated: Boolean(existing) };
+}

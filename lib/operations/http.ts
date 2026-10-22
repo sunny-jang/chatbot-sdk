@@ -13,6 +13,7 @@ export async function adminBot(
   id: string,
   db: AccessDatabase = sql,
   lock = false,
+  allowCustomer = false,
 ) {
   const tenantId = await readTenantId();
   if (tenantId) {
@@ -35,6 +36,7 @@ export async function adminBot(
     }
     return { bot, tenantId };
   }
+  if (!allowCustomer) throw new OperationError("Unauthorized", 401);
   try {
     const user = await portalUser(),
       grant = await resolveBotAccess(db, user.id, id, "knowledge.manage");

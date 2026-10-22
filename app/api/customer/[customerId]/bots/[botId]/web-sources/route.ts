@@ -1,8 +1,8 @@
 import sql from "@/lib/neon";
 import {
-  GET as read,
-  POST as manage,
-} from "@/app/api/bots/[id]/web-sources/route";
+  readWebSources as read,
+  manageWebSources as manage,
+} from "@/lib/operations/web-sources";
 import { portalUser } from "@/lib/customer-portal/auth";
 import { customerBot } from "@/lib/customer-portal/bots";
 import { failure, sameOrigin } from "@/lib/customer-portal/input";
@@ -22,9 +22,13 @@ async function handle(req: Request, { params }: C, mutation: boolean) {
           { status: 429 },
         );
     }
-    return (mutation ? manage : read)(req, {
-      params: Promise.resolve({ id: p.botId }),
-    });
+    return (mutation ? manage : read)(
+      req,
+      {
+        params: Promise.resolve({ id: p.botId }),
+      },
+      true,
+    );
   } catch (e) {
     return failure(e);
   }
