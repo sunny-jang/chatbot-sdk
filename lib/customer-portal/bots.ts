@@ -242,3 +242,68 @@ export async function uploadCustomerDocument(
   );
   return { ...result, skipped: false, updated: Boolean(existing) };
 }
+
+export async function unchangedCustomerDocument(
+  db: AccessDatabase,
+  userId: string,
+  customerId: string,
+  botId: string,
+  title: string,
+  content: string,
+) {
+  await customerBot(db, userId, customerId, botId, "knowledge.manage", true);
+  const [existing] =
+    await db`SELECT id,content FROM documents WHERE bot_id=${botId} AND title=${title} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
+  return existing?.content === content
+    ? { id: String(existing.id), ok: true, skipped: true, updated: false }
+    : null;
+}
+
+export async function importCustomerQa(
+  db: AccessDatabase,
+  userId: string,
+  customerId: string,
+  botId: string,
+  rows: { folder: string; question: string; answer: string }[],
+  folderOverride: string | null,
+  vectors: number[][],
+) {
+  await customerBot(db, userId, customerId, botId, "knowledge.manage", true);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    let folderId = folderOverride;
+    if (!folderId) {
+      const name = text(row.folder, "폴더 이름", 100);
+      const [folder] =
+        await db`SELECT id FROM qa_folders WHERE bot_id=${botId} AND name=${name} ORDER BY id LIMIT 1`;
+      folderId = folder
+        ? String(folder.id)
+        : (
+            await mutateKnowledge(
+              db,
+              userId,
+              customerId,
+              botId,
+              "qa-folders",
+              "POST",
+              { name },
+              null,
+              null,
+            )
+          ).id;
+    }
+    const [existing] =
+      await db`SELECT id FROM qa_pairs WHERE bot_id=${botId} AND question=${row.question} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
+    await mutateKnowledge(
+      db,
+      userId,
+      customerId,
+      botId,
+      "qa",
+      existing ? "PUT" : "POST",
+      { ...row, folder_id: folderId },
+      existing ? String(existing.id) : null,
+      vectors[i],
+    );
+  }
+}

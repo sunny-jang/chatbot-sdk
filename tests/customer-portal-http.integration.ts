@@ -353,6 +353,41 @@ async function main() {
       await sql`UPDATE bots SET widget_title=${original.widget_title} WHERE id='portal-cafe-bot'`;
     }
   });
+  await check("동일 파일 재업로드는 모델 키 없이도 건너뛴다", async () => {
+    const id = randomUUID(),
+      title = "unchanged-" + randomUUID();
+    const content = "변하지 않은 합성 문서 본문";
+    await sql`INSERT INTO documents(id,bot_id,title,content) VALUES(${id},'portal-cafe-bot',${title},${content})`;
+    try {
+      const boundary = "qa-boundary-" + randomUUID();
+      const body = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${title}.txt"\r\nContent-Type: text/plain\r\n\r\n${content}\r\n--${boundary}--\r\n`;
+      const response = await localFetch(
+        base + "/api/customer/qa-cafe/bots/portal-cafe-bot/docs/upload",
+        {
+          method: "POST",
+          headers: {
+            Host: desk,
+            Origin: "http://" + desk,
+            Cookie: admin,
+            "Content-Type": "multipart/form-data; boundary=" + boundary,
+          },
+          body,
+        },
+      );
+      assert.equal(response.status, 200);
+      const result = await response.json();
+      assert.equal(result.id, id);
+      assert.equal(result.skipped, true);
+      assert.equal(
+        (
+          await sql`SELECT count(*)::int AS n FROM documents WHERE bot_id='portal-cafe-bot' AND title=${title}`
+        )[0].n,
+        1,
+      );
+    } finally {
+      await sql`DELETE FROM documents WHERE id=${id}`;
+    }
+  });
   await check("지식 폴더와 Q&A 항목 ID 변조 차단", async () => {
     const base = "/api/customer/qa-cafe/bots/portal-cafe-bot";
     const folder = await api(base + "/qa-folders", desk, admin, "POST", {

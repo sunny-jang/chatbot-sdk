@@ -3,7 +3,7 @@ import { parseQaWorkbook } from "@/lib/knowledge/qa-workbook";
 import sql from "@/lib/neon";
 import type { AccessDatabase } from "@/lib/access/schema";
 import { portalUser } from "@/lib/customer-portal/auth";
-import { customerBot, mutateKnowledge } from "@/lib/customer-portal/bots";
+import { customerBot, importCustomerQa } from "@/lib/customer-portal/bots";
 import {
   failure,
   sameOrigin,
@@ -57,20 +57,17 @@ export async function POST(
       rows.map((r) => r.question),
       await getTenantApiKeyByTenantId(grant.tenant_id),
     );
-    await sql.begin(async (tx) => {
-      for (let i = 0; i < rows.length; i++)
-        await mutateKnowledge(
-          tx as unknown as AccessDatabase,
-          user.id,
-          p.customerId,
-          p.botId,
-          "qa",
-          "POST",
-          { ...rows[i], folder_id: form.get("folder_id") || null },
-          null,
-          vectors[i],
-        );
-    });
+    await sql.begin((tx) =>
+      importCustomerQa(
+        tx as unknown as AccessDatabase,
+        user.id,
+        p.customerId,
+        p.botId,
+        rows,
+        form.get("folder_id") ? text(form.get("folder_id"), "폴더", 200) : null,
+        vectors,
+      ),
+    );
     return Response.json({ count: rows.length }, { status: 201 });
   } catch (e) {
     return failure(e);
