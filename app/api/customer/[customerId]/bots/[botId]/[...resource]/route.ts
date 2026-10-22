@@ -1,3 +1,4 @@
+import { uploadForm } from "@/lib/knowledge/upload";
 import { randomUUID } from "node:crypto";
 import sql from "@/lib/neon";
 import type { AccessDatabase } from "@/lib/access/schema";
@@ -79,7 +80,7 @@ async function mutate(req: Request, { params }: C) {
       await customerBot(sql, user.id, p.customerId, p.botId, "bot.configure");
       let logo: string | null = null;
       if (req.method !== "DELETE") {
-        const file = (await req.formData()).get("file");
+        const file = (await uploadForm(req, 3 * 1024 * 1024)).get("file");
         if (!(file instanceof File) || file.size > 2 * 1024 * 1024)
           throw new PortalError("2MB 이하 이미지 파일을 선택해주세요.");
         const bytes = new Uint8Array(await file.arrayBuffer()),

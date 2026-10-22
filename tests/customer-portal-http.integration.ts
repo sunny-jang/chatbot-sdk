@@ -426,6 +426,7 @@ async function main() {
         "qa",
         "folders",
         "qa-folders",
+        "web-sources",
         "analytics",
         "logs",
       ])

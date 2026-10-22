@@ -1,3 +1,4 @@
+import type { AccessDatabase } from "@/lib/access/schema";
 import { randomUUID } from "crypto";
 import sql from "@/lib/neon";
 import { getEmbedding } from "@/lib/embeddings";
@@ -56,12 +57,18 @@ export async function POST(req: Request, { params }: Context) {
         const extracted = extractPage(fetched.html);
         const hash = contentHash(extracted.content);
         if (source) {
-          await sql`UPDATE web_sources SET checked_at=EXTRACT(EPOCH FROM NOW())::BIGINT,last_error=NULL WHERE id=${source.id}`;
+          await sql.begin(async (tx) => {
+            await adminBot(id, tx as unknown as AccessDatabase, true);
+            await tx`UPDATE web_sources SET checked_at=EXTRACT(EPOCH FROM NOW())::BIGINT,last_error=NULL WHERE id=${source.id}`;
+          });
           if (source.source_hash === hash)
             return Response.json({ unchanged: true });
         }
         const previewId = randomUUID();
-        await sql`INSERT INTO web_previews(id,bot_id,source_id,url,final_url,title,content,source_hash,base_hash,base_document_hash) VALUES(${previewId},${id},${source ? String(source.id) : null},${url},${fetched.finalUrl},${extracted.title},${extracted.content},${hash},${source ? String(source.source_hash) : null},${source ? contentHash(String(source.content)) : null})`;
+        await sql.begin(async (tx) => {
+          await adminBot(id, tx as unknown as AccessDatabase, true);
+          await tx`INSERT INTO web_previews(id,bot_id,source_id,url,final_url,title,content,source_hash,base_hash,base_document_hash) VALUES(${previewId},${id},${source ? String(source.id) : null},${url},${fetched.finalUrl},${extracted.title},${extracted.content},${hash},${source ? String(source.source_hash) : null},${source ? contentHash(String(source.content)) : null})`;
+        });
         return Response.json({
           previewId,
           ...extracted,
@@ -70,7 +77,12 @@ export async function POST(req: Request, { params }: Context) {
         });
       } catch (e) {
         if (source)
-          await sql`UPDATE web_sources SET last_error=${e instanceof OperationError ? e.message : "수집 실패"} WHERE id=${source.id}`;
+          await sql
+            .begin(async (tx) => {
+              await adminBot(id, tx as unknown as AccessDatabase, true);
+              await tx`UPDATE web_sources SET last_error=${e instanceof OperationError ? e.message : "수집 실패"} WHERE id=${source.id}`;
+            })
+            .catch(() => {});
         throw e;
       }
     }
@@ -101,6 +113,7 @@ export async function POST(req: Request, { params }: Context) {
     if (!key) throw new OperationError("OpenAI API 키를 등록해주세요.");
     const embedding = await getEmbedding(content.slice(0, 8000), key);
     const result = await sql.begin(async (tx) => {
+      await adminBot(id, tx as unknown as AccessDatabase, true);
       const locked =
         await tx`SELECT id FROM web_previews WHERE id=${previewId} FOR UPDATE`;
       if (!locked[0])

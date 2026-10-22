@@ -1,4 +1,5 @@
 "use client";
+import WebSourceManager from "@/app/components/WebSourceManager";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -411,6 +412,54 @@ export default function BotWorkspace({
         <p role="status" className="cp-note">
           불러오는 중입니다.
         </p>
+      )}
+      {["docs", "qa"].includes(tab) && (
+        <section className="cp-panel">
+          <h2>
+            {tab === "docs" ? "문서 파일 가져오기" : "엑셀·CSV Q&A 가져오기"}
+          </h2>
+          <p className="cp-note">
+            {tab === "docs"
+              ? "TXT·Markdown·PDF·DOCX·HWP·HWPX 등, 파일당 최대 5MB"
+              : "질문·답변 열이 있는 XLSX·CSV, 최대 5MB·100개 질문"}
+          </p>
+          <label>
+            파일 선택
+            <input
+              type="file"
+              disabled={busy}
+              accept={
+                tab === "docs"
+                  ? ".txt,.md,.markdown,.csv,.json,.xml,.html,.htm,.pdf,.docx,.hwp,.hwpx"
+                  : ".xlsx,.csv"
+              }
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                void perform(async () => {
+                  const form = new FormData();
+                  form.set("file", file);
+                  form.set("folder_id", folder);
+                  const r = await fetch(`${base}/${tab}/upload`, {
+                      method: "POST",
+                      body: form,
+                    }),
+                    d = await r.json();
+                  if (!r.ok) throw Error(d.error);
+                  setRevision((v) => v + 1);
+                });
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </section>
+      )}
+      {tab === "docs" && (
+        <WebSourceManager
+          botId={bot.id}
+          apiBase={base}
+          folders={folders.map((f) => ({ id: f.id, name: f.name || "" }))}
+        />
       )}
       {["docs", "qa"].includes(tab) && (
         <>

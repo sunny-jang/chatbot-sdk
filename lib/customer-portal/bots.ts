@@ -14,7 +14,10 @@ export async function customerBot(
   permission: Permission = "bot.read",
   lock = false,
 ) {
-  if (lock) await lockAccess(db, userId, customerId, permission);
+  if (lock) {
+    await lockAccess(db, userId, customerId, permission);
+    await db`SELECT id FROM bots WHERE id=${botId} AND customer_id=${customerId} FOR UPDATE`;
+  }
   const grant = await resolveBotAccess(db, userId, botId, permission);
   if (!grant || grant.customer_id !== customerId)
     throw new PortalError("챗봇을 찾을 수 없습니다.", 404);
@@ -58,7 +61,12 @@ export async function configureCustomerBot(
       : input.widget_title === null || input.widget_title === ""
         ? null
         : widgetTitle(input.widget_title);
-  if (input.widget_title && !title)
+  if (
+    input.widget_title !== undefined &&
+    input.widget_title !== null &&
+    input.widget_title !== "" &&
+    !title
+  )
     throw new PortalError("위젯 제목은 100자 이내 일반 텍스트로 입력해주세요.");
   const color =
     input.widget_color === undefined
