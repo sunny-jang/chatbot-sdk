@@ -32,7 +32,10 @@ async function main() {
     agent = await login(fixture.agent, desk);
   let demoId = "",
     token = "",
-    secondId = "";
+    secondId = "",
+    secondToken = "";
+  const [originalBot] =
+    await sql`SELECT request_settings FROM bots WHERE id='portal-cafe-bot'`;
   const qa = randomUUID(),
     foreignQa = randomUUID();
   await sql`INSERT INTO qa_pairs(id,bot_id,question,answer) VALUES(${qa},'portal-cafe-bot','데모 테스트 질문','데모 전용 답변'),(${foreignQa},'portal-shop-bot','다른 질문','다른 답변')`;
@@ -131,6 +134,56 @@ async function main() {
         );
       },
     );
+    await check(
+      "데모 신청은 멱등 영수증만 저장·실제 접수 및 알림 없음",
+      async () => {
+        const settings = {
+          quote: true,
+          consultation: true,
+          company: true,
+          contact: "email",
+          consentText: "QA 데모 동의",
+          consentVersion: "demo-qa-1",
+        };
+        await sql`UPDATE bots SET request_settings=${sql.json(settings)} WHERE id='portal-cafe-bot'`;
+        const before =
+          await sql`SELECT (SELECT count(*) FROM customer_requests)::int AS requests,(SELECT count(*) FROM operation_jobs)::int AS jobs`;
+        const input = {
+          kind: "quote",
+          name: "합성 데모 방문자",
+          email: "demo-qa@example.test",
+          message: "합성 견적 문의",
+          consent: true,
+          consentVersion: settings.consentVersion,
+          idempotencyKey: randomUUID(),
+        };
+        const path = endpoint() + "/requests";
+        const first = await call(path, "POST", input),
+          retry = await call(path, "POST", input);
+        assert.equal(first.status, 201);
+        assert.equal(first.data.demo, true);
+        assert.match(first.data.receipt, /^DEMO-/);
+        assert.equal(retry.data.receipt, first.data.receipt);
+        assert.equal(
+          (await call(path, "POST", { ...input, message: "변경" })).status,
+          409,
+        );
+        assert.deepEqual(
+          await sql`SELECT (SELECT count(*) FROM customer_requests)::int AS requests,(SELECT count(*) FROM operation_jobs)::int AS jobs`,
+          before,
+        );
+        const stored =
+          await sql`SELECT * FROM demo_requests WHERE demo_id=${demoId}`;
+        assert.equal(stored.length, 1);
+        assert.ok(!JSON.stringify(stored).includes(input.email));
+        assert.ok(!JSON.stringify(stored).includes(input.name));
+        assert.equal(
+          (await call(endpoint() + "/handoff", "POST", { sessionId: session }))
+            .status,
+          409,
+        );
+      },
+    );
     await check("다른 데모는 같은 대화 ID로 기록 조회 불가", async () => {
       const r = await api("/api/demos", agency, owner, "POST", {
         customerId: "qa-cafe",
@@ -140,13 +193,25 @@ async function main() {
       });
       assert.equal(r.status, 201);
       secondId = r.data.id;
-      const secondToken = new URL(r.data.url).pathname.split("/").pop()!;
+      secondToken = new URL(r.data.url).pathname.split("/").pop()!;
       const history = await api(
         `/api/demo/${secondToken}/api/chat/portal-cafe-bot/handoff?sessionId=${session}`,
         agency,
       );
       assert.equal(history.status, 200);
       assert.equal(history.data.messages.length, 0);
+    });
+    await check("시간 만료 링크는 공개 설정 조회 차단", async () => {
+      await sql`UPDATE customer_demos SET expires_at=EXTRACT(EPOCH FROM NOW())::bigint-1 WHERE id=${secondId}`;
+      assert.equal(
+        (
+          await api(
+            `/api/demo/${secondToken}/api/widget/portal-cafe-bot`,
+            agency,
+          )
+        ).status,
+        410,
+      );
     });
     await check("링크 해제·만료 후 대화와 설정 차단", async () => {
       assert.equal(
@@ -169,6 +234,7 @@ async function main() {
       );
     });
   } finally {
+    await sql`UPDATE bots SET request_settings=${sql.json(originalBot.request_settings)} WHERE id='portal-cafe-bot'`;
     await sql`DELETE FROM qa_pairs WHERE id IN (${qa},${foreignQa})`;
     for (const id of [demoId, secondId].filter(Boolean)) {
       await sql`DELETE FROM access_audit_logs WHERE target_id=${id}`;
