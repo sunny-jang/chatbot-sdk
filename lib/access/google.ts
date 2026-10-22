@@ -38,6 +38,23 @@ export function isGoogleIdentityReason(
 const fail = (reason: GoogleIdentityReason, status: number) =>
   new GoogleIdentityError(reason, GOOGLE_IDENTITY_MESSAGES[reason], status);
 
+/** Google display names are untrusted and unbounded; never let them abort a login. */
+export function displayName(value: unknown, fallback: string) {
+  const cleaned =
+    typeof value === "string"
+      ? value.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, 80).trim()
+      : "";
+  return cleaned || fallback;
+}
+
+/** Both the explicit env names and @auth/core's AUTH_GOOGLE_* defaults enable the buttons. */
+export function googleLoginAvailable(env: Record<string, string | undefined> = process.env) {
+  return Boolean(
+    (env.GOOGLE_CLIENT_ID || env.AUTH_GOOGLE_ID) &&
+      (env.GOOGLE_CLIENT_SECRET || env.AUTH_GOOGLE_SECRET),
+  );
+}
+
 export type GoogleProfile = {
   subject: string;
   email: string;
@@ -59,7 +76,7 @@ export async function googleIdentity(
   if (profile.verified !== true) throw fail("unverified", 403);
   const address = email(profile.email),
     subject = text(profile.subject, "Google 계정", 300),
-    name = text(profile.name || address, "이름", 80);
+    name = displayName(profile.name, address);
   await db`SELECT pg_advisory_xact_lock(hashtextextended(${"google:" + subject},0))`;
   await db`SELECT pg_advisory_xact_lock(hashtextextended(${"identity:" + address},0))`;
   const [ready] =

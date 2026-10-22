@@ -35,7 +35,10 @@ function providerId(provider: { id: string; options?: unknown }) {
   return typeof custom === "string" ? custom : provider.id;
 }
 
+const cache = new WeakMap<AuthConfig, AuthConfig>();
 export function customerPortalAuthConfig(base: AuthConfig): AuthConfig {
+  const cached = cache.get(base);
+  if (cached) return cached;
   const config: AuthConfig = {
     ...base,
     providers: base.providers.filter((provider) =>
@@ -47,6 +50,7 @@ export function customerPortalAuthConfig(base: AuthConfig): AuthConfig {
     trustHost: true,
   };
   setEnvDefaults(process.env, config, true);
+  cache.set(base, config);
   return config;
 }
 

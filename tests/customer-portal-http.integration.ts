@@ -167,9 +167,46 @@ async function main() {
       onDesk["customer-google"].callbackUrl,
     );
     assert.ok(onAgency.google.callbackUrl.startsWith("http://" + agency + "/"));
-    const blocked = await api("/api/auth/signin/google", desk, "", "POST");
-    assert.ok([302, 400, 404].includes(blocked.status));
-    assert.ok(!blocked.location?.includes("accounts.google.com"));
+    // With a valid CSRF token the agency provider must still be unknown on the desk host.
+    const jar = new Map<string, string>();
+    const collect = (r: { headers: Headers }) => {
+      for (const raw of r.headers.getSetCookie()) {
+        const c = raw.split(";")[0];
+        jar.set(c.slice(0, c.indexOf("=")), c);
+      }
+      return [...jar.values()].join("; ");
+    };
+    collect(await api("/api/auth/csrf", desk));
+    const csrf = await api("/api/auth/csrf", desk, [...jar.values()].join("; "));
+    const cookie = collect(csrf);
+    const start = async (provider: string) =>
+      localFetch(base + "/api/auth/signin/" + provider, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          Host: desk,
+          Origin: "http://" + desk,
+          Cookie: cookie,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Auth-Return-Redirect": "1",
+        },
+        body: new URLSearchParams({
+          csrfToken: csrf.data.csrfToken,
+          callbackUrl: "http://" + desk + "/customer",
+        }),
+      });
+    const blocked = await start("google"),
+      blockedBody = await blocked.text();
+    assert.ok(
+      !blockedBody.includes("accounts.google.com") &&
+        !(blocked.headers.get("location") || "").includes("accounts.google.com"),
+      blockedBody.slice(0, 200),
+    );
+    assert.ok(/error/i.test(blockedBody) || blocked.status >= 400, String(blocked.status));
+    const allowed = await start("customer-google"),
+      allowedBody = await allowed.text();
+    // Without a Google client in QA the customer provider errors too, but it is recognised (no unknown-provider error page).
+    assert.notEqual(allowedBody, blockedBody);
   });
   await check("고객사 로그인은 tenant/admin 권한을 발급하지 않음", async () => {
     const s = (await api("/api/auth/session", desk, agent)).data;

@@ -158,6 +158,26 @@ async function main() {
       );
       checks++;
 
+      // An inviter who lost the permission retires the link with 410 instead of blaming the invitee.
+      const adminUser = "admin-" + suffix;
+      await tx`INSERT INTO users(id,name,email,email_verified_at) VALUES(${adminUser},'고객사 관리자',${adminUser + "@example.test"},1)`;
+      await tx`INSERT INTO customer_memberships(customer_id,user_id,role) VALUES(${customer},${adminUser},'admin')`;
+      const byAdmin = await createInvitation(db, adminUser, customer, {
+        email: "by-admin-" + suffix + "@example.test",
+      });
+      await tx`INSERT INTO users(id,name,email,email_verified_at) VALUES(${"by-admin-" + suffix},'관리자 초대',${"by-admin-" + suffix + "@example.test"},1)`;
+      await updateMember(db, owner, customer, { userId: adminUser, revoke: true });
+      await assert.rejects(
+        () => acceptVerifiedInvitation(db, byAdmin.token, "by-admin-" + suffix),
+        { status: 410 },
+      );
+      assert.equal(
+        (await tx`SELECT status FROM customer_invitations WHERE id=${byAdmin.id}`)[0].status,
+        "revoked",
+      );
+      assert.equal(await count("customer_memberships", "user_id", "by-admin-" + suffix), 0);
+      checks++;
+
       // Expired and revoked invitations, and inactive customers, are refused.
       const expired = await createInvitation(db, owner, customer, {
         email: "expired-" + suffix + "@example.test",

@@ -2,6 +2,7 @@ import LoginClient from "./LoginClient";
 import { customerReturnPath } from "@/lib/customer-portal/return-path";
 import {
   GOOGLE_IDENTITY_MESSAGES,
+  googleLoginAvailable,
   isGoogleIdentityReason,
 } from "@/lib/access/google";
 export default async function CustomerLoginPage({
@@ -20,9 +21,7 @@ export default async function CustomerLoginPage({
     <LoginClient
       agencyOrigin={process.env.AUTH_URL || ""}
       next={customerReturnPath(query.next)}
-      googleAvailable={Boolean(
-        process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
-      )}
+      googleAvailable={googleLoginAvailable()}
       oauthError={oauthError}
     />
   );

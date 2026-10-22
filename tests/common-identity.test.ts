@@ -7,6 +7,8 @@ import {
 } from "../lib/customer-portal/auth-host";
 import {
   GOOGLE_IDENTITY_MESSAGES,
+  displayName,
+  googleLoginAvailable,
   isGoogleIdentityReason,
 } from "../lib/access/google";
 
@@ -85,6 +87,23 @@ test("desk 전용 설정은 고객사 공급자만 남기고 기본 경로를 �
   );
   assert.equal(config.basePath, "/api/auth");
   assert.equal(config.trustHost, true);
+});
+
+test("Google 표시 이름은 로그인을 막지 않고 정리·절단·대체", () => {
+  assert.equal(displayName("  홍길동 ", "a@b.test"), "홍길동");
+  assert.equal(displayName("", "a@b.test"), "a@b.test");
+  assert.equal(displayName(undefined, "a@b.test"), "a@b.test");
+  assert.equal(displayName("x".repeat(100), "a@b.test").length, 80);
+  assert.equal(displayName("bad\u0000\u000bname", "a@b.test"), "bad  name");
+  assert.equal(displayName("\u0000\u0001", "a@b.test"), "a@b.test");
+});
+
+test("Google 버튼은 명시 env 또는 AUTH_GOOGLE_* 기본값이 모두 있을 때만", () => {
+  assert.equal(googleLoginAvailable({}), false);
+  assert.equal(googleLoginAvailable({ GOOGLE_CLIENT_ID: "id" }), false);
+  assert.equal(googleLoginAvailable({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" }), true);
+  assert.equal(googleLoginAvailable({ AUTH_GOOGLE_ID: "id", AUTH_GOOGLE_SECRET: "s" }), true);
+  assert.equal(googleLoginAvailable({ GOOGLE_CLIENT_ID: "id", AUTH_GOOGLE_SECRET: "s" }), true);
 });
 
 test("Google 로그인 실패 사유는 알려진 코드만 안내문으로 변환", () => {

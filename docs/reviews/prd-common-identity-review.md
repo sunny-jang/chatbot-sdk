@@ -51,3 +51,22 @@
 - 프로덕션 빌드 통과. `auth.ts → google.ts → input.ts(node:crypto)`가 Edge 미들웨어 번들에 들어가는 경고가 있어 검증 헬퍼를 `lib/customer-portal/validation.ts`로 분리해 경고 0으로 만들었다. `tsc --noEmit` 통과, 변경 파일 린트 0오류.
 - HTTP: fixture 초기화 후 `tests/customer-portal-http.integration.ts` 31건 통과. 첫 실행에서 desk `/api/auth/providers`가 공급자 0개를 돌려줘 실패했는데, `Google({ id: "customer-google" })`의 커스텀 id가 요청 시점 병합 전까지 `options.id`에만 있어 필터가 기본 id만 본 것이 원인이었다. `options.id` 우선으로 고치고 단위 테스트에 같은 케이스를 추가했다.
 - 브라우저(desk.localhost:3012, Google 클라이언트 없는 QA 환경이라 Google 버튼은 비표시): 비로그인 초대 화면 → `로그인한 뒤 수락` → 로그인 후 초대 경로로 복귀 → 일치 계정 안내·`초대 수락` → `/customer/qa-cafe/support` 진입. 다른 계정으로 로그인한 상태에서는 마스킹된 초대 이메일과 `다른 계정으로 로그인` 버튼만 표시되고, 누르면 로그아웃 후 초대 경로를 `next`로 보존한 로그인 화면으로 이동했다. 캡처 `docs/verification/common-identity-invite-{signed-out,matching-account,accepted-support,other-account}.jpg`. 검수에 쓴 초대·멤버십·감사 행은 삭제했다.
+
+## 독립 리뷰 1차 (2026-10-23, Claude code-review — Codex 사용량 한도로 대체)
+
+Codex 리뷰 봇이 "You have reached your Codex usage limits for code reviews"로 PR #4·#6·#7 모두 `failed`를 돌려줘, 한도가 풀릴 때까지 별도 리뷰 에이전트로 9건을 받았다. Codex 한도 복구 후 재요청한다.
+
+수정(8건):
+
+- Google 표시 이름이 80자를 넘거나 제어문자를 포함하면 로그인 자체가 실패하던 것을 `displayName`으로 정리·절단·주소 대체. 단위 검사 추가.
+- `validation.ts`가 Edge 번들에 포함되므로 `Buffer.byteLength` 대신 `TextEncoder`로 바이트 길이 계산.
+- 예상 밖 오류(DB 장애 등)는 `failed` 코드로 돌리되 서버 로그에 오류 이름만 남긴다(원문·행 값 미출력).
+- 이미 수락한 본인이 초대 링크를 다시 열면 "사용할 수 없는 초대" 대신 "이미 수락한 초대" + 상담함 링크.
+- 초대자가 권한을 잃은 초대는 수락 시 invitee에게 403을 돌리지 않고 초대를 `revoked`로 바꾸며 410으로 새 초대를 안내. DB 검사 추가(멤버십 미생성 확인).
+- desk에서 에이전시 `google` 공급자를 막는 HTTP 검사가 CSRF 누락만으로 통과하던 것을 실제 CSRF 토큰으로 시작해 알 수 없는 공급자임을 확인하도록 강화.
+- desk 전용 Auth 설정을 요청마다 다시 만들지 않고 base 설정별로 캐시.
+- Google 버튼 노출 조건을 `googleLoginAvailable`(명시 env 또는 `AUTH_GOOGLE_*` 기본값)로 통일.
+
+**남은 공백(미해결·제품 결정 필요)**: 이관 스크립트로 생성된 기존 에이전시 소유자의 `users.email_verified_at`은 NULL이다. PRD 8장대로 미검증 주소와 Google을 자동 병합하지 않으므로, 이 소유자가 같은 이메일로 Google 로그인하면 `verify_existing`으로 거부되는데 **에이전시 쪽 이메일 확인 흐름이 아직 없다**(고객사 비밀번호 재설정 메일은 검증을 기록하지 않는다). 기존에는 이메일만 같으면 자동 연결했으므로 L02 관점의 후퇴다. 선택지: (a) 로그인된 비밀번호 세션에서 Google 연결(계정 연결 화면), (b) 에이전시 이메일 확인 메일, (c) 이관 시 비밀번호 보유 tenant를 검증 처리(PRD 위반). 다음 PR(비밀번호 공통화·에이전시 세션 통합)에서 (a) 또는 (b)로 다룬다.
+
+실행 기록(리뷰 반영 후): 단위 127건, DB `common-identity.integration.ts` 15건 롤백, 프로덕션 빌드(Edge 경고 0)·`tsc`·린트 통과, fixture 초기화 후 HTTP 31건 통과. 브라우저: 수락 후 같은 초대 링크를 다시 열면 "이미 수락한 초대" + 상담함 링크 표시(`docs/verification/common-identity-invite-already-accepted.jpg`). 검수 데이터는 삭제했다.

@@ -194,7 +194,13 @@ export const authConfig: NextAuthConfig = {
         user.customerAuthVersion = identity.authVersion;
         if (!portal) await syncAdminRole(identity.tenantId!, identity.email);
       } catch (e) {
-        return denied(e instanceof GoogleIdentityError ? e.reason : "failed");
+        if (e instanceof GoogleIdentityError) return denied(e.reason);
+        // Never print the raw error: postgres detail can carry row values.
+        console.error(
+          "google sign-in failed:",
+          e instanceof Error ? e.name : typeof e,
+        );
+        return denied("failed");
       }
       return true;
     },

@@ -177,12 +177,21 @@ export async function acceptVerifiedInvitation(
   }
   if (invite.status !== "pending" || Number(invite.expires_at) <= now)
     throw new PortalError("만료되었거나 취소된 초대입니다.", 410);
-  await lockAccess(
-    db,
-    String(invite.invited_by),
-    String(invite.customer_id),
-    invite.role === "admin" ? "members.admin" : "members.agent",
-  );
+  // The inviter must still hold the permission; otherwise the link is retired, not the invitee blamed.
+  try {
+    await lockAccess(
+      db,
+      String(invite.invited_by),
+      String(invite.customer_id),
+      invite.role === "admin" ? "members.admin" : "members.agent",
+    );
+  } catch {
+    await db`UPDATE customer_invitations SET status='revoked' WHERE id=${invite.id} AND status='pending'`;
+    throw new PortalError(
+      "초대한 담당자의 권한이 바뀌어 이 초대는 더 이상 유효하지 않습니다. 새 초대를 요청해주세요.",
+      410,
+    );
+  }
   await db`INSERT INTO customer_memberships(customer_id,user_id,role) VALUES(${invite.customer_id},${user.id},${invite.role}) ON CONFLICT(customer_id,user_id) DO UPDATE SET role=EXCLUDED.role,status='active',updated_at=${now}`;
   await db`UPDATE customer_invitations SET status='accepted',accepted_by=${user.id},accepted_at=${now} WHERE id=${invite.id}`;
   await db`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${user.id},${invite.tenant_id},${invite.customer_id},'member.accept',${invite.id},'success')`;

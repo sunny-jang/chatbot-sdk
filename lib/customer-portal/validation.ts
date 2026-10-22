@@ -39,7 +39,7 @@ export function password(value: unknown) {
   if (
     typeof value !== "string" ||
     value.length < 12 ||
-    Buffer.byteLength(value) > 72
+    new TextEncoder().encode(value).length > 72
   )
     throw new PortalError(
       "비밀번호는 12자 이상, UTF-8 기준 72바이트 이하로 입력해주세요.",
