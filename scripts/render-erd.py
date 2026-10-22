@@ -5,6 +5,9 @@ root=Path('docs/architecture'); data=json.loads((root/'schema-2026-10-22.json').
 tables={}
 for c in data['columns']:tables.setdefault(c['table_name'],[]).append(c)
 groups=[('계정·고객사', '#7350bb',['tenants','users','user_accounts','partner_memberships','customers','customer_memberships','customer_invitations','customer_invite_challenges','customer_password_reset_tokens','phone_otps']),('챗봇·지식','#236a80',['bots','doc_folders','documents','qa_folders','qa_pairs','web_sources','web_previews','unanswered_reviews']),('상담·접수','#296b53',['chat_sessions','support_handoffs','chat_messages','customer_message_requests','customer_requests','request_notes']),('운영·연동','#a66724',['monthly_chat_sessions','chat_logs','operation_jobs','proactive_evaluations','slack_integrations','telegram_integrations','api_rate_limits','access_audit_logs']),('공유 데모','#a54679',['customer_demos','demo_turns','demo_requests'])]
+classified={name for _,_,names in groups for name in names}
+remaining=sorted(set(tables)-classified)
+if remaining:groups.append(('기타 테이블','#526477',remaining))
 rels={}
 for r in data['relations']:rels.setdefault((r['source_table'],r['constraint_name']),[]).append(r)
 mer=['erDiagram']
@@ -22,7 +25,7 @@ for (source,_),rs in rels.items():
  nullable=any(c['is_nullable']=='YES' for c in tables[source] if c['column_name'] in cols)
  mer.append(f'    {rs[0]["target_table"]} '+('o|' if nullable else '||')+'--'+('o|' if unique else 'o{')+f' {source} : "'+', '.join(sorted(cols))+'"')
 (root/'chatbot-erd.mmd').write_text('\n'.join(mer)+'\n')
-positions={}; entities=[]; edges=[]; width=2240; max_y=0
+positions={}; entities=[]; edges=[]; width=len(groups)*445+15; max_y=0
 for gi,(label,color,names) in enumerate(groups):
  x=gi*445+20; y=66
  entities.append(f'<text x="{x}" y="34" font-size="20" font-weight="700" fill="{color}">{label}</text>')
