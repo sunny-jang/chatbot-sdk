@@ -79,6 +79,7 @@ export default function Sidebar({
           {link("/requests", "문의·견적", "▤")}
           <p className="workspace-nav-label">관리</p>
           {link("/customers", "고객사 관리", "▣")}
+          {link("/demos", "고객사 데모", "◈")}
           {link("/bots", "챗봇 관리", "◇")}
           {link("/analytics", "이용 현황", "▥")}
           {link("/settings", "공간 설정", "⚙")}

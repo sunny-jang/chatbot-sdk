@@ -1,0 +1,99 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+export default function DemoSite({
+  token,
+  botId,
+  siteUrl,
+  customerName,
+  botName,
+  expiresAt,
+}: {
+  token: string;
+  botId: string;
+  siteUrl: string;
+  customerName: string;
+  botName: string;
+  expiresAt: number;
+}) {
+  const [fallback, setFallback] = useState(false),
+    [frameReady, setFrameReady] = useState(false);
+  const scriptRef = useRef<HTMLScriptElement | null>(null);
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "/chatbot-widget.js";
+    script.setAttribute("data-bot-id", botId);
+    script.setAttribute("data-bot-token", token);
+    script.setAttribute(
+      "data-endpoint",
+      `${location.origin}/api/demo/${token}`,
+    );
+    document.body.appendChild(script);
+    scriptRef.current = script;
+    return () => {
+      script.remove();
+      const root = document.getElementById("__chatbot-widget") as
+        (HTMLElement & { cleanupProactive?: () => void }) | null;
+      root?.cleanupProactive?.();
+      root?.remove();
+      document.getElementById("__chatbot-widget-style")?.remove();
+    };
+  }, [token, botId]);
+  return (
+    <main className="site-demo">
+      <header className="site-demo-bar">
+        <div>
+          <strong>{customerName} · 챗봇 데모</strong>
+          <p>
+            체험용 화면입니다. 실제 상담원 연결·접수 알림은 전송하지 않습니다.
+          </p>
+        </div>
+        <div className="site-demo-actions">
+          <a href={siteUrl} target="_blank" rel="noopener noreferrer">
+            원본 홈페이지
+          </a>
+          <button onClick={() => setFallback((v) => !v)}>
+            {fallback ? "홈페이지 배경 보기" : "배경이 안 보이면 대체 화면"}
+          </button>
+        </div>
+      </header>
+      <p className="site-demo-note">
+        오른쪽 아래 챗봇을 열어보세요.{" "}
+        {new Date(expiresAt * 1000).toLocaleString("ko-KR", {
+          timeZone: "Asia/Seoul",
+        })}
+        까지 · 홈페이지 내부 스크롤·클릭 행동 분석은 실제 설치 후 동작합니다.
+      </p>
+      {fallback ? (
+        <section className="site-demo-fallback">
+          <span>홈페이지 대체 미리보기</span>
+          <h1>{customerName}</h1>
+          <p>{new URL(siteUrl).hostname}</p>
+          <div>
+            <h2>{botName}을 체험해보세요</h2>
+            <p>
+              실제 홈페이지가 외부 표시를 차단하는 경우 이 화면에서 같은 챗봇을
+              사용할 수 있습니다. 이 배경은 원본 홈페이지 화면이 아닙니다.
+            </p>
+          </div>
+        </section>
+      ) : (
+        <div className="site-demo-frame">
+          <iframe
+            src={siteUrl}
+            title={`${customerName} 홈페이지 배경`}
+            sandbox="allow-scripts allow-same-origin allow-forms"
+            referrerPolicy="no-referrer"
+            onLoad={() => setFrameReady(true)}
+            onError={() => setFallback(true)}
+          />
+          {!frameReady && (
+            <p className="site-demo-frame-hint">
+              홈페이지 배경을 불러오는 중입니다. 보이지 않으면 상단의 대체
+              화면을 선택해주세요.
+            </p>
+          )}
+        </div>
+      )}
+    </main>
+  );
+}

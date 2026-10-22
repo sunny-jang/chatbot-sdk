@@ -4,21 +4,33 @@ function getClient(apiKey?: string | null) {
   return new OpenAI({ apiKey: apiKey ?? process.env.OPENAI_API_KEY });
 }
 
-export async function getEmbedding(text: string, apiKey?: string | null): Promise<number[]> {
-  const response = await getClient(apiKey).embeddings.create({
-    model: "text-embedding-3-small",
-    input: text,
-  });
+export async function getEmbedding(
+  text: string,
+  apiKey?: string | null,
+  signal?: AbortSignal,
+): Promise<number[]> {
+  const response = await getClient(apiKey).embeddings.create(
+    {
+      model: "text-embedding-3-small",
+      input: text,
+    },
+    { signal },
+  );
   return response.data[0].embedding;
 }
 
-export async function getEmbeddings(texts: string[], apiKey?: string | null): Promise<number[][]> {
+export async function getEmbeddings(
+  texts: string[],
+  apiKey?: string | null,
+): Promise<number[][]> {
   if (texts.length === 0) return [];
   const response = await getClient(apiKey).embeddings.create({
     model: "text-embedding-3-small",
     input: texts,
   });
-  return response.data.sort((a, b) => a.index - b.index).map((item) => item.embedding);
+  return response.data
+    .sort((a, b) => a.index - b.index)
+    .map((item) => item.embedding);
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -37,7 +49,7 @@ export async function findBestMatch(
   query: string,
   pairs: { id: string; answer: string; embedding: string | null }[],
   threshold = 0.75,
-  apiKey?: string | null
+  apiKey?: string | null,
 ): Promise<{ id: string; answer: string; score: number } | null> {
   const queryEmbedding = await getEmbedding(query, apiKey);
 
