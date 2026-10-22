@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       site = website(input.website),
       id = randomUUID();
     await sql.begin(async (tx) => {
-      await tx`SELECT id FROM tenants WHERE id=${tenantId} FOR UPDATE`;
+      await tx`SELECT id FROM tenants WHERE id=${tenantId} FOR NO KEY UPDATE`;
       await tx`INSERT INTO customers(id,tenant_id,name,website) VALUES(${id},${tenantId},${name},${site})`;
       await tx`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${user.id},${tenantId},${id},'customer.create',${id},'success')`;
     });

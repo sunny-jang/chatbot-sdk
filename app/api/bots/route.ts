@@ -112,7 +112,7 @@ export async function POST(req: Request) {
     const id = randomUUID();
     const rows = await sql.begin(async (tx) => {
       const [currentTenant] =
-        await tx`SELECT plan,subscription_status,enterprise_bot_limit FROM tenants WHERE id=${tenantId} FOR UPDATE`;
+        await tx`SELECT plan,subscription_status,enterprise_bot_limit FROM tenants WHERE id=${tenantId} FOR NO KEY UPDATE`;
       if (!currentTenant || currentTenant.subscription_status !== "active")
         throw new PortalError("구독 상태를 확인해주세요.", 403);
       const currentLimit = getBotLimit(
