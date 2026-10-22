@@ -1,61 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
-export class PortalError extends Error {
-  constructor(
-    message: string,
-    public status = 400,
-  ) {
-    super(message);
-  }
-}
+import { PortalError } from "./validation";
+export { PortalError, text, email, website, password } from "./validation";
 export const tokenHash = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 export const newToken = () => randomBytes(32).toString("base64url");
-export function text(value: unknown, label: string, max = 120) {
-  if (
-    typeof value !== "string" ||
-    !value.trim() ||
-    value.trim().length > max ||
-    /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)
-  )
-    throw new PortalError(`${label}을 확인해주세요.`);
-  return value.trim();
-}
-export function email(value: unknown) {
-  const v = text(value, "이메일", 254).toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))
-    throw new PortalError("이메일을 확인해주세요.");
-  return v;
-}
-export function website(value: unknown) {
-  if (value === undefined || value === null || value === "") return null;
-  const v = text(value, "홈페이지 주소", 500);
-  try {
-    const u = new URL(v);
-    if (!["http:", "https:"].includes(u.protocol) || u.username || u.password)
-      throw Error();
-    return u.href;
-  } catch {
-    throw new PortalError("http 또는 https 홈페이지 주소를 입력해주세요.");
-  }
-}
-export function password(value: unknown) {
-  if (
-    typeof value !== "string" ||
-    value.length < 12 ||
-    Buffer.byteLength(value) > 72
-  )
-    throw new PortalError(
-      "비밀번호는 12자 이상, UTF-8 기준 72바이트 이하로 입력해주세요.",
-    );
-  return value;
-}
-export function safeNext(value: string | null) {
-  return value?.startsWith("/customer/") &&
-    !value.startsWith("//") &&
-    !/[\\\r\n]/.test(value)
-    ? value
-    : "/customer";
-}
+export { customerReturnPath as safeNext } from "./return-path";
 export function sameOrigin(req: Request) {
   const origin = req.headers.get("origin");
   const configured = process.env.CUSTOMER_PORTAL_ORIGIN;

@@ -6,7 +6,7 @@ import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { syncAdminRole } from "@/lib/admin";
 import { provisionAgencyOwner } from "@/lib/access/provision";
-import { googleIdentity } from "@/lib/access/google";
+import { GoogleIdentityError, googleIdentity } from "@/lib/access/google";
 import type { AccessDatabase } from "@/lib/access/schema";
 
 declare module "next-auth" {
@@ -166,21 +166,35 @@ export const authConfig: NextAuthConfig = {
       if (!account) return false;
       // 아래 계정 연결 로직은 Google 전용입니다. 이메일·개발 로그인은 authorize에서 이미 계정을 확인했습니다.
       if (!["google", "customer-google"].includes(account.provider)) return true;
-      if (profile?.email_verified !== true || !user.email) return false;
+      const customerOnly = account.provider === "customer-google";
+      // Customer-portal failures redirect with a short reason; the agency login keeps Auth.js's generic denial.
+      const denied = (reason: string) =>
+        customerOnly ? `/customer/login?error=${reason}` : false;
+      if (profile?.email_verified !== true || !user.email)
+        return denied("unverified");
       await initSchema();
       try {
-        const identity = await sql.begin(tx => googleIdentity(tx as unknown as AccessDatabase, {
-          subject: account.providerAccountId, email: user.email!, name: user.name || user.email!, verified: profile.email_verified === true,
-        }, account.provider === "customer-google"));
-        const portal = account.provider === "customer-google" || !identity.tenantId;
+        const identity = await sql.begin((tx) =>
+          googleIdentity(
+            tx as unknown as AccessDatabase,
+            {
+              subject: account.providerAccountId,
+              email: user.email!,
+              name: user.name || user.email!,
+              verified: profile.email_verified === true,
+            },
+            customerOnly,
+          ),
+        );
+        const portal = customerOnly || !identity.tenantId;
         user.id = portal ? identity.id : identity.tenantId!;
         user.name = identity.name;
         user.email = identity.email;
         user.customerPortal = portal;
         user.customerAuthVersion = identity.authVersion;
         if (!portal) await syncAdminRole(identity.tenantId!, identity.email);
-      } catch {
-        return false;
+      } catch (e) {
+        return denied(e instanceof GoogleIdentityError ? e.reason : "failed");
       }
       return true;
     },
