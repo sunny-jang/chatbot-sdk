@@ -19,7 +19,8 @@ export async function updateCustomer(
   if (!grant) throw new PortalError("고객사를 찾을 수 없습니다.", 404);
   if (
     input.status !== undefined &&
-    !["active", "inactive"].includes(String(input.status))
+    (typeof input.status !== "string" ||
+      !["active", "inactive"].includes(input.status))
   )
     throw new PortalError("상태를 확인해주세요.");
   if (input.status !== undefined && !owner)

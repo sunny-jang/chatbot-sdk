@@ -370,6 +370,30 @@ async function main() {
         1,
       );
       checks++;
+      await assert.rejects(
+        () => updateCustomer(db, owner, customer, { status: ["inactive"] }),
+        { status: 400 },
+      );
+      assert.equal(
+        (await tx`SELECT status FROM customers WHERE id=${customer}`)[0].status,
+        "active",
+      );
+      checks++;
+      const cancel = await createInvitation(db, owner, customer, {
+        email: "cancel-" + suffix + "@example.test",
+      });
+      await updateMember(db, owner, customer, { invitationId: cancel.id });
+      await assert.rejects(
+        () => updateMember(db, owner, customer, { invitationId: cancel.id }),
+        { status: 409 },
+      );
+      assert.equal(
+        (
+          await tx`SELECT count(*)::int AS n FROM access_audit_logs WHERE action='member.invite.revoke' AND target_id=${cancel.id}`
+        )[0].n,
+        1,
+      );
+      checks++;
       throw rollback;
     });
   } catch (e) {
