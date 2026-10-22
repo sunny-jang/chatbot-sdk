@@ -4,6 +4,7 @@ import { portalUser } from "@/lib/customer-portal/auth";
 import {
   customerBot,
   uploadCustomerDocument,
+  unchangedCustomerDocument,
 } from "@/lib/customer-portal/bots";
 import {
   failure,
@@ -69,6 +70,17 @@ export async function POST(
       ),
       title = text(file.name.replace(/\.[^.]+$/, ""), "제목", 300),
       folderId = form.get("folder_id");
+    const skipped = await sql.begin((tx) =>
+      unchangedCustomerDocument(
+        tx as unknown as AccessDatabase,
+        user.id,
+        p.customerId,
+        p.botId,
+        title,
+        content,
+      ),
+    );
+    if (skipped) return Response.json(skipped);
     const vec = await getEmbedding(
       content.slice(0, 8000),
       await getTenantApiKeyByTenantId(grant.tenant_id),

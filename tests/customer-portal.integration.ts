@@ -1,5 +1,7 @@
 import {
   uploadCustomerDocument,
+  unchangedCustomerDocument,
+  importCustomerQa,
   customerBot,
   configureCustomerBot,
   mutateKnowledge,
@@ -467,6 +469,71 @@ async function main() {
           uploadCustomerDocument(db, agent, customer, bot, uploadInput, vec),
         { status: 403 },
       );
+      checks++;
+      assert.equal(
+        (
+          await unchangedCustomerDocument(
+            db,
+            admin,
+            customer,
+            bot,
+            uploadInput.title,
+            "수정 본문",
+          )
+        )?.skipped,
+        true,
+      );
+      assert.equal(
+        await unchangedCustomerDocument(
+          db,
+          admin,
+          customer,
+          bot,
+          uploadInput.title,
+          "다른 본문",
+        ),
+        null,
+      );
+      checks++;
+      const workbookRows = [
+        {
+          folder: "시트 A",
+          question: "반복 가져오기 질문 A",
+          answer: "기존 답변",
+        },
+        {
+          folder: "시트 B",
+          question: "반복 가져오기 질문 B",
+          answer: "다른 답변",
+        },
+      ];
+      await importCustomerQa(db, admin, customer, bot, workbookRows, null, [
+        vec,
+        vec,
+      ]);
+      const beforeImport =
+        await tx`SELECT q.id,q.question,f.name FROM qa_pairs q JOIN qa_folders f ON f.id=q.folder_id WHERE q.bot_id=${bot} AND q.question LIKE '반복 가져오기 질문%' ORDER BY q.question`;
+      assert.deepEqual(
+        beforeImport.map((r) => r.name),
+        ["시트 A", "시트 B"],
+      );
+      checks++;
+      await importCustomerQa(
+        db,
+        admin,
+        customer,
+        bot,
+        workbookRows.map((r) => ({ ...r, answer: "수정된 답변" })),
+        null,
+        [vec, vec],
+      );
+      const afterImport =
+        await tx`SELECT id,answer FROM qa_pairs WHERE bot_id=${bot} AND question LIKE '반복 가져오기 질문%' ORDER BY question`;
+      assert.deepEqual(
+        afterImport.map((r) => r.id),
+        beforeImport.map((r) => r.id),
+      );
+      assert.ok(afterImport.every((r) => r.answer === "수정된 답변"));
       checks++;
       const qa = await mutateKnowledge(
         db,

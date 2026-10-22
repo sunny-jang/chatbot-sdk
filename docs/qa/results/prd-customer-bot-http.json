@@ -48,6 +48,10 @@
     "status": "pass"
   },
   {
+    "name": "동일 파일 재업로드는 모델 키 없이도 건너뛴다",
+    "status": "pass"
+  },
+  {
     "name": "지식 폴더와 Q&A 항목 ID 변조 차단",
     "status": "pass"
   },
