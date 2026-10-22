@@ -492,15 +492,15 @@ export default function BotSettings({ bot }: { bot: Bot }) {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">챗봇 로고</label>
           <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
-              {logoUrl ? <img src={logoUrl} alt="챗봇 로고" className="w-full h-full object-contain" /> : <span className="text-xl">💬</span>}
+            <div className="w-14 h-14 shrink-0 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
+              <img src={logoUrl || "/chatbot-default.svg"} alt={logoUrl ? "챗봇 로고" : "기본 챗봇 로고"} className="w-full h-full object-contain" />
             </div>
             <label className="px-3 py-2 rounded-lg bg-purple-50 text-purple-700 text-xs font-medium cursor-pointer hover:bg-purple-100">
               {logoUploading ? "업로드 중..." : "이미지 선택"}
               <input type="file" accept="image/*" className="hidden" disabled={logoUploading} onChange={handleLogoUpload} />
             </label>
           </div>
-          <p className="text-xs text-gray-400 mt-1">PNG·JPG, 최대 2MB</p>
+          <p className="text-xs text-gray-400 mt-1">PNG·JPG, 최대 2MB{!logoUrl && " · 이미지 미등록 시 기본 아이콘 사용"}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
