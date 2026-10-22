@@ -7,6 +7,7 @@ import {
   normalizeSupportHours,
 } from "@/lib/supportHours";
 import WidgetPreview from "@/app/components/WidgetPreview";
+import { DEFAULT_WIDGET_COLOR } from "@/lib/widget-presentation";
 type Bot = {
   id: string;
   name: string;
@@ -207,7 +208,7 @@ export default function BotWorkspace({
                 await request(base, "PATCH", {
                   name: draft.name,
                   widget_title: draft.widget_title,
-                  widget_color: draft.widget_color || "#7c3aed",
+                  widget_color: draft.widget_color || DEFAULT_WIDGET_COLOR,
                   greeting_message: draft.greeting_message || "",
                   system_prompt: draft.system_prompt || "",
                   support_mode: draft.support_mode,
@@ -242,7 +243,7 @@ export default function BotWorkspace({
               위젯 색상
               <input
                 type="color"
-                value={draft.widget_color || "#7c3aed"}
+                value={draft.widget_color || DEFAULT_WIDGET_COLOR}
                 onChange={(e) =>
                   setDraft({ ...draft, widget_color: e.target.value })
                 }

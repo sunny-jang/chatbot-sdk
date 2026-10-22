@@ -495,6 +495,77 @@ async function main() {
         null,
       );
       checks++;
+      const docFolder = await mutateKnowledge(
+        db,
+        admin,
+        customer,
+        bot,
+        "folders",
+        "POST",
+        { name: "이동 폴더" },
+        null,
+        null,
+      );
+      const moved = await unchangedCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        uploadInput.title,
+        "수정 본문",
+        docFolder.id,
+      );
+      assert.equal(moved?.skipped, true);
+      assert.equal(moved?.moved, true);
+      assert.equal(
+        (await tx`SELECT folder_id FROM documents WHERE id=${firstDoc.id}`)[0]
+          .folder_id,
+        docFolder.id,
+      );
+      const stayed = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        { ...uploadInput, content: "수정 본문", folder_id: docFolder.id },
+        vec,
+      );
+      assert.equal(stayed.skipped, true);
+      assert.equal(stayed.moved, false);
+      const unclassified = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        { ...uploadInput, content: "수정 본문", folder_id: null },
+        vec,
+      );
+      assert.equal(unclassified.moved, true);
+      assert.equal(
+        (await tx`SELECT folder_id FROM documents WHERE id=${firstDoc.id}`)[0]
+          .folder_id,
+        null,
+      );
+      await assert.rejects(
+        () =>
+          unchangedCustomerDocument(
+            db,
+            admin,
+            customer,
+            bot,
+            uploadInput.title,
+            "수정 본문",
+            randomUUID(),
+          ),
+        { status: 404 },
+      );
+      assert.equal(
+        (
+          await tx`SELECT count(*)::int AS n FROM access_audit_logs WHERE action='knowledge.put' AND target_id=${firstDoc.id}`
+        )[0].n,
+        3,
+      );
+      checks++;
       const workbookRows = [
         {
           folder: "시트 A",

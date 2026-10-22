@@ -78,6 +78,7 @@ export async function POST(
         p.botId,
         title,
         content,
+        folderId || null,
       ),
     );
     if (skipped) return Response.json(skipped);
