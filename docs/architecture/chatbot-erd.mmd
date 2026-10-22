@@ -1,0 +1,434 @@
+erDiagram
+    access_audit_logs {
+        text id PK
+        text actor_user_id FK
+        text tenant_id FK
+        text customer_id FK
+        text action
+        text target_id
+        text outcome
+        int8 created_at
+    }
+    api_rate_limits {
+        text bucket_key PK
+        int4 request_count
+        int8 expires_at
+    }
+    bots {
+        text id PK
+        text tenant_id FK
+        text name
+        text type
+        text system_prompt
+        text model
+        text widget_title
+        text widget_color
+        text greeting_message
+        int8 created_at
+        jsonb proactive_settings
+        text logo_url
+        text support_mode
+        text public_token
+        bool qa_handoff_always
+        text support_channel
+        jsonb support_hours
+        bool force_unattended
+        bool summary_enabled
+        jsonb request_settings
+        text customer_id FK
+    }
+    chat_logs {
+        text id PK
+        text bot_id
+        text session_id
+        text user_message
+        text bot_reply
+        int8 created_at
+        text intent
+        bool refused
+        text refusal_reason
+        text model
+        int4 input_tokens
+        int4 output_tokens
+        int4 latency_ms
+        bool api_success
+        float8 estimated_cost_usd
+        text tool_name
+        bool tool_success
+        text qa_pair_id
+        bool qa_matched
+        float8 qa_match_score
+    }
+    chat_messages {
+        text id PK
+        text session_id FK
+        text sender_type
+        text sender_name
+        text content
+        text source
+        text external_message_id
+        int8 created_at
+        text sender_user_id FK
+    }
+    chat_sessions {
+        text id PK
+        text tenant_id FK
+        text bot_id FK
+        text status
+        text customer_name
+        text assigned_agent_name
+        int8 started_at
+        int8 updated_at
+        int8 closed_at
+        text assigned_agent_user_id FK
+    }
+    customer_demos {
+        text id PK
+        text tenant_id FK
+        text customer_id FK
+        text bot_id FK
+        text created_by FK
+        text token_hash
+        text site_url
+        int8 expires_at
+        int8 revoked_at
+        int4 request_count
+        int4 max_requests
+        int8 created_at
+    }
+    customer_invitations {
+        text id PK
+        text customer_id FK
+        text email
+        text role
+        text invited_by FK
+        text token_hash
+        text status
+        int8 expires_at
+        text accepted_by FK
+        int8 accepted_at
+        int8 created_at
+    }
+    customer_invite_challenges {
+        text token_hash PK
+        text invitation_id FK
+        int8 expires_at
+        int8 used_at
+        int8 created_at
+    }
+    customer_memberships {
+        text customer_id PK, FK
+        text user_id PK, FK
+        text role
+        text status
+        int8 created_at
+        int8 updated_at
+    }
+    customer_message_requests {
+        text session_id PK, FK
+        text request_key PK
+        text payload_hash
+        text message_id FK
+    }
+    customer_password_reset_tokens {
+        text token_hash PK
+        text user_id FK
+        int8 expires_at
+        int8 used_at
+        int8 created_at
+    }
+    customer_requests {
+        text id PK
+        text receipt
+        text bot_id FK
+        text tenant_id FK
+        text session_id FK
+        text kind
+        text name
+        text company
+        text email
+        text phone
+        text message
+        text consent_text
+        text consent_version
+        int4 retention_days
+        text idempotency_key
+        text payload_hash
+        text status
+        text summary
+        int8 created_at
+        int8 updated_at
+    }
+    customers {
+        text id PK
+        text tenant_id FK
+        text name
+        text website
+        text status
+        bool is_default
+        int8 created_at
+    }
+    demo_requests {
+        text id PK
+        text demo_id FK
+        text request_key
+        text payload_hash
+        text kind
+        text receipt
+        int8 created_at
+    }
+    demo_turns {
+        text id PK
+        int8 sequence
+        text demo_id FK
+        text session_id
+        text request_id
+        text payload_hash
+        text question
+        text reply
+        text state
+        int8 created_at
+    }
+    doc_folders {
+        text id PK
+        text bot_id FK
+        text name
+        text parent_id FK
+        int8 created_at
+    }
+    documents {
+        text id PK
+        text bot_id FK
+        text folder_id FK
+        text title
+        text content
+        text embedding
+        int8 created_at
+    }
+    monthly_chat_sessions {
+        text tenant_id PK, FK
+        text month_key PK
+        text session_id PK
+        text bot_id
+        int8 created_at
+    }
+    operation_jobs {
+        text id PK
+        text bot_id FK
+        text kind
+        text target_id
+        text channel
+        text status
+        int4 attempts
+        int8 available_at
+        int8 locked_at
+        text last_error
+    }
+    partner_memberships {
+        text tenant_id PK, FK
+        text user_id PK, FK
+        text role
+        text status
+        int8 created_at
+    }
+    phone_otps {
+        text phone PK
+        text code
+        int8 expires_at
+    }
+    proactive_evaluations {
+        text id PK
+        text bot_id FK
+        text tenant_id FK
+        text visit_id
+        text month_key
+        text summary_hash
+        text state
+        jsonb result
+        int4 input_tokens
+        int4 output_tokens
+        text session_id
+        bool test
+        int8 created_at
+        int8 shown_at
+        int8 clicked_at
+        int8 dismissed_at
+    }
+    qa_folders {
+        text id PK
+        text bot_id FK
+        text name
+        int8 created_at
+    }
+    qa_pairs {
+        text id PK
+        text bot_id FK
+        text folder_id FK
+        text question
+        text answer
+        text embedding
+        int8 created_at
+    }
+    request_notes {
+        text id PK
+        text request_id FK
+        text content
+        int8 created_at
+    }
+    slack_integrations {
+        text bot_id PK, FK
+        text bot_token
+        text signing_secret
+        text channel_id
+        text team_id
+        bool enabled
+        int8 created_at
+        int8 updated_at
+    }
+    support_handoffs {
+        text id PK
+        text session_id FK
+        text bot_id FK
+        text telegram_chat_id
+        int8 telegram_topic_id
+        text slack_channel_id
+        text slack_thread_ts
+        text status
+        text reason
+        int8 requested_at
+        int8 accepted_at
+        int8 closed_at
+        text summary
+        text summary_status
+    }
+    telegram_integrations {
+        text bot_id PK, FK
+        text bot_token
+        text chat_id
+        text webhook_secret
+        bool enabled
+        int8 created_at
+        int8 updated_at
+    }
+    tenants {
+        text id PK
+        text name
+        text api_key
+        text openai_api_key
+        text gemini_api_key
+        int8 created_at
+        text email
+        text password_hash
+        text oauth_provider
+        text oauth_sub
+        text phone
+        bool is_admin
+        text plan
+        text subscription_status
+        int4 enterprise_bot_limit
+        int4 enterprise_monthly_session_limit
+    }
+    unanswered_reviews {
+        text log_id PK, FK
+        text bot_id FK
+        text status
+        text qa_id FK
+        int8 updated_at
+    }
+    user_accounts {
+        text provider PK
+        text provider_subject PK
+        text user_id FK
+    }
+    users {
+        text id PK
+        text legacy_tenant_id FK
+        text name
+        text email
+        text password_hash
+        int4 auth_version
+        int8 email_verified_at
+        text status
+        bool is_platform_admin
+        int8 created_at
+    }
+    web_previews {
+        text id PK
+        text bot_id FK
+        text source_id FK
+        text url
+        text final_url
+        text title
+        text content
+        text source_hash
+        text base_hash
+        text base_document_hash
+        int8 created_at
+    }
+    web_sources {
+        text id PK
+        text bot_id FK
+        text document_id FK
+        text url
+        text final_url
+        text source_hash
+        int8 checked_at
+        int8 applied_at
+        text last_error
+    }
+    users o|--o{ access_audit_logs : "actor_user_id"
+    customers o|--o{ access_audit_logs : "customer_id, tenant_id"
+    tenants ||--o{ access_audit_logs : "tenant_id"
+    customers o|--o{ bots : "customer_id, tenant_id"
+    tenants o|--o{ bots : "tenant_id"
+    users o|--o{ chat_messages : "sender_user_id"
+    chat_sessions ||--o{ chat_messages : "session_id"
+    users o|--o{ chat_sessions : "assigned_agent_user_id"
+    bots ||--o{ chat_sessions : "bot_id"
+    tenants ||--o{ chat_sessions : "tenant_id"
+    bots ||--o{ customer_demos : "bot_id"
+    users ||--o{ customer_demos : "created_by"
+    customers ||--o{ customer_demos : "customer_id"
+    tenants ||--o{ customer_demos : "tenant_id"
+    users o|--o{ customer_invitations : "accepted_by"
+    customers ||--o{ customer_invitations : "customer_id"
+    users ||--o{ customer_invitations : "invited_by"
+    customer_invitations ||--o{ customer_invite_challenges : "invitation_id"
+    customers ||--o{ customer_memberships : "customer_id"
+    users ||--o{ customer_memberships : "user_id"
+    chat_messages ||--o{ customer_message_requests : "message_id"
+    chat_sessions ||--o{ customer_message_requests : "session_id"
+    users ||--o{ customer_password_reset_tokens : "user_id"
+    bots ||--o{ customer_requests : "bot_id"
+    chat_sessions o|--o{ customer_requests : "session_id"
+    tenants ||--o{ customer_requests : "tenant_id"
+    tenants ||--o{ customers : "tenant_id"
+    customer_demos ||--o{ demo_requests : "demo_id"
+    customer_demos ||--o{ demo_turns : "demo_id"
+    bots ||--o{ doc_folders : "bot_id"
+    doc_folders o|--o{ doc_folders : "parent_id"
+    bots ||--o{ documents : "bot_id"
+    doc_folders o|--o{ documents : "folder_id"
+    tenants ||--o{ monthly_chat_sessions : "tenant_id"
+    bots ||--o{ operation_jobs : "bot_id"
+    tenants ||--o{ partner_memberships : "tenant_id"
+    users ||--o{ partner_memberships : "user_id"
+    bots ||--o{ proactive_evaluations : "bot_id"
+    tenants ||--o{ proactive_evaluations : "tenant_id"
+    bots ||--o{ qa_folders : "bot_id"
+    bots ||--o{ qa_pairs : "bot_id"
+    qa_folders o|--o{ qa_pairs : "folder_id"
+    customer_requests ||--o{ request_notes : "request_id"
+    bots ||--o| slack_integrations : "bot_id"
+    bots ||--o{ support_handoffs : "bot_id"
+    chat_sessions ||--o| support_handoffs : "session_id"
+    bots ||--o| telegram_integrations : "bot_id"
+    bots ||--o{ unanswered_reviews : "bot_id"
+    chat_logs ||--o| unanswered_reviews : "log_id"
+    qa_pairs o|--o{ unanswered_reviews : "qa_id"
+    users ||--o{ user_accounts : "user_id"
+    tenants o|--o| users : "legacy_tenant_id"
+    bots ||--o{ web_previews : "bot_id"
+    web_sources o|--o{ web_previews : "source_id"
+    bots ||--o{ web_sources : "bot_id"
+    documents ||--o| web_sources : "document_id"
