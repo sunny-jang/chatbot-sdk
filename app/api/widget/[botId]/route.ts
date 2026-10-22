@@ -54,5 +54,5 @@ export async function GET(_: Request, { params }: { params: Promise<{ botId: str
     greeting: bot.greeting_message || null,
     logo: bot.logo_url || null,
     qaFolders,
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }
