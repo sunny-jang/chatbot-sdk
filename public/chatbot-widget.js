@@ -145,7 +145,7 @@
       #__chatbot-header .title { display: flex; align-items: center; gap: 9px; min-width: 0; }
       #__chatbot-header .title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #__chatbot-header .close { flex-shrink: 0; margin-left: 12px; }
-      #__chatbot-header .logo { width: 30px; height: 30px; border-radius: 8px; background: white; object-fit: contain; flex: 0 0 30px; min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; display: block; }
+      #__chatbot-header .logo { width: 30px; height: 30px; border-radius: 8px; background: transparent; object-fit: contain; flex: 0 0 30px; min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; display: block; }
       #__chatbot-header .close { background: none; border: none; color: white; cursor: pointer; font-size: 18px; line-height: 1; opacity: 0.8; }
       #__chatbot-header .close:hover { opacity: 1; }
       #__chatbot-messages {
