@@ -22,8 +22,12 @@ export async function verifyAgencyCredentials(
 ) {
   const address = email.trim();
   if (!address || !password || password.length > 200) return null;
-  const [tenant] =
-    await db`SELECT id,name,email,password_hash FROM tenants WHERE lower(btrim(email))=${address.toLowerCase()}`;
+  // Exact legacy match first; the normalized match is used only when it is unambiguous.
+  const candidates =
+    await db`SELECT id,name,email,password_hash FROM tenants WHERE lower(btrim(email))=${address.toLowerCase()} ORDER BY created_at,id`;
+  const tenant =
+    candidates.find((row) => row.email === address) ??
+    (candidates.length === 1 ? candidates[0] : undefined);
   if (!tenant) return null;
   let hash: string | null = tenant.password_hash ? String(tenant.password_hash) : null,
     userId: string | null = null,

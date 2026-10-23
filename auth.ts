@@ -7,7 +7,10 @@ import { initSchema } from "@/lib/db";
 import { syncAdminRole } from "@/lib/admin";
 import { provisionAgencyOwner } from "@/lib/access/provision";
 import { GoogleIdentityError, googleIdentity } from "@/lib/access/google";
-import { verifyAgencyCredentials } from "@/lib/access/credentials";
+import {
+  agencySessionValid,
+  verifyAgencyCredentials,
+} from "@/lib/access/credentials";
 import type { AccessDatabase } from "@/lib/access/schema";
 
 declare module "next-auth" {
@@ -259,6 +262,15 @@ async function signedInUserId(): Promise<string | null> {
     const session = await auth();
     if (session?.customer_user_id) return session.customer_user_id;
     if (!session?.tenant_id) return null;
+    // A session that getTenantId would reject (reset, revoked, disabled) must not authorize linking either.
+    if (
+      !(await agencySessionValid(
+        sql,
+        session.tenant_id,
+        session.agency_auth_version ?? null,
+      ))
+    )
+      return null;
     const [user] =
       await sql`SELECT id FROM users WHERE legacy_tenant_id=${session.tenant_id} AND status='active'`;
     return user ? String(user.id) : null;

@@ -17,15 +17,20 @@ export async function GET() {
     catch { return "••••••••••••••••••••"; }
   };
   // Linked Google subjects live on the common identity; legacy tenants.oauth_sub counts until migrated.
-  const [identity] = await sql`SELECT EXISTS(
-    SELECT 1 FROM tenants t WHERE t.id=${tenantId} AND t.oauth_provider='google' AND t.oauth_sub IS NOT NULL
-  ) OR (to_regclass('user_accounts') IS NOT NULL AND EXISTS(
-    SELECT 1 FROM user_accounts a JOIN users u ON u.id=a.user_id WHERE u.legacy_tenant_id=${tenantId} AND a.provider='google'
-  )) AS linked`;
+  // The identity tables are queried only once they exist: a missing relation fails at parse time regardless of short-circuits.
+  const [legacy] = await sql`SELECT EXISTS(SELECT 1 FROM tenants t WHERE t.id=${tenantId} AND t.oauth_provider='google' AND t.oauth_sub IS NOT NULL) AS linked`;
+  let linked = legacy?.linked === true;
+  if (!linked) {
+    const [ready] = await sql`SELECT to_regclass('user_accounts') AS accounts`;
+    if (ready?.accounts) {
+      const [identity] = await sql`SELECT EXISTS(SELECT 1 FROM user_accounts a JOIN users u ON u.id=a.user_id WHERE u.legacy_tenant_id=${tenantId} AND a.provider='google') AS linked`;
+      linked = identity?.linked === true;
+    }
+  }
   return NextResponse.json({
     openai: { hasKey: !!row?.openai_api_key, maskedKey: mask(row?.openai_api_key) },
     gemini: { hasKey: !!row?.gemini_api_key, maskedKey: mask(row?.gemini_api_key) },
-    googleLinked: identity?.linked === true,
+    googleLinked: linked,
   });
 }
 

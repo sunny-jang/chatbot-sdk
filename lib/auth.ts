@@ -1,10 +1,11 @@
+import { cache } from "react";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import sql from "@/lib/neon";
 import { agencySessionValid } from "@/lib/access/credentials";
 
-/** 로그인한 작업 공간 ID. 세션 JWT만 믿지 않고 소유자 신원의 활성 상태·auth_version을 매 요청 확인합니다. */
-export async function getTenantId(): Promise<string | null> {
+/** 로그인한 작업 공간 ID. 세션 JWT만 믿지 않고 소유자 신원의 활성 상태·auth_version을 요청당 한 번 확인합니다. */
+export const getTenantId = cache(async (): Promise<string | null> => {
   const session = await auth();
   if (!session?.tenant_id || session.customer_user_id) return null;
   return (await agencySessionValid(
@@ -14,7 +15,7 @@ export async function getTenantId(): Promise<string | null> {
   ))
     ? session.tenant_id
     : null;
-}
+});
 
 /** 라우트마다 있는 지역 함수 getTenantId와 이름이 겹치지 않도록 둔 별칭입니다. */
 export const readTenantId = getTenantId;

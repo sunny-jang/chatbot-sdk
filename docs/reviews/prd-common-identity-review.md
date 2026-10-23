@@ -95,3 +95,14 @@ Codex 리뷰 봇이 "You have reached your Codex usage limits for code reviews"�
 
 - 실제 Google 계정으로 "설정 → Google 계정 연결" 왕복(로컬 QA에 Google 클라이언트 없음). `auth()`를 Auth.js signIn 콜백 안에서 호출하는 경로는 DB 수준(`sessionUserId`)만 검증했다.
 실행 기록: 단위 127건, DB common-identity 17건·portal 31건 롤백, 프로덕션 빌드(Edge 경고 0)·tsc·린트 통과, fixture 초기화 후 HTTP 32건 통과(auth_version 회수 시 포털 기반 라우트는 403, 기존 tenant 라우트는 401).
+
+### 2단계 독립 리뷰 (2026-10-23, Claude code-review — Codex 사용량 한도로 대체)
+
+5건 모두 반영:
+
+- `/api/tenants/settings`의 `googleLinked` 조회가 같은 문장 안에서 `user_accounts`를 참조해 이관 전 배포에서 parse 오류로 500이 나던 것을, `to_regclass`를 JS에서 먼저 확인한 뒤에만 신원 테이블을 조회하도록 분리.
+- Google 연결 세션 확인(`signedInUserId`)이 `agency_auth_version`·멤버십을 보지 않아 재설정으로 끊긴 세션도 연결을 승인할 수 있던 것을 `agencySessionValid`로 막음.
+- 에이전시 이메일 조회는 정확 일치를 우선하고, 대소문자/공백만 다른 기존 중복이 있으면 정규화 일치가 **유일할 때만** 사용(임의 행 선택 방지).
+- `getTenantId`를 React `cache()`로 감싸 한 요청에서 여러 번 호출돼도 신원 검사를 한 번만 수행.
+- 이관 전(users 테이블 없음) 분기 단위 검사 추가(stub db). tenant 행만 있는 경우는 DB 검사에 이미 포함.
+실행 기록(2단계 리뷰 반영 후): 단위 128건, DB 17건 롤백, 빌드(Edge 경고 0)·tsc·린트 통과, fixture 초기화 후 HTTP 32건 통과.

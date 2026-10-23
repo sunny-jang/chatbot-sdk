@@ -5,6 +5,7 @@ import {
   customerPortalAuthConfig,
   customerPortalAuthOrigin,
 } from "../lib/customer-portal/auth-host";
+import { agencySessionValid } from "../lib/access/credentials";
 import {
   GOOGLE_IDENTITY_MESSAGES,
   displayName,
@@ -104,6 +105,17 @@ test("Google 버튼은 명시 env 또는 AUTH_GOOGLE_* 기본값이 모두 있�
   assert.equal(googleLoginAvailable({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" }), true);
   assert.equal(googleLoginAvailable({ AUTH_GOOGLE_ID: "id", AUTH_GOOGLE_SECRET: "s" }), true);
   assert.equal(googleLoginAvailable({ GOOGLE_CLIENT_ID: "id", AUTH_GOOGLE_SECRET: "s" }), true);
+});
+
+test("users 테이블이 없는 이관 전 배포에서는 tenant 세션이 그대로 유효", async () => {
+  const queries: string[] = [];
+  const db = (async (strings: TemplateStringsArray) => {
+    queries.push(strings.join("?"));
+    return [{ users: null }];
+  }) as unknown as Parameters<typeof agencySessionValid>[0];
+  assert.equal(await agencySessionValid(db, "tenant-1", 7), true);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0], /to_regclass\('users'\)/);
 });
 
 test("Google 로그인 실패 사유는 알려진 코드만 안내문으로 변환", () => {
