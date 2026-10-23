@@ -5,6 +5,11 @@ import type { AccessDatabase } from "../lib/access/schema";
 import { createAccessSchema } from "../lib/access/schema";
 import { googleIdentity, GoogleIdentityError } from "../lib/access/google";
 import {
+  agencySessionValid,
+  verifyAgencyCredentials,
+} from "../lib/access/credentials";
+import { hash } from "bcryptjs";
+import {
   acceptVerifiedInvitation,
   createInvitation,
   updateMember,
@@ -243,13 +248,61 @@ async function main() {
           .token_hash,
         tokenHash(invite.token),
       );
+
+      // Agency email login prefers the common identity's password once the users row exists.
+      const legacyTenant = "pw-" + suffix,
+        legacyOwner = "pw-owner-" + suffix,
+        legacyMail = legacyTenant + "@example.test";
+      await tx`INSERT INTO tenants(id,name,email,api_key,password_hash) VALUES(${legacyTenant},'비밀번호 에이전시',${" PW-" + legacyTenant + "@Example.test "},${randomUUID()},${await hash("tenant-password-1", 4)})`;
+      const [onlyTenant] = await tx`UPDATE tenants SET email=${legacyMail} WHERE id=${legacyTenant} RETURNING id`;
+      assert.ok(onlyTenant);
+      assert.ok(await verifyAgencyCredentials(db, legacyMail, "tenant-password-1"));
+      assert.equal(await verifyAgencyCredentials(db, legacyMail, "wrong"), null);
+      assert.equal(await agencySessionValid(db, legacyTenant, null), true);
+      await tx`INSERT INTO users(id,legacy_tenant_id,name,email,password_hash,auth_version) VALUES(${legacyOwner},${legacyTenant},'소유자',${legacyMail},${await hash("user-password-2", 4)},3)`;
+      await tx`INSERT INTO partner_memberships(tenant_id,user_id) VALUES(${legacyTenant},${legacyOwner})`;
+      assert.equal(await verifyAgencyCredentials(db, legacyMail, "tenant-password-1"), null);
+      const byUser = await verifyAgencyCredentials(db, " " + legacyMail.toUpperCase() + " ", "user-password-2");
+      assert.equal(byUser?.tenantId, legacyTenant);
+      assert.equal(byUser?.userId, legacyOwner);
+      assert.equal(byUser?.authVersion, 3);
+      assert.equal(await agencySessionValid(db, legacyTenant, 3), true);
+      assert.equal(await agencySessionValid(db, legacyTenant, 2), false);
+      await tx`UPDATE users SET status='disabled' WHERE id=${legacyOwner}`;
+      assert.equal(await verifyAgencyCredentials(db, legacyMail, "user-password-2"), null);
+      assert.equal(await agencySessionValid(db, legacyTenant, 3), false);
+      await tx`UPDATE users SET status='active' WHERE id=${legacyOwner}`;
+      await tx`UPDATE partner_memberships SET status='revoked' WHERE tenant_id=${legacyTenant}`;
+      assert.equal(await agencySessionValid(db, legacyTenant, 3), false);
+      await tx`UPDATE partner_memberships SET status='active' WHERE tenant_id=${legacyTenant}`;
+      checks++;
+
+      // A signed-in password session may link Google to its own unverified address; nobody else may.
+      await assert.rejects(
+        () => googleIdentity(db, profile("sub-pw-" + suffix, legacyMail), false),
+        reason("verify_existing"),
+      );
+      await assert.rejects(
+        () => googleIdentity(db, profile("sub-pw-" + suffix, legacyMail), false, { sessionUserId: owner }),
+        reason("verify_existing"),
+      );
+      const linkedOwner = await googleIdentity(db, profile("sub-pw-" + suffix, legacyMail), false, {
+        sessionUserId: legacyOwner,
+      });
+      assert.equal(linkedOwner.id, legacyOwner);
+      assert.equal(linkedOwner.tenantId, legacyTenant);
+      assert.ok(
+        Number((await tx`SELECT email_verified_at FROM users WHERE id=${legacyOwner}`)[0].email_verified_at) > 0,
+      );
+      assert.equal(await count("user_accounts", "user_id", legacyOwner), 1);
+      checks++;
       throw rollback;
     });
   } catch (e) {
     if (e !== rollback) throw e;
   }
   console.log(
-    `Google 신원 생성/연결/거부·초대 수락 멱등/재초대/회수/만료 ${checks}개 검증 통과. 전체 롤백.`,
+    `Google 신원 생성/연결/거부·초대 수락 멱등/재초대/회수/만료·에이전시 공통 비밀번호/세션 ${checks}개 검증 통과. 전체 롤백.`,
   );
 }
 main()

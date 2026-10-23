@@ -7,6 +7,10 @@ import { initSchema } from "@/lib/db";
 import { syncAdminRole } from "@/lib/admin";
 import { provisionAgencyOwner } from "@/lib/access/provision";
 import { GoogleIdentityError, googleIdentity } from "@/lib/access/google";
+import {
+  agencySessionValid,
+  verifyAgencyCredentials,
+} from "@/lib/access/credentials";
 import type { AccessDatabase } from "@/lib/access/schema";
 
 declare module "next-auth" {
@@ -15,10 +19,12 @@ declare module "next-auth" {
     is_admin: boolean;
     customer_user_id: string | null;
     customer_auth_version: number | null;
+    agency_auth_version: number | null;
   }
   interface User {
     customerPortal?: boolean;
     customerAuthVersion?: number;
+    agencyAuthVersion?: number | null;
   }
 }
 
@@ -100,26 +106,19 @@ export const authConfig: NextAuthConfig = {
           typeof credentials.password === "string" ? credentials.password : "";
         if (!email || !password) return null;
         await initSchema();
-        const rows =
-          await sql`SELECT id, name, email, password_hash FROM tenants WHERE email = ${email}`;
-        const tenant = rows[0] as
-          | {
-              id: string;
-              name: string;
-              email: string;
-              password_hash: string | null;
-            }
-          | undefined;
-        if (
-          !tenant?.password_hash ||
-          !(await compare(password, tenant.password_hash))
-        )
-          return null;
-        await syncAdminRole(tenant.id, tenant.email);
+        // The common identity's password wins once the owner's users row exists.
+        const found = await verifyAgencyCredentials(sql, email, password);
+        if (!found) return null;
+        if (found.email) await syncAdminRole(found.tenantId, found.email);
         await sql.begin((tx) =>
-          provisionAgencyOwner(tx as unknown as AccessDatabase, tenant.id),
+          provisionAgencyOwner(tx as unknown as AccessDatabase, found.tenantId),
         );
-        return { id: tenant.id, name: tenant.name, email: tenant.email };
+        return {
+          id: found.tenantId,
+          name: found.name,
+          email: found.email,
+          agencyAuthVersion: found.authVersion,
+        };
       },
     }),
     // 로컬 개발 전용 테스트 로그인. 운영 빌드에는 공급자 자체가 등록되지 않습니다.
@@ -174,6 +173,8 @@ export const authConfig: NextAuthConfig = {
         return denied("unverified");
       await initSchema();
       try {
+        // A signed-in password session may link Google to its own unverified address.
+        const sessionUserId = await signedInUserId();
         const identity = await sql.begin((tx) =>
           googleIdentity(
             tx as unknown as AccessDatabase,
@@ -184,6 +185,7 @@ export const authConfig: NextAuthConfig = {
               verified: profile.email_verified === true,
             },
             customerOnly,
+            { sessionUserId },
           ),
         );
         const portal = customerOnly || !identity.tenantId;
@@ -192,6 +194,7 @@ export const authConfig: NextAuthConfig = {
         user.email = identity.email;
         user.customerPortal = portal;
         user.customerAuthVersion = identity.authVersion;
+        user.agencyAuthVersion = identity.authVersion;
         if (!portal) await syncAdminRole(identity.tenantId!, identity.email);
       } catch (e) {
         if (e instanceof GoogleIdentityError) return denied(e.reason);
@@ -215,6 +218,10 @@ export const authConfig: NextAuthConfig = {
       if (user?.id) {
         token.customer_user_id = null;
         token.customer_auth_version = null;
+        token.agency_auth_version =
+          typeof user.agencyAuthVersion === "number"
+            ? user.agencyAuthVersion
+            : null;
         token.tenant_id = user.id;
         // 관리자 여부는 로그인 방식과 관계없이 DB 기준으로 저장합니다. (Google 로그인은 signIn 콜백에서 ADMIN_EMAILS로 먼저 동기화)
         const rows =
@@ -235,6 +242,10 @@ export const authConfig: NextAuthConfig = {
           ? token.customer_user_id
           : null;
       session.tenant_id = (token.tenant_id as string) ?? null;
+      session.agency_auth_version =
+        typeof token.agency_auth_version === "number"
+          ? token.agency_auth_version
+          : null;
       session.is_admin = (token.is_admin as boolean) ?? false;
       return session;
     },
@@ -244,3 +255,26 @@ export const authConfig: NextAuthConfig = {
   },
 };
 export const { handlers, signIn, signOut, auth } = NextAuth(authConfig);
+
+/** Common user id of the session that started this OAuth callback, if any. */
+async function signedInUserId(): Promise<string | null> {
+  try {
+    const session = await auth();
+    if (session?.customer_user_id) return session.customer_user_id;
+    if (!session?.tenant_id) return null;
+    // A session that getTenantId would reject (reset, revoked, disabled) must not authorize linking either.
+    if (
+      !(await agencySessionValid(
+        sql,
+        session.tenant_id,
+        session.agency_auth_version ?? null,
+      ))
+    )
+      return null;
+    const [user] =
+      await sql`SELECT id FROM users WHERE legacy_tenant_id=${session.tenant_id} AND status='active'`;
+    return user ? String(user.id) : null;
+  } catch {
+    return null;
+  }
+}
