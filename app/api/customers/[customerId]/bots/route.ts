@@ -16,15 +16,28 @@ export async function POST(
   try {
     sameOrigin(req);
     const { customerId } = await params,
-      { user } = await agencyOwner(),
+      { user, tenantId } = await agencyOwner(),
       input = await body(req),
       botId = text(input.botId, "챗봇", 200);
     await sql.begin(async (tx) => {
-      const db = tx as unknown as AccessDatabase,
-        grant = await lockAccess(db, user.id, customerId, "bot.move");
+      const db = tx as unknown as AccessDatabase;
+      const [before] =
+        await tx`SELECT customer_id FROM bots WHERE id=${botId} AND tenant_id=${tenantId}`;
+      if (!before) throw new PortalError("챗봇을 찾을 수 없습니다.", 404);
+      const scopes = [
+        customerId,
+        ...(before.customer_id ? [String(before.customer_id)] : []),
+      ].sort();
+      await tx`SELECT id FROM customers WHERE id=ANY(${scopes}) ORDER BY id FOR UPDATE`;
+      const grant = await lockAccess(db, user.id, customerId, "bot.move");
       const [b] =
         await tx`SELECT id,customer_id FROM bots WHERE id=${botId} AND tenant_id=${grant.tenant_id} FOR UPDATE`;
       if (!b) throw new PortalError("챗봇을 찾을 수 없습니다.", 404);
+      if (b.customer_id !== before.customer_id)
+        throw new PortalError(
+          "챗봇 소속이 변경되었습니다. 다시 시도해주세요.",
+          409,
+        );
       if (b.customer_id === customerId) return;
       const [used] =
         await tx`SELECT EXISTS(SELECT 1 FROM chat_sessions WHERE bot_id=${botId}) OR EXISTS(SELECT 1 FROM chat_logs WHERE bot_id=${botId}) OR EXISTS(SELECT 1 FROM customer_requests WHERE bot_id=${botId}) AS used`;

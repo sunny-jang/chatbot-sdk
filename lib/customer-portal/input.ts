@@ -68,7 +68,7 @@ export function sameOrigin(req: Request) {
   if (!origin || origin !== expected)
     throw new PortalError("요청 출처를 확인해주세요.", 403);
 }
-export async function body(req: Request) {
+export async function body(req: Request, maxBytes = 12000) {
   const reader = req.body?.getReader();
   if (!reader) throw new PortalError("입력 내용을 확인해주세요.");
   const chunks: Uint8Array[] = [];
@@ -77,7 +77,7 @@ export async function body(req: Request) {
     const part = await reader.read();
     if (part.done) break;
     bytes += part.value.length;
-    if (bytes > 12000) {
+    if (bytes > maxBytes) {
       await reader.cancel();
       throw new PortalError("요청이 너무 큽니다.", 413);
     }
