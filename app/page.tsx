@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import sql from "@/lib/neon";
+import { hiddenBotIds } from "@/lib/access/visibility";
 import { initSchema } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
 export const dynamic = "force-dynamic";
@@ -23,13 +24,14 @@ export default async function HomePage() {
   const tenantId = await getTenantId();
   if (!tenantId) redirect("/brochure.html");
   await initSchema();
+  const hidden = await hiddenBotIds(sql, tenantId);
   const [counts, waiting, requests, bots] = await Promise.all([
     sql`SELECT (SELECT COUNT(*)::int FROM support_handoffs h JOIN chat_sessions s ON s.id=h.session_id WHERE s.tenant_id=${tenantId} AND h.status='waiting') AS waiting,
       (SELECT COUNT(*)::int FROM support_handoffs h JOIN chat_sessions s ON s.id=h.session_id WHERE s.tenant_id=${tenantId} AND h.status='active') AS active,
-      (SELECT COUNT(*)::int FROM customer_requests WHERE tenant_id=${tenantId} AND status='new') AS requests,
+      (SELECT COUNT(*)::int FROM customer_requests WHERE tenant_id=${tenantId} AND status='new' AND bot_id <> ALL(${hidden}::text[])) AS requests,
       (SELECT COUNT(*)::int FROM bots WHERE tenant_id=${tenantId}) AS bots`,
     sql`SELECT h.id,h.session_id,s.customer_name,b.name AS bot_name,h.reason FROM support_handoffs h JOIN chat_sessions s ON s.id=h.session_id JOIN bots b ON b.id=h.bot_id WHERE s.tenant_id=${tenantId} AND h.status='waiting' ORDER BY h.requested_at ASC LIMIT 5`,
-    sql`SELECT r.id,r.bot_id,r.name,r.kind,b.name AS bot_name FROM customer_requests r JOIN bots b ON b.id=r.bot_id WHERE r.tenant_id=${tenantId} AND r.status='new' ORDER BY r.created_at ASC LIMIT 5`,
+    sql`SELECT r.id,r.bot_id,r.name,r.kind,b.name AS bot_name FROM customer_requests r JOIN bots b ON b.id=r.bot_id WHERE r.tenant_id=${tenantId} AND r.status='new' AND r.bot_id <> ALL(${hidden}::text[]) ORDER BY r.created_at ASC LIMIT 5`,
     sql`SELECT id,name,type FROM bots WHERE tenant_id=${tenantId} ORDER BY created_at DESC LIMIT 4`,
   ]);
   const stats = counts[0];

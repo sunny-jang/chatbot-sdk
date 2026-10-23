@@ -93,6 +93,20 @@ async function main() {
       await sql`DELETE FROM bots WHERE id=${ownBot}`;
     }
   });
+  await check("고객사 봇의 접수·미응답은 고객사만 처리하고 에이전시 화면에서 빠진다", async () => {
+    assert.equal((await api("/api/bots/portal-cafe-bot/requests", agency, owner)).status, 403);
+    assert.equal((await api("/api/bots/portal-cafe-bot/unanswered", agency, owner)).status, 403);
+    const list = await api("/requests", agency, owner);
+    assert.equal(list.status, 200);
+    assert.ok(!list.data.includes("김방문"), "customer request name must not render for the agency");
+    const home = await api("/", agency, owner);
+    assert.ok(!home.data.includes("김방문"));
+    const botPage = await api("/bots/portal-cafe-bot/requests", agency, owner);
+    assert.ok(botPage.data.includes("고객사가 직접 처리하는 접수"));
+    const desk = await api("/api/customer/qa-cafe/requests", "desk.localhost:3012", admin);
+    assert.equal(desk.status, 200);
+    assert.ok(JSON.stringify(desk.data).includes("김방문"));
+  });
   await check("에이전시 세션은 소유자 auth_version 회수에 즉시 반응", async () => {
     assert.equal((await api("/api/customers", agency, owner)).status, 200);
     await sql`UPDATE users SET auth_version=auth_version+1 WHERE id='portal-owner'`;

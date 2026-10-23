@@ -49,4 +49,8 @@
 - PRD 권한표에 "대화 원문 분석·대화 기록·세션 상세: 자사·미배정 봇만" 행과 결정 메모 추가.
 - 검증: DB 1건(배정/자사/미배정 구분), HTTP 1건(원문 제외·집계 포함·단일 봇 selected·logs 403/200·페이지 안내·desk 원문 유지).
 
-**후속 결정 필요**: `/api/bots/[id]/unanswered`(미응답 보완)와 `/api/bots/[id]/requests`(문의 원문)는 지식 유지·접수 처리 업무라 이번 제한에 넣지 않았다. 같은 경계를 적용할지 결정이 필요하다.
+**추가 결정(같은 날)**: 문의·견적 접수와 미응답 질문 보완은 **고객사가 직접 처리**한다.
+- `/api/bots/[id]/requests` GET/PATCH·`/api/bots/[id]/unanswered` GET/POST/PATCH → 고객사 봇이면 403(`REQUESTS_NOTICE`). `/bots/[id]/requests` 페이지는 안내 패널, Q&A 분석의 미응답 보완 영역은 안내 문구로 대체.
+- 에이전시 `/requests` 목록과 업무 홈의 "새 문의·견적" 수치·목록은 `bot_id <> ALL(hidden)`로 고객사 봇을 제외하고, 제외가 있을 때 설명 문구를 붙인다.
+- desk의 고객사 `/customer/[customerId]/requests`는 그대로.
+- HTTP 1건 추가: 고객사 봇 requests/unanswered 403, 에이전시 /requests·홈에 고객사 접수(김방문) 미노출, desk 관리자 경로에는 노출.

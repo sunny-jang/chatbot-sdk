@@ -25,5 +25,12 @@ export async function isRestrictedBot(
   return (await restrictedBotIds(db, tenantId)).has(botId);
 }
 
+/** For SQL: `bot_id <> ALL(${await hiddenBotIds(db, tenantId)}::text[])` is true when nothing is restricted. */
+export async function hiddenBotIds(db: AccessDatabase, tenantId: string) {
+  return [...(await restrictedBotIds(db, tenantId))];
+}
+
+export const REQUESTS_NOTICE =
+  "고객사에 배정된 챗봇으로 접수된 문의·견적과 미응답 질문은 해당 고객사가 상담함에서 직접 처리합니다.";
 export const RESTRICTED_NOTICE =
   "고객사에 배정된 챗봇의 대화 원문은 해당 고객사 상담함에서만 열람할 수 있습니다. 여기에는 집계 수치만 포함됩니다.";
