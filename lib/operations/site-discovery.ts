@@ -98,7 +98,6 @@ export async function discoverSitePages(input: string) {
       if (page) pages.add(page);
     });
   }
-  if (!pages.size)
-    throw new OperationError("가져올 페이지를 찾지 못했습니다.");
+  if (!pages.size) throw new OperationError("sitemap 검색결과가 없습니다.");
   return { via, pages: [...pages], startUrl: base.toString() };
 }

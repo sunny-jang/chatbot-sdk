@@ -273,8 +273,10 @@ export default function WebSourceManager({
           <div className="border border-gray-200 rounded-xl p-4 mt-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <span>
-                {discovered.via === "sitemap" ? "사이트맵" : "첫 페이지 링크"}
-                에서 {discovered.pages.length}개 발견 · {selected.size}개 선택
+                {discovered.via === "sitemap"
+                  ? "사이트맵에서"
+                  : "사이트맵이 없어 첫 페이지 링크에서"}{" "}
+                {discovered.pages.length}개 발견 · {selected.size}개 선택
               </span>
               <span className="flex gap-2">
                 <button

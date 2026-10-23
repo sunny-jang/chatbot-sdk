@@ -24,7 +24,8 @@ export function masterHostAllows(path: string) {
     path.startsWith("/admin/") ||
     path.startsWith("/api/admin") ||
     path.startsWith("/api/auth/") ||
-    path === "/login"
+    path === "/login" ||
+    path === "/robots.txt"
   );
 }
 export function masterOrigin(env: Record<string, string | undefined> = process.env) {
