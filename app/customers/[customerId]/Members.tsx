@@ -136,23 +136,27 @@ export default function Members({
         </button>
       </form>
       {url && (
-        <div className="cp-panel">
-          <label>
-            초대 링크
-            <input
-              className="cp-input"
-              value={url}
-              readOnly
-              onFocus={(e) => e.target.select()}
-            />
-          </label>
-          <p className="cp-note">이 링크를 초대한 담당자에게 전달해주세요.</p>
-          <button
-            className="cp-button"
-            onClick={() => void navigator.clipboard.writeText(url)}
-          >
-            링크 복사
-          </button>
+        <div className="cp-callout" role="status">
+          <strong style={{ fontSize: 13 }}>초대 링크가 만들어졌습니다</strong>
+          <input
+            className="cp-input"
+            value={url}
+            readOnly
+            onFocus={(e) => e.target.select()}
+            aria-label="초대 링크"
+          />
+          <div className="cp-row">
+            <button
+              type="button"
+              className="cp-button"
+              onClick={() => void navigator.clipboard.writeText(url)}
+            >
+              링크 복사
+            </button>
+            <span className="cp-note">
+              초대한 담당자에게 직접 전달해주세요. 72시간 뒤 만료됩니다.
+            </span>
+          </div>
         </div>
       )}
       <div className="cp-table-wrap">
@@ -170,11 +174,14 @@ export default function Members({
               <tr key={m.id}>
                 <td>
                   {m.name}
-                  <br />
                   <small>{m.email}</small>
                 </td>
                 <td>{m.role === "admin" ? "고객사 관리자" : "상담 담당자"}</td>
-                <td>{m.status === "active" ? "사용 중" : "해제"}</td>
+                <td>
+                  <span className={`cp-chip ${m.status === "active" ? "ok" : "muted"}`}>
+                    {m.status === "active" ? "사용 중" : "해제"}
+                  </span>
+                </td>
                 <td>
                   {m.status === "active" && (owner || m.role === "agent") && (
                     <button
@@ -196,29 +203,45 @@ export default function Members({
       {!items.length && (
         <p className="cp-note">아직 연결된 담당자가 없습니다.</p>
       )}
-      <h3>최근 초대</h3>
-      {invitations.map((i) => (
-        <p className="cp-row cp-note" key={i.id}>
-          {i.email} · {i.role === "admin" ? "관리자" : "담당자"} ·{" "}
-          {(
-            {
-              pending: "수락 대기",
-              accepted: "수락 완료",
-              revoked: "취소",
-              expired: "만료",
-            } as Record<string, string>
-          )[i.status] || i.status}
-          {i.status === "pending" && (owner || i.role === "agent") && (
-            <button
-              className="cp-link"
-              disabled={busy}
-              onClick={() => void update({ invitationId: i.id })}
-            >
-              초대 취소
-            </button>
-          )}
-        </p>
-      ))}
+      {invitations.length > 0 && <h3>최근 초대</h3>}
+      {invitations.length > 0 && (
+        <ul className="cp-list">
+          {invitations.map((i) => (
+            <li key={i.id}>
+              <span>
+                {i.email}
+                <small style={{ marginLeft: 8 }}>
+                  {i.role === "admin" ? "고객사 관리자" : "상담 담당자"}
+                </small>
+              </span>
+              <span className="cp-row" style={{ gap: 10 }}>
+                <span
+                  className={`cp-chip ${i.status === "pending" ? "warn" : i.status === "accepted" ? "ok" : "muted"}`}
+                >
+                  {(
+                    {
+                      pending: "수락 대기",
+                      accepted: "수락 완료",
+                      revoked: "취소",
+                      expired: "만료",
+                    } as Record<string, string>
+                  )[i.status] || i.status}
+                </span>
+                {i.status === "pending" && (owner || i.role === "agent") && (
+                  <button
+                    type="button"
+                    className="cp-link"
+                    disabled={busy}
+                    onClick={() => void update({ invitationId: i.id })}
+                  >
+                    초대 취소
+                  </button>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
