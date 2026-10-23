@@ -123,7 +123,7 @@
       }
       #__chatbot-fab .fab-logo {
         width: 52px; height: 52px; padding: 0; border-radius: 50%;
-        object-fit: contain; display: block; flex: 0 0 52px; min-width: 52px; max-width: 52px; min-height: 52px; max-height: 52px; box-sizing: border-box; background: white;
+        object-fit: contain; display: block; flex: 0 0 52px; min-width: 52px; max-width: 52px; min-height: 52px; max-height: 52px; box-sizing: border-box; background: transparent;
       }
       #__chatbot-fab:hover { transform: scale(1.05); box-shadow: 0 6px 20px ${color}88; }
       #__chatbot-panel {
