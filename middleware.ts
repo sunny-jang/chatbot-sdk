@@ -19,6 +19,8 @@ const TENANT_PUBLIC_PATHS = [
   "/plan",
   "/brochure.html",
   "/customer/login",
+  "/sitemap.xml",
+  "/robots.txt",
 ];
 const TENANT_PUBLIC_PREFIXES = [
   "/api/cron/",

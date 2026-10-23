@@ -16,6 +16,9 @@ import {
   normalizeWebUrl,
 } from "@/lib/operations/web-fetch";
 import { extractPage } from "@/lib/operations/extract";
+import { discoverSitePages } from "@/lib/operations/site-discovery";
+/** 한 요청에서 가져오는 페이지 수. 페이지당 최대 15초라 60초 실행 제한 안에 맞춥니다. */
+export const IMPORT_BATCH = 3;
 type Context = { params: Promise<{ id: string }> };
 export async function readWebSources(
   _: Request,
@@ -41,6 +44,81 @@ export async function manageWebSources(
     const { id } = await params;
     const { tenantId } = await adminBot(id, sql, false, allowCustomer);
     const body = await jsonBody(req);
+    if (body.action === "discover") {
+      const found = await discoverSitePages(
+        boundedText(body.url, "URL", 2000),
+      );
+      const registered = new Set(
+        (
+          await sql`SELECT url FROM web_sources WHERE bot_id=${id} AND url=ANY(${found.pages}::text[])`
+        ).map((r) => String(r.url)),
+      );
+      return Response.json({
+        via: found.via,
+        startUrl: found.startUrl,
+        pages: found.pages.map((url) => ({
+          url,
+          registered: registered.has(url),
+        })),
+      });
+    }
+    if (body.action === "import") {
+      // 검토 없이 바로 반영하는 일괄 가져오기. URL별로 성공/실패를 따로 돌려줍니다.
+      const urls = Array.isArray(body.urls)
+        ? body.urls.slice(0, IMPORT_BATCH).map((u) => boundedText(u, "URL", 2000))
+        : [];
+      if (!urls.length) throw new OperationError("가져올 URL이 없습니다.");
+      const folderId = body.folderId
+        ? boundedText(body.folderId, "폴더", 200)
+        : null;
+      if (
+        folderId &&
+        !(
+          await sql`SELECT id FROM doc_folders WHERE id=${folderId} AND bot_id=${id}`
+        )[0]
+      )
+        throw new OperationError("폴더를 찾을 수 없습니다.", 404);
+      const key = await getTenantApiKeyByTenantId(tenantId);
+      if (!key) throw new OperationError("OpenAI API 키를 등록해주세요.");
+      const results: { url: string; ok: boolean; message: string }[] = [];
+      for (const raw of urls) {
+        try {
+          const url = normalizeWebUrl(raw).toString();
+          if (
+            (await sql`SELECT id FROM web_sources WHERE bot_id=${id} AND url=${url}`)[0]
+          ) {
+            results.push({ url, ok: true, message: "이미 등록됨" });
+            continue;
+          }
+          const fetched = await fetchPublicHtml(url);
+          const extracted = extractPage(fetched.html);
+          const hash = contentHash(extracted.content);
+          const embedding = await getEmbedding(
+            extracted.content.slice(0, 8000),
+            key,
+          );
+          await sql.begin(async (tx) => {
+            await adminBot(id, tx as unknown as AccessDatabase, true, allowCustomer);
+            await tx`SELECT id FROM bots WHERE id=${id} FOR UPDATE`;
+            if (
+              (await tx`SELECT id FROM web_sources WHERE bot_id=${id} AND url=${url}`)[0]
+            )
+              throw new OperationError("이미 등록된 URL입니다.", 409);
+            const docId = randomUUID();
+            await tx`INSERT INTO documents(id,bot_id,folder_id,title,content,embedding) VALUES(${docId},${id},${folderId},${extracted.title},${extracted.content},${JSON.stringify(embedding)})`;
+            await tx`INSERT INTO web_sources(id,bot_id,document_id,url,final_url,source_hash) VALUES(${randomUUID()},${id},${docId},${url},${fetched.finalUrl},${hash})`;
+          });
+          results.push({ url, ok: true, message: extracted.title });
+        } catch (e) {
+          results.push({
+            url: raw,
+            ok: false,
+            message: e instanceof OperationError ? e.message : "수집 실패",
+          });
+        }
+      }
+      return Response.json({ results });
+    }
     if (body.action === "preview") {
       let source = null;
       let url = normalizeWebUrl(boundedText(body.url, "URL", 2000)).toString();

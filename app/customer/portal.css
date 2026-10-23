@@ -638,3 +638,125 @@
     padding: 8px 12px;
   }
 }
+
+/* ---------- Inline forms: label above control, controls and buttons share one baseline ---------- */
+.cp-row > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #43516a;
+}
+form.cp-row {
+  align-items: flex-end;
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.cp-row .cp-input {
+  margin-top: 0;
+  min-height: 40px;
+  width: auto;
+  min-width: 220px;
+}
+.cp-row select.cp-input {
+  min-width: 180px;
+}
+.cp-row .cp-button {
+  min-height: 40px;
+}
+.cp-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 22px 0 8px;
+}
+.cp-panel > .cp-note {
+  margin-top: 10px;
+}
+.cp-list {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--cp-border-soft);
+  border-radius: var(--cp-radius-sm);
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+.cp-list > li,
+.cp-list > div {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--cp-border-soft);
+  font-size: 14px;
+}
+.cp-list > li:last-child,
+.cp-list > div:last-child {
+  border-bottom: 0;
+}
+.cp-list small {
+  color: var(--cp-muted);
+  font-size: 12.5px;
+}
+.cp-callout {
+  margin: 14px 0 4px;
+  padding: 14px 16px;
+  border: 1px solid #d6e0fb;
+  background: var(--cp-primary-soft);
+  border-radius: var(--cp-radius-sm);
+  display: grid;
+  gap: 8px;
+}
+.cp-callout .cp-input {
+  margin-top: 0;
+  background: #fff;
+}
+.cp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--cp-primary-soft);
+  color: var(--cp-primary-text);
+  white-space: nowrap;
+}
+.cp-chip.muted {
+  background: #eef0f3;
+  color: var(--cp-muted);
+}
+.cp-chip.ok {
+  background: #e7f5ee;
+  color: #1b7f55;
+}
+.cp-chip.warn {
+  background: #fff4e0;
+  color: #b4720d;
+}
+.cp-table td small {
+  display: block;
+  color: var(--cp-muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+.cp-table button.cp-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}
+@media (max-width: 760px) {
+  form.cp-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .cp-row .cp-input,
+  .cp-row select.cp-input {
+    width: 100%;
+    min-width: 0;
+  }
+}

@@ -36,15 +36,22 @@ export default function CustomerBots({
   return (
     <section className="cp-panel">
       <h2>연결된 챗봇</h2>
-      {bots
-        .filter((b) => b.customer_id === customerId)
-        .map((b) => (
-          <p key={b.id}>
-            <Link className="cp-link" href={`/bots/${b.id}`}>
-              {b.name} 설정
-            </Link>
-          </p>
-        ))}
+      {bots.some((b) => b.customer_id === customerId) ? (
+        <ul className="cp-list">
+          {bots
+            .filter((b) => b.customer_id === customerId)
+            .map((b) => (
+              <li key={b.id}>
+                <span>{b.name}</span>
+                <Link className="cp-link" href={`/bots/${b.id}`}>
+                  설정 열기
+                </Link>
+              </li>
+            ))}
+        </ul>
+      ) : (
+        <p className="cp-note">아직 연결된 챗봇이 없습니다.</p>
+      )}
       <form className="cp-row" onSubmit={connect}>
         <label>
           챗봇 연결
