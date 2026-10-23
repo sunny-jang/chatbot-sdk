@@ -66,7 +66,7 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`"${name}" 고객사를 삭제하시겠어요? 해당 고객사의 모든 봇도 삭제됩니다.`)) return;
+    if (!confirm(`"${name}" 에이전시를 삭제하시겠어요? 해당 에이전시의 모든 고객사와 봇도 삭제됩니다.`)) return;
     await fetch(`/api/admin/tenants/${id}`, { method: "DELETE" });
     setTenants((prev) => prev.filter((t) => t.id !== id));
   }
@@ -107,13 +107,13 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
     <div className="max-w-3xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold" style={{ color: "#1a1040" }}>계정 관리</h1>
-        <p className="text-sm mt-1" style={{ color: "#9b8fc0" }}>고객사 계정을 생성하고 관리합니다</p>
+        <p className="text-sm mt-1" style={{ color: "#9b8fc0" }}>에이전시(파트너) 계정의 요금제·구독·한도를 관리합니다</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl p-5 border" style={{ backgroundColor: "#fff", borderColor: "#e8e6ff" }}>
-          <p className="text-sm mb-1" style={{ color: "#9b8fc0" }}>총 고객사</p>
+          <p className="text-sm mb-1" style={{ color: "#9b8fc0" }}>총 에이전시</p>
           <p className="text-3xl font-bold" style={{ color: "#1a1040" }}>{tenants.length}</p>
         </div>
         <div className="rounded-xl p-5 border" style={{ backgroundColor: "#fff", borderColor: "#e8e6ff" }}>
@@ -124,13 +124,13 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
 
       {/* New tenant form */}
       <div className="rounded-xl p-6 mb-5 border" style={{ backgroundColor: "#fff", borderColor: "#e8e6ff" }}>
-        <h2 className="font-semibold mb-4" style={{ color: "#2d1b69" }}>새 고객사 추가</h2>
+        <h2 className="font-semibold mb-4" style={{ color: "#2d1b69" }}>새 에이전시 추가</h2>
         <form onSubmit={handleCreate} className="flex gap-3">
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="고객사 이름"
+            placeholder="에이전시 이름"
             required
             className="flex-1 px-3 py-2 rounded-lg text-sm focus:outline-none"
             style={{ border: "1px solid #d4cfff", backgroundColor: "#faf9ff", color: "#1a1040" }}
@@ -178,12 +178,12 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
       {/* Tenant list */}
       <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: "#fff", borderColor: "#e8e6ff" }}>
         <div className="px-6 py-4 border-b" style={{ borderColor: "#e8e6ff" }}>
-          <h2 className="font-semibold" style={{ color: "#2d1b69" }}>고객사 목록</h2>
+          <h2 className="font-semibold" style={{ color: "#2d1b69" }}>에이전시 목록</h2>
         </div>
 
         {tenants.length === 0 ? (
           <div className="px-6 py-12 text-center text-sm" style={{ color: "#b8aee0" }}>
-            아직 등록된 고객사가 없어요
+            아직 등록된 에이전시가 없어요
           </div>
         ) : (
           <div className="divide-y" style={{ borderColor: "#f0eeff" }}>
