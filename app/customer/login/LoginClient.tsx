@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import Image from "next/image";
 export default function CustomerLogin({
   agencyOrigin,
   next,
@@ -43,7 +44,16 @@ export default function CustomerLogin({
     <main className="cp-login">
       <section>
         <Link href="/customer" className="cp-wordmark">
-          Ideal AI <span>고객사 상담함</span>
+          <Image
+            src="/logo.png"
+            alt="Ideal AI"
+            width={120}
+            height={36}
+            priority
+            unoptimized
+            style={{ width: 120, height: "auto" }}
+          />
+          <span>고객사 상담함</span>
         </Link>
         <h1>
           우리 회사의 상담을
