@@ -1,11 +1,12 @@
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
-import { isAdminEmail, syncAdminRole } from "@/lib/admin";
+import { syncAdminRole } from "@/lib/admin";
 import { provisionAgencyOwner } from "@/lib/access/provision";
+import { GoogleIdentityError, googleIdentity } from "@/lib/access/google";
 import type { AccessDatabase } from "@/lib/access/schema";
 
 declare module "next-auth" {
@@ -21,13 +22,20 @@ declare module "next-auth" {
   }
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+export const authConfig: NextAuthConfig = {
   // 모든 로그인 방식(Google·이메일·개발 로그인)이 Auth.js 세션 하나를 사용합니다.
   // 세션 쿠키는 Auth.js가 AUTH_SECRET으로 암호화한 표준 JWT로 발급하므로 직접 서명하지 않습니다.
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    Google({
+      id: "customer-google",
+      name: "Google 고객사 로그인",
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: { params: { prompt: "select_account" } },
     }),
     Credentials({
       id: "customer-credentials",
@@ -157,36 +165,43 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async signIn({ user, account, profile }) {
       if (!account) return false;
       // 아래 계정 연결 로직은 Google 전용입니다. 이메일·개발 로그인은 authorize에서 이미 계정을 확인했습니다.
-      if (account.provider !== "google") return true;
-      if (profile?.email_verified !== true) return false;
+      if (!["google", "customer-google"].includes(account.provider)) return true;
+      const customerOnly = account.provider === "customer-google";
+      // Customer-portal failures redirect with a short reason; the agency login keeps Auth.js's generic denial.
+      const denied = (reason: string) =>
+        customerOnly ? `/customer/login?error=${reason}` : false;
+      if (profile?.email_verified !== true || !user.email)
+        return denied("unverified");
       await initSchema();
-
-      const provider = account.provider;
-      const sub = account.providerAccountId;
-      const email = user.email ?? null;
-      const name = user.name || email || sub;
-
-      // 기존 테넌트 찾기: oauth_sub 우선, 없으면 email로
-      let rows = await sql`
-        SELECT id FROM tenants WHERE oauth_provider = ${provider} AND oauth_sub = ${sub}
-      `;
-      if (rows.length === 0 && email) {
-        rows = await sql`SELECT id FROM tenants WHERE email = ${email}`;
+      try {
+        const identity = await sql.begin((tx) =>
+          googleIdentity(
+            tx as unknown as AccessDatabase,
+            {
+              subject: account.providerAccountId,
+              email: user.email!,
+              name: user.name || user.email!,
+              verified: profile.email_verified === true,
+            },
+            customerOnly,
+          ),
+        );
+        const portal = customerOnly || !identity.tenantId;
+        user.id = portal ? identity.id : identity.tenantId!;
+        user.name = identity.name;
+        user.email = identity.email;
+        user.customerPortal = portal;
+        user.customerAuthVersion = identity.authVersion;
+        if (!portal) await syncAdminRole(identity.tenantId!, identity.email);
+      } catch (e) {
+        if (e instanceof GoogleIdentityError) return denied(e.reason);
+        // Never print the raw error: postgres detail can carry row values.
+        console.error(
+          "google sign-in failed:",
+          e instanceof Error ? e.name : typeof e,
+        );
+        return denied("failed");
       }
-
-      const admin = isAdminEmail(email ?? "");
-      await sql.begin(async (tx) => {
-        if (rows.length > 0) {
-          await tx`UPDATE tenants SET oauth_provider=${provider},oauth_sub=${sub},is_admin=${admin} WHERE id=${rows[0].id as string}`;
-          user.id = rows[0].id as string;
-        } else {
-          const id = crypto.randomUUID(),
-            apiKey = `iai-${crypto.randomUUID().replace(/-/g, "")}`;
-          await tx`INSERT INTO tenants(id,name,api_key,email,oauth_provider,oauth_sub,is_admin) VALUES(${id},${name},${apiKey},${email},${provider},${sub},${admin})`;
-          user.id = id;
-        }
-        await provisionAgencyOwner(tx as unknown as AccessDatabase, user.id!);
-      });
       return true;
     },
     async jwt({ token, user }) {
@@ -227,4 +242,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/login",
   },
-});
+};
+export const { handlers, signIn, signOut, auth } = NextAuth(authConfig);

@@ -1,5 +1,7 @@
 import sql from "@/lib/neon";
-import { requireReady } from "@/lib/customer-portal/auth";
+import { acceptVerifiedInvitation } from "@/lib/customer-portal/management";
+import type { AccessDatabase } from "@/lib/access/schema";
+import { portalUser, requireReady } from "@/lib/customer-portal/auth";
 import {
   PortalError,
   failure,
@@ -42,6 +44,23 @@ export async function POST(req: Request, { params }: Context) {
       throw e;
     }
     return Response.json({ ok: true });
+  } catch (e) {
+    return failure(e);
+  }
+}
+
+/** Explicit accept by a signed-in, verified identity. GET never accepts; crawlers cannot consume a link. */
+export async function PATCH(req: Request, { params }: Context) {
+  try {
+    sameOrigin(req);
+    const user = await portalUser(),
+      { token } = await params;
+    if (!(await enforceRateLimit("customer-accept:" + user.id, req, 10)))
+      throw new PortalError("잠시 후 다시 시도해주세요.", 429);
+    const result = await sql.begin((tx) =>
+      acceptVerifiedInvitation(tx as unknown as AccessDatabase, token, user.id),
+    );
+    return Response.json({ ok: true, ...result });
   } catch (e) {
     return failure(e);
   }

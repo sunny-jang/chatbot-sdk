@@ -137,3 +137,63 @@ export async function activateInvitation(
   await db`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${user.id},${c.tenant_id},${c.customer_id},'member.accept',${c.invitation_id},'success')`;
   return { customerId: String(c.customer_id) };
 }
+
+/**
+ * A signed-in identity whose verified email matches the invitation accepts the copied link
+ * directly, without a second mailbox challenge. The customer lock orders this with
+ * activateInvitation, revocation and re-invitation; a repeated accept by the same user is idempotent.
+ */
+export async function acceptVerifiedInvitation(
+  db: AccessDatabase,
+  token: string,
+  userId: string,
+) {
+  const digest = tokenHash(token);
+  const [initial] =
+    await db`SELECT customer_id FROM customer_invitations WHERE token_hash=${digest}`;
+  if (!initial) throw new PortalError("유효하지 않은 초대입니다.", 410);
+  await db`SELECT id FROM customers WHERE id=${initial.customer_id} FOR UPDATE`;
+  const [invite] =
+    await db`SELECT i.id,i.customer_id,i.email,i.role,i.invited_by,i.status,i.expires_at,i.accepted_by,c.tenant_id,c.status AS customer_status FROM customer_invitations i JOIN customers c ON c.id=i.customer_id WHERE i.token_hash=${digest} FOR UPDATE OF i`;
+  if (!invite) throw new PortalError("유효하지 않은 초대입니다.", 410);
+  const [user] =
+    await db`SELECT id,email,email_verified_at,status FROM users WHERE id=${userId} FOR UPDATE`;
+  if (!user || user.status !== "active" || !user.email_verified_at)
+    throw new PortalError("이메일 확인을 마친 계정으로 로그인해주세요.", 403);
+  if (user.email !== invite.email)
+    throw new PortalError(
+      "초대받은 이메일과 로그인 계정이 다릅니다. 계정을 바꿔주세요.",
+      403,
+    );
+  if (invite.customer_status !== "active")
+    throw new PortalError("사용할 수 없는 고객사입니다.", 410);
+  const now = Math.floor(Date.now() / 1000);
+  if (invite.status === "accepted" && invite.accepted_by === user.id) {
+    const [membership] =
+      await db`SELECT 1 FROM customer_memberships WHERE customer_id=${invite.customer_id} AND user_id=${user.id} AND status='active'`;
+    if (!membership)
+      throw new PortalError("해제된 권한은 새 초대로만 복귀할 수 있습니다.", 410);
+    return { customerId: String(invite.customer_id), duplicate: true };
+  }
+  if (invite.status !== "pending" || Number(invite.expires_at) <= now)
+    throw new PortalError("만료되었거나 취소된 초대입니다.", 410);
+  // The inviter must still hold the permission; otherwise the link is retired, not the invitee blamed.
+  try {
+    await lockAccess(
+      db,
+      String(invite.invited_by),
+      String(invite.customer_id),
+      invite.role === "admin" ? "members.admin" : "members.agent",
+    );
+  } catch {
+    await db`UPDATE customer_invitations SET status='revoked' WHERE id=${invite.id} AND status='pending'`;
+    throw new PortalError(
+      "초대한 담당자의 권한이 바뀌어 이 초대는 더 이상 유효하지 않습니다. 새 초대를 요청해주세요.",
+      410,
+    );
+  }
+  await db`INSERT INTO customer_memberships(customer_id,user_id,role) VALUES(${invite.customer_id},${user.id},${invite.role}) ON CONFLICT(customer_id,user_id) DO UPDATE SET role=EXCLUDED.role,status='active',updated_at=${now}`;
+  await db`UPDATE customer_invitations SET status='accepted',accepted_by=${user.id},accepted_at=${now} WHERE id=${invite.id}`;
+  await db`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${user.id},${invite.tenant_id},${invite.customer_id},'member.accept',${invite.id},'success')`;
+  return { customerId: String(invite.customer_id), duplicate: false };
+}

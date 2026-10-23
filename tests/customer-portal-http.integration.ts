@@ -57,6 +57,61 @@ async function main() {
       "portal-agency-qa",
     ),
   );
+  await check("desk 호스트 OAuth 처리는 고객사 공급자만 노출", async () => {
+    const onDesk = (await api("/api/auth/providers", desk)).data,
+      onAgency = (await api("/api/auth/providers", agency)).data;
+    assert.deepEqual(Object.keys(onDesk).sort(), [
+      "customer-credentials",
+      "customer-google",
+    ]);
+    assert.ok(onAgency.google && onAgency.credentials);
+    // Sign-in and callback URLs stay on the desk origin instead of being rewritten to AUTH_URL.
+    assert.ok(
+      onDesk["customer-google"].callbackUrl.startsWith("http://" + desk + "/api/auth/callback/"),
+      onDesk["customer-google"].callbackUrl,
+    );
+    assert.ok(onAgency.google.callbackUrl.startsWith("http://" + agency + "/"));
+    // With a valid CSRF token the agency provider must still be unknown on the desk host.
+    const jar = new Map<string, string>();
+    const collect = (r: { headers: Headers }) => {
+      for (const raw of r.headers.getSetCookie()) {
+        const c = raw.split(";")[0];
+        jar.set(c.slice(0, c.indexOf("=")), c);
+      }
+      return [...jar.values()].join("; ");
+    };
+    collect(await api("/api/auth/csrf", desk));
+    const csrf = await api("/api/auth/csrf", desk, [...jar.values()].join("; "));
+    const cookie = collect(csrf);
+    const start = async (provider: string) =>
+      localFetch(base + "/api/auth/signin/" + provider, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          Host: desk,
+          Origin: "http://" + desk,
+          Cookie: cookie,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Auth-Return-Redirect": "1",
+        },
+        body: new URLSearchParams({
+          csrfToken: csrf.data.csrfToken,
+          callbackUrl: "http://" + desk + "/customer",
+        }),
+      });
+    const blocked = await start("google"),
+      blockedBody = await blocked.text();
+    assert.ok(
+      !blockedBody.includes("accounts.google.com") &&
+        !(blocked.headers.get("location") || "").includes("accounts.google.com"),
+      blockedBody.slice(0, 200),
+    );
+    assert.ok(/error/i.test(blockedBody) || blocked.status >= 400, String(blocked.status));
+    const allowed = await start("customer-google"),
+      allowedBody = await allowed.text();
+    // Without a Google client in QA the customer provider errors too, but it is recognised (no unknown-provider error page).
+    assert.notEqual(allowedBody, blockedBody);
+  });
   await check("고객사 로그인은 tenant/admin 권한을 발급하지 않음", async () => {
     const s = (await api("/api/auth/session", desk, agent)).data;
     assert.equal(s.customer_user_id, "portal-agent");
@@ -738,6 +793,61 @@ async function main() {
         ).status,
         410,
       );
+    },
+  );
+  await check(
+    "검증된 로그인 계정은 초대 이메일이 같을 때만 PATCH로 수락·멱등",
+    async () => {
+      const r = await api(
+        "/api/customers/qa-cafe/invitations",
+        agency,
+        owner,
+        "POST",
+        { email: f.other.email, role: "agent" },
+      );
+      assert.equal(r.status, 201);
+      const token = r.data.url.split("/").pop(),
+        path = "/api/customer/invitations/" + token;
+      try {
+        assert.equal((await api(path, desk, "", "PATCH")).status, 401);
+        assert.equal((await api(path, desk, admin, "PATCH")).status, 403);
+        const noOrigin = await localFetch(base + path, {
+          method: "PATCH",
+          headers: { Host: desk, Cookie: other },
+        });
+        assert.equal(noOrigin.status, 403);
+        assert.equal(
+          (
+            await sql`SELECT count(*)::int AS n FROM customer_memberships WHERE customer_id='qa-cafe' AND user_id='portal-other'`
+          )[0].n,
+          0,
+        );
+        const accepted = await api(path, desk, other, "PATCH");
+        assert.equal(accepted.status, 200, JSON.stringify(accepted.data));
+        assert.equal(accepted.data.customerId, "qa-cafe");
+        assert.equal(accepted.data.duplicate, false);
+        const repeat = await api(path, desk, other, "PATCH");
+        assert.equal(repeat.status, 200);
+        assert.equal(repeat.data.duplicate, true);
+        assert.equal(
+          (
+            await sql`SELECT count(*)::int AS n FROM customer_memberships WHERE customer_id='qa-cafe' AND user_id='portal-other' AND status='active' AND role='agent'`
+          )[0].n,
+          1,
+        );
+        assert.equal(
+          (await api("/api/customer/qa-cafe/support", desk, other)).status,
+          200,
+        );
+        assert.equal(
+          (await api("/api/customer/invitations/" + token, desk)).status,
+          405,
+        );
+      } finally {
+        await sql`DELETE FROM customer_memberships WHERE customer_id='qa-cafe' AND user_id='portal-other'`;
+        await sql`DELETE FROM access_audit_logs WHERE target_id=${r.data.id}`;
+        await sql`DELETE FROM customer_invitations WHERE id=${r.data.id}`;
+      }
     },
   );
   await check("고객사 권한 회수는 기존 로그인 세션에 즉시 반영", async () => {

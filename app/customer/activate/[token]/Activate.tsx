@@ -53,7 +53,7 @@ export default function Activate({
       {existing ? (
         <p>
           이미 등록된 계정입니다.{" "}
-          <Link className="cp-link" href="/customer/login">
+          <Link className="cp-link" href={`/customer/login?next=${encodeURIComponent("/customer/activate/" + token)}`}>
             해당 계정으로 로그인
           </Link>
           한 뒤 이 링크를 다시 열어 수락해주세요. 기존 에이전시 소유자는
