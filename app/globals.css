@@ -251,3 +251,6 @@ button{font:inherit}
 .inbox-summary{padding:14px 16px}
 .inbox-live{display:none}
 }
+
+.analytics-notice{margin:0 0 18px;padding:12px 16px;border:1px solid #d6e0fb;background:var(--brand-soft);border-radius:var(--r-control);font-size:13px;color:var(--brand-text);line-height:1.6}
+.analytics-notice strong{font-weight:600}

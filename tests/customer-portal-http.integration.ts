@@ -58,6 +58,41 @@ async function main() {
       "portal-agency-qa",
     ),
   );
+  await check("에이전시 분석은 고객사 봇의 대화 원문을 숨기고 집계만 포함", async () => {
+    const ownBot = "own-bot-" + randomUUID(),
+      customerLog = "log-c-" + randomUUID(),
+      ownLog = "log-o-" + randomUUID();
+    const [home] =
+      await sql`SELECT id FROM customers WHERE tenant_id='portal-agency-qa' AND is_default=TRUE`;
+    await sql`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${ownBot},'portal-agency-qa',${home.id},'우리 회사 봇','qa')`;
+    await sql`INSERT INTO chat_logs(id,bot_id,session_id,user_message,bot_reply,created_at) VALUES(${customerLog},'portal-cafe-bot','s-c','고객사 질문 원문','고객사 답변',EXTRACT(EPOCH FROM NOW())::BIGINT),(${ownLog},${ownBot},'s-o','우리 회사 질문 원문','우리 회사 답변',EXTRACT(EPOCH FROM NOW())::BIGINT)`;
+    try {
+      const r = await api("/api/analytics?days=7&botId=all", agency, owner);
+      assert.equal(r.status, 200);
+      const texts = JSON.stringify([r.data.conversations, r.data.refusedConversations]);
+      assert.ok(!texts.includes("고객사 질문 원문"));
+      assert.ok(texts.includes("우리 회사 질문 원문"));
+      assert.ok(r.data.summary.messages >= 2, "aggregates still count customer bots");
+      assert.ok(r.data.restricted.bots.some((b: { id: string }) => b.id === "portal-cafe-bot"));
+      assert.ok(r.data.restricted.hiddenMessages >= 1);
+      const single = await api("/api/analytics?days=7&botId=portal-cafe-bot", agency, owner);
+      assert.equal(single.data.restricted.selected, true);
+      assert.equal(single.data.conversations.length, 0);
+      assert.ok(single.data.summary.messages >= 1);
+      assert.equal((await api("/api/bots/portal-cafe-bot/logs", agency, owner)).status, 403);
+      assert.equal((await api(`/api/bots/${ownBot}/logs`, agency, owner)).status, 200);
+      const page = await api("/bots/portal-cafe-bot/logs", agency, owner);
+      assert.ok(page.data.includes("고객사 전용 대화 기록"));
+      assert.ok(!page.data.includes("고객사 질문 원문"));
+      // The customer's own administrator still sees the text in the desk portal.
+      const desk = await api("/api/customer/qa-cafe/bots/portal-cafe-bot/logs", "desk.localhost:3012", admin);
+      assert.equal(desk.status, 200);
+      assert.ok(JSON.stringify(desk.data).includes("고객사 질문 원문"));
+    } finally {
+      await sql`DELETE FROM chat_logs WHERE id IN (${customerLog},${ownLog})`;
+      await sql`DELETE FROM bots WHERE id=${ownBot}`;
+    }
+  });
   await check("에이전시 세션은 소유자 auth_version 회수에 즉시 반응", async () => {
     assert.equal((await api("/api/customers", agency, owner)).status, 200);
     await sql`UPDATE users SET auth_version=auth_version+1 WHERE id='portal-owner'`;

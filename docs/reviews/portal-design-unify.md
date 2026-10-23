@@ -37,3 +37,16 @@
 **확인**: 캡처 `docs/verification/design-pro-*.jpg`(에이전시 로그인, desk 로그인, 업무 홈, 상담함, 고객사 관리, 모바일 desk 로그인). 빌드·tsc·린트 통과. HTTP 검사의 desk 로그인 문구 단언을 새 제목("상담함 로그인")으로 갱신.
 
 **남은 것**: 로그인 상태에서 `/login`을 열면 사이드바 레이아웃 안에 로그인 폼이 렌더되는 기존 동작(리디렉션 없음)은 그대로다. `/analytics` 등 `.analytics-*` 화면은 자체 팔레트(보라 `#6655e8`)를 유지하고 있어 다음 단계에서 같은 토큰으로 맞춘다.
+
+## 데이터 경계 — 에이전시 분석에서 고객사 대화 원문 제외 (2026-10-23)
+
+사용자 결정: 고객사에 배정된 챗봇의 대화는 고객사 데이터다. 에이전시는 **집계 수치만** 본다. 예외는 자기 사업장(기본 고객사 `우리 회사`) 봇과 미배정 봇.
+
+- `lib/access/visibility.ts` `restrictedBotIds(tenant)`: `customers.is_default=FALSE`인 고객사에 배정된 봇 집합. customers 테이블이 없으면(이관 전) 제한 없음.
+- `/api/analytics`: summary·daily·intents·refusalReasons·tools는 모든 봇을 집계하되 `conversations`·`refusedConversations`는 제한 봇을 제외. 응답에 `restricted{bots,selected,hiddenMessages,notice}`를 추가하고 대시보드 상단에 안내 배너. 제한 봇 하나를 선택하면 `selected: true`와 함께 집계만.
+- `/api/bots/[id]/logs` → 제한 봇은 403, `/bots/[id]/logs` 페이지는 안내 패널. `/api/bots/[id]/qa-analytics`의 `unmatched` 질문 원문은 제한 봇에서 빈 배열(`restricted: true`).
+- desk의 고객사 관리자 경로(`/api/customer/[customerId]/bots/[botId]/logs`)는 그대로 원문 제공.
+- PRD 권한표에 "대화 원문 분석·대화 기록·세션 상세: 자사·미배정 봇만" 행과 결정 메모 추가.
+- 검증: DB 1건(배정/자사/미배정 구분), HTTP 1건(원문 제외·집계 포함·단일 봇 selected·logs 403/200·페이지 안내·desk 원문 유지).
+
+**후속 결정 필요**: `/api/bots/[id]/unanswered`(미응답 보완)와 `/api/bots/[id]/requests`(문의 원문)는 지식 유지·접수 처리 업무라 이번 제한에 넣지 않았다. 같은 경계를 적용할지 결정이 필요하다.
