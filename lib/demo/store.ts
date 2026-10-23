@@ -22,6 +22,16 @@ export type PublicDemo = {
   customer_name: string;
   bot_name: string;
 };
+/** The agency app and desk portal must never be framed inside a shared demo page. */
+function ownHosts(env: Record<string, string | undefined> = process.env) {
+  return [env.AUTH_URL, env.CUSTOMER_PORTAL_ORIGIN].flatMap((value) => {
+    try {
+      return value ? [new URL(value).hostname.toLowerCase()] : [];
+    } catch {
+      return [];
+    }
+  });
+}
 export function demoSiteUrl(value: unknown) {
   const raw = text(value, "홈페이지 주소", 2000);
   let u: URL;
@@ -38,6 +48,8 @@ export function demoSiteUrl(value: unknown) {
   )
     throw new PortalError("공개 HTTP/HTTPS 홈페이지 주소를 입력해주세요.");
   const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (ownHosts().includes(host))
+    throw new PortalError("이 서비스의 주소는 데모 배경으로 사용할 수 없습니다.");
   if (
     host === "localhost" ||
     /[.](localhost|local|internal|test|invalid)$/.test(host) ||
@@ -144,6 +156,16 @@ export async function revokeDemo(
   if (changed.length)
     await db`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${userId},${tenantId},${String(demo.customer_id)},'demo.revoke',${id},'success')`;
 }
+/** Lock tenant and demo rows by token, then validate once; the lookup itself is one indexed read. */
+export async function lockPublicDemo(db: AccessDatabase, token: string) {
+  const [row] = /^[A-Za-z0-9_-]{40,100}$/.test(token)
+    ? await db`SELECT id,tenant_id FROM customer_demos WHERE token_hash=${tokenHash(token)}`
+    : [];
+  if (!row) throw new PortalError("만료되었거나 해제된 데모입니다.", 410);
+  await db`SELECT id FROM tenants WHERE id=${row.tenant_id} FOR NO KEY UPDATE`;
+  await db`SELECT id FROM customer_demos WHERE id=${row.id} FOR UPDATE`;
+  return readPublicDemo(db, token);
+}
 export async function reserveDemoTurn(
   db: AccessDatabase,
   token: string,
@@ -152,10 +174,7 @@ export async function reserveDemoTurn(
   message: string,
   qaId: string | null,
 ) {
-  const demo = await readPublicDemo(db, token);
-  await db`SELECT id FROM tenants WHERE id=${demo.tenant_id} FOR NO KEY UPDATE`;
-  await db`SELECT id FROM customer_demos WHERE id=${demo.id} FOR UPDATE`;
-  await readPublicDemo(db, token);
+  const demo = await lockPublicDemo(db, token);
   const digest = tokenHash(message + "\n" + (qaId || ""));
   const [prior] =
     await db`SELECT id,payload_hash,state,reply FROM demo_turns WHERE demo_id=${demo.id} AND session_id=${sessionId} AND request_id=${requestId}`;
@@ -169,10 +188,19 @@ export async function reserveDemoTurn(
         reply: String(prior.reply),
         duplicate: true,
       };
-    throw new PortalError(
-      "이미 처리 중이거나 실패한 요청입니다. 잠시 후 다시 시도해주세요.",
-      409,
-    );
+    if (prior.state === "pending")
+      throw new PortalError(
+        "이미 처리 중인 요청입니다. 잠시 후 다시 시도해주세요.",
+        409,
+      );
+    // A failed turn was refunded; the same key may try again and keeps its model reservation.
+    const [usage] =
+      await db`SELECT request_count FROM customer_demos WHERE id=${demo.id}`;
+    if (Number(usage.request_count) >= Number(demo.max_requests))
+      throw new PortalError("데모 체험 한도에 도달했습니다.", 429);
+    await db`UPDATE demo_turns SET state='pending' WHERE id=${prior.id}`;
+    await db`UPDATE customer_demos SET request_count=request_count+1 WHERE id=${demo.id}`;
+    return { demo, id: String(prior.id), reply: null, duplicate: false };
   }
   const [pending] =
     await db`SELECT id FROM demo_turns WHERE demo_id=${demo.id} AND session_id=${sessionId} AND state='pending'`;
@@ -197,10 +225,7 @@ export async function reserveDemoModelCall(
   token: string,
   turnId: string,
 ) {
-  const demo = await readPublicDemo(db, token);
-  await db`SELECT id FROM tenants WHERE id=${demo.tenant_id} FOR NO KEY UPDATE`;
-  await db`SELECT id FROM customer_demos WHERE id=${demo.id} FOR UPDATE`;
-  await readPublicDemo(db, token);
+  const demo = await lockPublicDemo(db, token);
   const [turn] =
     await db`SELECT model_started_at,state FROM demo_turns WHERE id=${turnId} AND demo_id=${demo.id} FOR UPDATE`;
   if (!turn || turn.state !== "pending")
@@ -211,4 +236,12 @@ export async function reserveDemoModelCall(
   if (Number(daily.n) >= 1000)
     throw new PortalError("에이전시의 일일 AI 데모 한도에 도달했습니다.", 429);
   await db`UPDATE demo_turns SET model_started_at=EXTRACT(EPOCH FROM NOW())::bigint WHERE id=${turnId}`;
+}
+
+/** A turn that produced no reply gives its visitor-turn back; the AI reservation stays as spent cost. */
+export async function failDemoTurn(db: AccessDatabase, turnId: string) {
+  const [turn] =
+    await db`UPDATE demo_turns SET state='failed' WHERE id=${turnId} AND state='pending' RETURNING demo_id`;
+  if (turn)
+    await db`UPDATE customer_demos SET request_count=GREATEST(request_count-1,0) WHERE id=${turn.demo_id}`;
 }

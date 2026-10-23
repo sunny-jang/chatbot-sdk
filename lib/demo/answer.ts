@@ -23,12 +23,12 @@ export async function answerDemo(
   }
   const normalize = (s: string) =>
     s.normalize("NFKC").replace(/\s+/g, "").toLowerCase();
-  const pairs =
-    await sql`SELECT question,answer,embedding FROM qa_pairs WHERE bot_id=${demo.bot_id} ORDER BY created_at DESC LIMIT 100`;
-  const exact = pairs.find(
-    (q) => normalize(String(q.question)) === normalize(message),
-  );
+  // Exact questions match across the whole bot, not only the retrieval window below.
+  const [exact] =
+    await sql`SELECT answer FROM qa_pairs WHERE bot_id=${demo.bot_id} AND lower(regexp_replace(question,'\\s','','g'))=${normalize(message)} ORDER BY created_at,id LIMIT 1`;
   if (exact) return { reply: String(exact.answer), usedDocs: [] };
+  const pairs =
+    await sql`SELECT question,answer,embedding FROM qa_pairs WHERE bot_id=${demo.bot_id} ORDER BY created_at DESC LIMIT 500`;
   const keys = await getTenantApiKeysByTenantId(demo.tenant_id),
     model = String(bot.model || "gpt-4o-mini"),
     gemini = model.startsWith("gemini");
@@ -38,7 +38,7 @@ export async function answerDemo(
       503,
     );
   const docs =
-    await sql`SELECT title,content,embedding FROM documents WHERE bot_id=${demo.bot_id} ORDER BY created_at DESC LIMIT 100`;
+    await sql`SELECT title,content,embedding FROM documents WHERE bot_id=${demo.bot_id} ORDER BY created_at DESC LIMIT 500`;
   const candidates = [
     ...docs.map((d) => ({
       title: String(d.title),

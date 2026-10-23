@@ -84,14 +84,13 @@ export default function DemoSite({
             sandbox="allow-scripts allow-same-origin allow-forms"
             referrerPolicy="no-referrer"
             onLoad={() => setFrameReady(true)}
-            onError={() => setFallback(true)}
           />
-          {!frameReady && (
-            <p className="site-demo-frame-hint">
-              홈페이지 배경을 불러오는 중입니다. 보이지 않으면 상단의 대체
-              화면을 선택해주세요.
-            </p>
-          )}
+          {/* Browsers do not report X-Frame-Options/CSP blocks, so the cue stays after load. */}
+          <p className="site-demo-frame-hint">
+            {frameReady
+              ? "홈페이지가 외부 표시를 차단하면 이 영역이 비어 보입니다. 상단의 대체 화면을 선택해주세요."
+              : "홈페이지 배경을 불러오는 중입니다. 보이지 않으면 상단의 대체 화면을 선택해주세요."}
+          </p>
         </div>
       )}
     </main>

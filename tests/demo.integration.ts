@@ -9,6 +9,7 @@ import {
   reserveDemoTurn,
   reserveDemoModelCall,
   revokeDemo,
+  failDemoTurn,
 } from "../lib/demo/store";
 async function main() {
   if (process.env.DEMO_DB_CHECK !== "1") throw Error("DEMO_DB_CHECK=1 필요");
@@ -115,6 +116,26 @@ async function main() {
           ),
         { status: 409 },
       );
+      checks++;
+      // A failed turn refunds the visitor-turn count and may be retried with the same key.
+      const before = Number(
+        (await tx`SELECT request_count FROM customer_demos WHERE id=${created.id}`)[0]
+          .request_count,
+      );
+      const doomed = await reserveDemoTurn(db, created.token, "session-f", "request-f", "실패 질문", null);
+      await failDemoTurn(db, doomed.id);
+      assert.equal(
+        Number((await tx`SELECT request_count FROM customer_demos WHERE id=${created.id}`)[0].request_count),
+        before,
+      );
+      const again = await reserveDemoTurn(db, created.token, "session-f", "request-f", "실패 질문", null);
+      assert.equal(again.id, doomed.id);
+      assert.equal(again.duplicate, false);
+      assert.equal(
+        (await tx`SELECT state FROM demo_turns WHERE id=${doomed.id}`)[0].state,
+        "pending",
+      );
+      await failDemoTurn(db, doomed.id);
       checks++;
       await tx`UPDATE customer_demos SET max_requests=1 WHERE id=${created.id}`;
       await assert.rejects(

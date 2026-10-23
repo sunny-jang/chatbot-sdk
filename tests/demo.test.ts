@@ -20,3 +20,16 @@ test("demo backgrounds accept public HTTP websites only", () => {
   ])
     assert.throws(() => demoSiteUrl(url));
 });
+test("demo backgrounds never frame the agency app or desk portal", () => {
+  const saved = { a: process.env.AUTH_URL, d: process.env.CUSTOMER_PORTAL_ORIGIN };
+  process.env.AUTH_URL = "https://app.example.com";
+  process.env.CUSTOMER_PORTAL_ORIGIN = "https://desk.example.com";
+  try {
+    assert.throws(() => demoSiteUrl("https://app.example.com/admin"));
+    assert.throws(() => demoSiteUrl("https://DESK.example.com/customer"));
+    assert.equal(demoSiteUrl("https://shop.example.com/"), "https://shop.example.com/");
+  } finally {
+    process.env.AUTH_URL = saved.a;
+    process.env.CUSTOMER_PORTAL_ORIGIN = saved.d;
+  }
+});

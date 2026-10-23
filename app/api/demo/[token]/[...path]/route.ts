@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import sql from "@/lib/neon";
 import type { AccessDatabase } from "@/lib/access/schema";
 import {
+  failDemoTurn,
+  lockPublicDemo,
   readPublicDemo,
   reserveDemoTurn,
   reserveDemoModelCall,
@@ -139,9 +141,7 @@ export async function POST(req: Request, { params }: C) {
         settings = requestSettings(bot.request_settings),
         data = validateRequest(input, settings);
       const receipt = await sql.begin(async (tx) => {
-        await tx`SELECT id FROM tenants WHERE id=${demo.tenant_id} FOR NO KEY UPDATE`;
-        await tx`SELECT id FROM customer_demos WHERE id=${demo.id} FOR UPDATE`;
-        await readPublicDemo(tx as unknown as AccessDatabase, token);
+        await lockPublicDemo(tx as unknown as AccessDatabase, token);
         const [prior] =
           await tx`SELECT receipt,payload_hash FROM demo_requests WHERE demo_id=${demo.id} AND request_key=${data.key}`;
         if (prior) {
@@ -206,9 +206,9 @@ export async function POST(req: Request, { params }: C) {
     return json({ ...result, demo: true, handoffAvailable: false });
   } catch (e) {
     if (turnId)
-      await sql`UPDATE demo_turns SET state='failed' WHERE id=${turnId} AND state='pending'`.catch(
-        () => {},
-      );
+      await sql
+        .begin((tx) => failDemoTurn(tx as unknown as AccessDatabase, turnId!))
+        .catch(() => {});
     return failure(
       e instanceof OperationError ? new PortalError(e.message, e.status) : e,
     );
