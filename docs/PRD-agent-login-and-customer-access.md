@@ -130,7 +130,7 @@ Google 로그인 재시도나 요청 중복으로 작업 공간을 중복 생성
 | ------------------ | --------------------------------------- | ------------------------------------------ |
 | 공통 로그인        | `/login`                                | 전체                                       |
 | 상담용 로그인 진입 | `/support/login`                        | 공통 로그인으로 연결하며 상담 목적지 유지  |
-| 마스터 어드민      | `/admin`                                | 플랫폼 마스터                              |
+| 마스터 어드민      | `master.서비스도메인/admin` (`MASTER_ORIGIN`) | 플랫폼 마스터. 설정 시 에이전시 호스트의 `/admin`은 이곳으로 리디렉션 |
 | 파트너 업무 홈     | `/`                                     | 파트너 소유자                              |
 | 고객사 목록·설정   | `/customers`, `/customers/[customerId]` | 소유자. 고객사 관리자는 자기 고객사 설정만 |
 | 구성원·초대        | `/customers/[customerId]/members`       | 소유자·해당 고객사 관리자                  |
@@ -286,4 +286,6 @@ Google 로그인 재시도나 요청 중복으로 작업 공간을 중복 생성
 
 사용자 확정에 따라 에이전시 `/login`과 공통 `desk.서비스도메인`의 상담 로그인 진입점을 분리한다. 상담 담당자별로 별도 주소를 만들지 않는다. desk 호스트 `/login`은 고객사 로그인으로 연결되고, 내부 경로는 `/customer/login`, `/customer`, `/customer/[customerId]/support`, `/requests` 대신 `/customer/[customerId]/requests`, `/customer/[customerId]/members`를 사용한다. 초대는 `/customer/invite/[token]`, 이메일 확인은 `/customer/activate/[token]`이다. 위 6장의 공통 로그인·URL 표는 최초 설계이며 이 진입점 결정으로 대체한다. Google과 사용자 신원 공통화 요구까지 완료된 것은 아니다.
 
-[PRD 대비 구현 검수](reviews/prd-implementation-audit-2026-10-22.md)에 L01~L18의 부분 구현·미충족과 코드 근거를 기록한다. 고객사 관리자 지식·응대 설정 등 필수 범위를 구현 없이 완료 처리하지 않는다.
+[PRD 대비 구현 검수](reviews/prd-implementation-audit-2026-10-22.md)에 L01~L18의 부분 구현·미충족과 코드 근거를 기록한다.
+
+2026-10-23: 플랫폼 마스터 콘솔도 desk처럼 전용 접두사 호스트를 쓴다. `MASTER_ORIGIN`(예: `https://master.서비스도메인`)을 설정하면 그 호스트는 `/admin`·`/api/admin`·`/api/auth`·`/login`만 응답하고(루트 → `/admin`, 그 외 → `/admin`으로 리디렉션, API는 403), 에이전시 호스트의 `/admin`·`/api/admin`은 마스터 호스트로 넘긴다. 마스터 호스트의 로그인은 공통 에이전시 자격 증명(`credentials`·`google`)이며 OAuth 콜백은 desk와 같은 전용 호스트 처리로 그 호스트에 유지된다(Google 콘솔에 `MASTER_ORIGIN/api/auth/callback/google` 등록 필요). 마스터 계정은 여전히 `ADMIN_EMAILS`로 지정된 에이전시 계정의 `is_admin` 플래그다 — 에이전시 공간 없는 독립 마스터 계정 분리는 후속 결정. 고객사 관리자 지식·응대 설정 등 필수 범위를 구현 없이 완료 처리하지 않는다.

@@ -107,6 +107,30 @@ async function main() {
     assert.equal(desk.status, 200);
     assert.ok(JSON.stringify(desk.data).includes("김방문"));
   });
+  await check("마스터 콘솔은 master 호스트에서만, 에이전시 호스트의 /admin은 그쪽으로 보냄", async () => {
+    const master = "master.localhost:3012";
+    // Anonymous root resolves to the console, which then sends non-masters to the shared login.
+    const root = await api("/", master);
+    assert.equal(root.status, 307);
+    assert.ok(root.location?.endsWith("/login"), String(root.location));
+    assert.equal((await api("/login", master)).status, 200);
+    const stray = await api("/customers", master, owner);
+    assert.equal(stray.status, 307);
+    assert.ok(stray.location?.endsWith("/admin"));
+    assert.equal((await api("/api/bots", master, owner)).status, 403);
+    const redirected = await api("/admin", agency, owner);
+    assert.equal(redirected.status, 307);
+    assert.ok(redirected.location?.startsWith("http://" + master + "/admin"), String(redirected.location));
+    assert.equal((await api("/api/admin/tenants", agency, owner)).status, 403);
+    // Non-master agency owners are still refused on the console itself.
+    assert.equal((await api("/api/admin/tenants", master, owner)).status, 403);
+    // Login works on the master host with the shared agency credentials.
+    const masterCookie = await login(f.owner, master, "credentials");
+    assert.equal((await api("/api/auth/session", master, masterCookie)).data.tenant_id, "portal-agency-qa");
+    const providers = (await api("/api/auth/providers", master)).data;
+    assert.deepEqual(Object.keys(providers).sort(), ["credentials", "google"]);
+    assert.ok(providers.google.callbackUrl.startsWith("http://" + master + "/api/auth/callback/"));
+  });
   await check("에이전시 세션은 소유자 auth_version 회수에 즉시 반응", async () => {
     assert.equal((await api("/api/customers", agency, owner)).status, 200);
     await sql`UPDATE users SET auth_version=auth_version+1 WHERE id='portal-owner'`;

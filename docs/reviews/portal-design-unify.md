@@ -54,3 +54,14 @@
 - 에이전시 `/requests` 목록과 업무 홈의 "새 문의·견적" 수치·목록은 `bot_id <> ALL(hidden)`로 고객사 봇을 제외하고, 제외가 있을 때 설명 문구를 붙인다.
 - desk의 고객사 `/customer/[customerId]/requests`는 그대로.
 - HTTP 1건 추가: 고객사 봇 requests/unanswered 403, 에이전시 /requests·홈에 고객사 접수(김방문) 미노출, desk 관리자 경로에는 노출.
+
+
+## 마스터 콘솔 전용 호스트 `master.` (2026-10-23)
+
+- `lib/master-host.ts`: `isMasterHost`(정확한 Host 일치), `masterHostPath`(`/`→`/admin`), `masterHostAllows`(콘솔·관리 API·인증·로그인만), `masterOrigin`.
+- `middleware.ts`: 마스터 호스트는 허용 경로 외 → `/admin` 리디렉션(API 403). `MASTER_ORIGIN` 설정 시 에이전시 호스트의 `/admin`·`/api/admin` → 마스터 호스트로 리디렉션(API 403). 관리자 여부 검사는 기존대로 미들웨어 1차 + `/admin`·API에서 DB 재확인.
+- 인증: `dedicatedAuthHost()`가 desk(고객사 공급자)와 master(`google`·`credentials`)를 구분해 각 호스트의 canonical URL로 `@auth/core`를 직접 호출. 설정 캐시는 base×공급자 집합별.
+- 화면: 마스터 호스트에서는 에이전시 사이드바 대신 `MasterBar`(네이비 상단바: 로고·"플랫폼 관리"·계정·로그아웃)와 `master-main` 레이아웃. 에이전시 사이드바의 "플랫폼 관리" 링크는 `MASTER_ORIGIN/admin`으로.
+- QA 환경 `app.env`에 `MASTER_ORIGIN=http://master.localhost:3012` 추가.
+- 검증: 단위 3건(호스트 판정·허용 경로·전용 호스트 공급자), HTTP 1건(익명 루트 → 로그인, 소유자의 `/customers` → `/admin`, `/api/bots` 403, 에이전시 `/admin` → master 리디렉션·`/api/admin` 403, 비마스터 소유자 콘솔 API 403, master 호스트 자격 증명 로그인 세션 발급, providers=credentials·google·callback이 master origin). 총 HTTP 39건.
+- 미검증: 실제 마스터 계정(`ADMIN_EMAILS`)으로 콘솔 화면 왕복 — QA fixture에는 마스터 이메일이 없다. 운영 DNS/TLS·Google 콘솔 URI 등록.

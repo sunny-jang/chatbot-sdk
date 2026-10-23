@@ -254,3 +254,12 @@ button{font:inherit}
 
 .analytics-notice{margin:0 0 18px;padding:12px 16px;border:1px solid #d6e0fb;background:var(--brand-soft);border-radius:var(--r-control);font-size:13px;color:var(--brand-text);line-height:1.6}
 .analytics-notice strong{font-weight:600}
+
+.master-shell{min-height:100vh;background:var(--canvas)}
+.master-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px clamp(20px,3vw,40px);background:var(--navy);color:#fff}
+.master-brand{display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none}
+.master-brand img{filter:brightness(0) invert(1)}
+.master-brand span{font-size:13px;font-weight:600;padding-left:12px;border-left:1px solid rgba(255,255,255,.25)}
+.master-account{display:flex;align-items:center;gap:16px;font-size:13px;color:#c7cfe0}
+.master-account button{color:#fff!important}
+.master-main{max-width:1240px;margin:0 auto;padding:32px clamp(20px,3vw,44px)}

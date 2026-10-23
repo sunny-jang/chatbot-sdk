@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import sql from "@/lib/neon";
 import Sidebar from "./Sidebar";
 import WorkspaceFrame from "./WorkspaceFrame";
+import MasterBar from "./MasterBar";
 import { headers } from "next/headers";
 import { isCustomerPortalHost } from "@/lib/customer-portal/host";
+import { isMasterHost, masterOrigin } from "@/lib/master-host";
 import { auth } from "@/auth";
 import "./globals.css";
 
@@ -18,7 +20,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   // 모든 로그인 방식(Google·이메일·개발 로그인)이 Auth.js 세션 하나를 사용합니다.
-  const customerHost = isCustomerPortalHost((await headers()).get("host"));
+  const host = (await headers()).get("host");
+  const customerHost = isCustomerPortalHost(host);
+  const masterHost = isMasterHost(host);
   const session = await auth();
   const tenantId = session?.tenant_id ?? null;
   const isAdmin = session?.is_admin === true;
@@ -55,8 +59,15 @@ export default async function RootLayout({
         {tenantName ? (
           <WorkspaceFrame
             customerHost={customerHost}
+            masterHost={masterHost}
+            masterNavigation={<MasterBar tenantName={tenantName} />}
             navigation={
-              <Sidebar tenantName={tenantName} bots={bots} isAdmin={isAdmin} />
+              <Sidebar
+                tenantName={tenantName}
+                bots={bots}
+                isAdmin={isAdmin}
+                masterOrigin={masterOrigin()}
+              />
             }
           >
             {children}

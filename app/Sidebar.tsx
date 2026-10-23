@@ -13,10 +13,12 @@ export default function Sidebar({
   tenantName,
   bots,
   isAdmin,
+  masterOrigin,
 }: {
   tenantName: string;
   bots: Bot[];
   isAdmin?: boolean;
+  masterOrigin?: string | null;
 }) {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
@@ -107,7 +109,16 @@ export default function Sidebar({
           {isAdmin && (
             <>
               <p className="workspace-nav-label">마스터 전용</p>
-              {link("/admin", "플랫폼 관리", "admin")}
+              {masterOrigin ? (
+                <a href={`${masterOrigin}/admin`} className="workspace-nav-link">
+                  <span aria-hidden="true">
+                    <NavIcon name="admin" />
+                  </span>
+                  플랫폼 관리
+                </a>
+              ) : (
+                link("/admin", "플랫폼 관리", "admin")
+              )}
             </>
           )}
         </nav>
