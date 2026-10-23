@@ -124,8 +124,13 @@ export default function MastersPanel({
                   <input type="password" placeholder="초기 비밀번호 (12자 이상)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} autoComplete="new-password" />
                 </>
               )}
-              <button className="workspace-primary" disabled={busy}>
-                {busy ? "처리 중…" : "추가"}
+              {/* .workspace-search button would repaint this white; keep the primary look explicit. */}
+              <button
+                className="workspace-primary"
+                disabled={busy}
+                style={{ background: "var(--brand)", color: "#fff", borderColor: "var(--brand)", flex: "none" }}
+              >
+                {busy ? "처리 중…" : "마스터 추가"}
               </button>
             </div>
             <p className="workspace-list-note" style={{ padding: 0 }}>
