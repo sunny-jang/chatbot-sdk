@@ -52,6 +52,10 @@
     "status": "pass"
   },
   {
+    "name": "고객사 미배정 기존 봇도 에이전시 URL 미리보기 저장 가능",
+    "status": "pass"
+  },
+  {
     "name": "지식 폴더와 Q&A 항목 ID 변조 차단",
     "status": "pass"
   },

@@ -388,6 +388,33 @@ async function main() {
       await sql`DELETE FROM documents WHERE id=${id}`;
     }
   });
+  await check(
+    "고객사 미배정 기존 봇도 에이전시 URL 미리보기 저장 가능",
+    async () => {
+      const id = "legacy-preview-" + randomUUID();
+      await sql`INSERT INTO bots(id,tenant_id,name,type) VALUES(${id},'portal-agency-qa','미배정 합성 봇','ai')`;
+      try {
+        const response = await api(
+          `/api/bots/${id}/web-sources`,
+          agency,
+          owner,
+          "POST",
+          { action: "preview", url: "https://example.com" },
+        );
+        assert.equal(response.status, 200, JSON.stringify(response.data));
+        assert.ok(response.data.previewId);
+        assert.equal(
+          (
+            await sql`SELECT bot_id FROM web_previews WHERE id=${response.data.previewId}`
+          )[0].bot_id,
+          id,
+        );
+      } finally {
+        await sql`DELETE FROM web_previews WHERE bot_id=${id}`;
+        await sql`DELETE FROM bots WHERE id=${id}`;
+      }
+    },
+  );
   await check("지식 폴더와 Q&A 항목 ID 변조 차단", async () => {
     const base = "/api/customer/qa-cafe/bots/portal-cafe-bot";
     const folder = await api(base + "/qa-folders", desk, admin, "POST", {

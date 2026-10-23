@@ -7,6 +7,7 @@ import {
   normalizeSupportHours,
 } from "@/lib/supportHours";
 import WidgetPreview from "@/app/components/WidgetPreview";
+import { DEFAULT_WIDGET_COLOR } from "@/lib/widget-presentation";
 type Bot = {
   id: string;
   name: string;
@@ -207,7 +208,7 @@ export default function BotWorkspace({
                 await request(base, "PATCH", {
                   name: draft.name,
                   widget_title: draft.widget_title,
-                  widget_color: draft.widget_color || "#7c3aed",
+                  widget_color: draft.widget_color || DEFAULT_WIDGET_COLOR,
                   greeting_message: draft.greeting_message || "",
                   system_prompt: draft.system_prompt || "",
                   support_mode: draft.support_mode,
@@ -242,7 +243,7 @@ export default function BotWorkspace({
               위젯 색상
               <input
                 type="color"
-                value={draft.widget_color || "#7c3aed"}
+                value={draft.widget_color || DEFAULT_WIDGET_COLOR}
                 onChange={(e) =>
                   setDraft({ ...draft, widget_color: e.target.value })
                 }
@@ -582,6 +583,80 @@ export default function BotWorkspace({
                 폴더 추가
               </button>
             </form>
+            <h3>등록 폴더</h3>
+            <p className="cp-note">
+              폴더를 삭제해도 안의 문서와 질문은 미분류로 남습니다.
+            </p>
+            {folders.map((f) => (
+              <article className="cp-knowledge-row" key={f.id + f.name}>
+                <form
+                  className="cp-row"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const name = new FormData(e.currentTarget).get("name");
+                    void perform(async () => {
+                      await request(
+                        `${base}/${kind === "docs" ? "folders" : "qa-folders"}/${f.id}`,
+                        "PUT",
+                        { name },
+                      );
+                      setRevision((v) => v + 1);
+                    });
+                  }}
+                >
+                  <label>
+                    {f.name} 폴더 이름
+                    <input
+                      className="cp-input"
+                      name="name"
+                      defaultValue={f.name}
+                      required
+                      maxLength={100}
+                    />
+                  </label>
+                  <button className="cp-button" disabled={busy}>
+                    이름 저장
+                  </button>
+                  <button
+                    type="button"
+                    className="cp-link"
+                    disabled={busy}
+                    onClick={() => setConfirmDelete("folder:" + f.id)}
+                  >
+                    폴더 삭제
+                  </button>
+                </form>
+                {confirmDelete === "folder:" + f.id && (
+                  <div className="cp-row">
+                    <span>
+                      {f.name} 폴더를 삭제할까요? 내용은 미분류로 이동합니다.
+                    </span>
+                    <button
+                      className="cp-button"
+                      disabled={busy}
+                      onClick={() =>
+                        void perform(async () => {
+                          await request(
+                            `${base}/${kind === "docs" ? "folders" : "qa-folders"}/${f.id}`,
+                            "DELETE",
+                          );
+                          setConfirmDelete(null);
+                          setRevision((v) => v + 1);
+                        })
+                      }
+                    >
+                      폴더 삭제 확인
+                    </button>
+                    <button
+                      className="cp-link"
+                      onClick={() => setConfirmDelete(null)}
+                    >
+                      취소
+                    </button>
+                  </div>
+                )}
+              </article>
+            ))}
           </section>
           <section className="cp-panel">
             <h2>

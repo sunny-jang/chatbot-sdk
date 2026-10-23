@@ -1,14 +1,17 @@
 import mammoth from "mammoth";
+import { load } from "cheerio";
 export function getExtension(name: string) {
   const dot = name.lastIndexOf(".");
   return dot >= 0 ? name.slice(dot).toLowerCase() : "";
 }
 
+/** Uploaded pages keep only visible text; script, style and noscript bodies never become knowledge. */
 function stripHtml(html: string) {
-  return html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const $ = load(html);
+  $("script,style,noscript,template").remove();
+  $("p,div,section,article,li,h1,h2,h3,h4,h5,h6,tr,td,th,br,dt,dd").append(" ");
+  const scope = $("body").length ? $("body").text() : $.root().text();
+  return scope.replace(/\s+/g, " ").trim();
 }
 
 export async function extractText(

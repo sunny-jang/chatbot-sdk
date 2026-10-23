@@ -215,6 +215,31 @@ export async function mutateKnowledge(
   return { id: target, ok: true };
 }
 
+/** Validates the destination folder and moves an unchanged document without regenerating its embedding. */
+async function skipUnchangedDocument(
+  db: AccessDatabase,
+  userId: string,
+  customerId: string,
+  tenantId: string,
+  botId: string,
+  existing: Record<string, unknown>,
+  folderInput: unknown,
+) {
+  const id = String(existing.id),
+    folderId = folderInput ? text(folderInput, "폴더", 200) : null;
+  if (folderId) {
+    const [folder] =
+      await db`SELECT id FROM doc_folders WHERE id=${folderId} AND bot_id=${botId}`;
+    if (!folder) throw new PortalError("이 챗봇의 폴더를 선택해주세요.", 404);
+  }
+  const moved = (existing.folder_id ?? null) !== folderId;
+  if (moved) {
+    await db`UPDATE documents SET folder_id=${folderId} WHERE id=${id} AND bot_id=${botId}`;
+    await audit(db, userId, customerId, tenantId, "knowledge.put", id);
+  }
+  return { id, ok: true, skipped: true, updated: false, moved };
+}
+
 /** Caller supplies a transaction. The bot lock serializes matching-title uploads. */
 export async function uploadCustomerDocument(
   db: AccessDatabase,
@@ -224,11 +249,26 @@ export async function uploadCustomerDocument(
   input: { title: string; content: string; folder_id: unknown },
   embedding: number[],
 ) {
-  await customerBot(db, userId, customerId, botId, "knowledge.manage", true);
+  const { grant } = await customerBot(
+    db,
+    userId,
+    customerId,
+    botId,
+    "knowledge.manage",
+    true,
+  );
   const [existing] =
-    await db`SELECT id,content FROM documents WHERE bot_id=${botId} AND title=${input.title} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
+    await db`SELECT id,content,folder_id FROM documents WHERE bot_id=${botId} AND title=${input.title} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
   if (existing && existing.content === input.content)
-    return { id: String(existing.id), ok: true, skipped: true, updated: false };
+    return skipUnchangedDocument(
+      db,
+      userId,
+      customerId,
+      grant.tenant_id,
+      botId,
+      existing,
+      input.folder_id,
+    );
   const result = await mutateKnowledge(
     db,
     userId,
@@ -240,9 +280,10 @@ export async function uploadCustomerDocument(
     existing ? String(existing.id) : null,
     embedding,
   );
-  return { ...result, skipped: false, updated: Boolean(existing) };
+  return { ...result, skipped: false, updated: Boolean(existing), moved: false };
 }
 
+/** Same-title, same-content uploads skip the embedding provider but still apply the chosen folder. */
 export async function unchangedCustomerDocument(
   db: AccessDatabase,
   userId: string,
@@ -250,15 +291,35 @@ export async function unchangedCustomerDocument(
   botId: string,
   title: string,
   content: string,
+  folderId: unknown = null,
 ) {
-  await customerBot(db, userId, customerId, botId, "knowledge.manage", true);
+  const { grant } = await customerBot(
+    db,
+    userId,
+    customerId,
+    botId,
+    "knowledge.manage",
+    true,
+  );
   const [existing] =
-    await db`SELECT id,content FROM documents WHERE bot_id=${botId} AND title=${title} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
+    await db`SELECT id,content,folder_id FROM documents WHERE bot_id=${botId} AND title=${title} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
   return existing?.content === content
-    ? { id: String(existing.id), ok: true, skipped: true, updated: false }
+    ? skipUnchangedDocument(
+        db,
+        userId,
+        customerId,
+        grant.tenant_id,
+        botId,
+        existing,
+        folderId,
+      )
     : null;
 }
 
+/**
+ * Caller supplies a transaction. One bot lock covers the whole workbook: sheet folders are
+ * created or reused once, rows upsert by question, and a single knowledge.import audit row records the action.
+ */
 export async function importCustomerQa(
   db: AccessDatabase,
   userId: string,
@@ -268,42 +329,55 @@ export async function importCustomerQa(
   folderOverride: string | null,
   vectors: number[][],
 ) {
-  await customerBot(db, userId, customerId, botId, "knowledge.manage", true);
+  const { grant } = await customerBot(
+    db,
+    userId,
+    customerId,
+    botId,
+    "knowledge.manage",
+    true,
+  );
+  if (folderOverride) {
+    const [folder] =
+      await db`SELECT id FROM qa_folders WHERE id=${folderOverride} AND bot_id=${botId}`;
+    if (!folder) throw new PortalError("이 챗봇의 폴더를 선택해주세요.", 404);
+  }
+  const folderIds = new Map<string, string>();
+  const result = { created: 0, updated: 0 };
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
+    const row = rows[i],
+      embedding = vectors[i];
+    if (
+      !embedding ||
+      !embedding.length ||
+      embedding.some((v) => !Number.isFinite(v))
+    )
+      throw new PortalError("지식 검색 데이터를 준비하지 못했습니다.", 503);
     let folderId = folderOverride;
     if (!folderId) {
       const name = text(row.folder, "폴더 이름", 100);
-      const [folder] =
-        await db`SELECT id FROM qa_folders WHERE bot_id=${botId} AND name=${name} ORDER BY id LIMIT 1`;
-      folderId = folder
-        ? String(folder.id)
-        : (
-            await mutateKnowledge(
-              db,
-              userId,
-              customerId,
-              botId,
-              "qa-folders",
-              "POST",
-              { name },
-              null,
-              null,
-            )
-          ).id;
+      folderId = folderIds.get(name) ?? null;
+      if (!folderId) {
+        const [folder] =
+          await db`SELECT id FROM qa_folders WHERE bot_id=${botId} AND name=${name} ORDER BY id LIMIT 1`;
+        folderId = folder ? String(folder.id) : randomUUID();
+        if (!folder)
+          await db`INSERT INTO qa_folders(id,bot_id,name) VALUES(${folderId},${botId},${name})`;
+        folderIds.set(name, folderId);
+      }
     }
+    const question = text(row.question, "질문", 2000),
+      answer = text(row.answer, "답변", 20000);
     const [existing] =
-      await db`SELECT id FROM qa_pairs WHERE bot_id=${botId} AND question=${row.question} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
-    await mutateKnowledge(
-      db,
-      userId,
-      customerId,
-      botId,
-      "qa",
-      existing ? "PUT" : "POST",
-      { ...row, folder_id: folderId },
-      existing ? String(existing.id) : null,
-      vectors[i],
-    );
+      await db`SELECT id FROM qa_pairs WHERE bot_id=${botId} AND question=${question} ORDER BY created_at,id LIMIT 1 FOR UPDATE`;
+    if (existing) {
+      await db`UPDATE qa_pairs SET answer=${answer},folder_id=${folderId},embedding=${JSON.stringify(embedding)} WHERE id=${existing.id} AND bot_id=${botId}`;
+      result.updated++;
+    } else {
+      await db`INSERT INTO qa_pairs(id,bot_id,question,answer,folder_id,embedding) VALUES(${randomUUID()},${botId},${question},${answer},${folderId},${JSON.stringify(embedding)})`;
+      result.created++;
+    }
   }
+  await audit(db, userId, customerId, grant.tenant_id, "knowledge.import", botId);
+  return result;
 }

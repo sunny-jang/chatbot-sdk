@@ -53,7 +53,7 @@ export async function PUT(
     UPDATE qa_pairs SET
       question  = COALESCE(${question ?? null}, question),
       answer    = COALESCE(${answer ?? null}, answer),
-      folder_id = COALESCE(${folder_id === undefined ? null : folder_id || null}, folder_id),
+      folder_id = CASE WHEN ${folder_id === undefined} THEN folder_id ELSE ${folder_id || null} END,
       embedding = COALESCE(${embeddingJson}, embedding)
     WHERE id = ${qaId} AND bot_id = ${id}
     RETURNING id, bot_id, folder_id, question, answer, created_at
