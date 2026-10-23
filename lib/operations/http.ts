@@ -6,7 +6,6 @@ import { readTenantId } from "../auth";
 import type { AccessDatabase } from "../access/schema";
 import { portalUser } from "../customer-portal/auth";
 import { customerBot } from "../customer-portal/bots";
-import { resolveBotAccess } from "../access/queries";
 import { PortalError } from "../customer-portal/input";
 
 export async function adminBot(
@@ -14,6 +13,19 @@ export async function adminBot(
   db: AccessDatabase = sql,
   lock = false,
   allowCustomer = false,
+) {
+  try {
+    return await resolveAdminBot(id, db, lock, allowCustomer);
+  } catch (e) {
+    if (e instanceof PortalError) throw new OperationError(e.message, e.status);
+    throw e;
+  }
+}
+async function resolveAdminBot(
+  id: string,
+  db: AccessDatabase,
+  lock: boolean,
+  allowCustomer: boolean,
 ) {
   const tenantId = await readTenantId();
   if (tenantId) {
@@ -48,26 +60,20 @@ export async function adminBot(
     return { bot, tenantId };
   }
   if (!allowCustomer) throw new OperationError("Unauthorized", 401);
-  try {
-    const user = await portalUser(),
-      grant = await resolveBotAccess(db, user.id, id, "knowledge.manage");
-    if (!grant) throw new OperationError("챗봇을 찾을 수 없습니다.", 404);
-    await customerBot(
-      db,
-      user.id,
-      grant.customer_id,
-      id,
-      "knowledge.manage",
-      lock,
-    );
-    const [bot] =
-      await db`SELECT * FROM bots WHERE id=${id} AND customer_id=${grant.customer_id} AND tenant_id=${grant.tenant_id}`;
-    if (!bot) throw new OperationError("챗봇을 찾을 수 없습니다.", 404);
-    return { bot, tenantId: grant.tenant_id };
-  } catch (e) {
-    if (e instanceof PortalError) throw new OperationError(e.message, e.status);
-    throw e;
-  }
+  const user = await portalUser();
+  const [assigned] = await db`SELECT customer_id FROM bots WHERE id=${id}`;
+  if (!assigned?.customer_id)
+    throw new OperationError("챗봇을 찾을 수 없습니다.", 404);
+  // customerBot verifies membership, permission and bot→customer→tenant ownership in one pass.
+  const { bot, grant } = await customerBot(
+    db,
+    user.id,
+    String(assigned.customer_id),
+    id,
+    "knowledge.manage",
+    lock,
+  );
+  return { bot, tenantId: grant.tenant_id };
 }
 export function failure(error: unknown) {
   return Response.json(

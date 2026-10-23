@@ -44,11 +44,21 @@ export async function POST(
     )
       throw new PortalError("5MB 이하 XLSX·CSV 파일을 선택해주세요.");
     const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-    const rows = parseQaWorkbook(workbook).map((item) => ({
-      ...item,
-      question: text(item.question, "질문", 2000),
-      answer: text(item.answer, "답변", 20000),
-    }));
+    const report = { skippedSheets: [] as string[] };
+    const rows = parseQaWorkbook(workbook, report).map((item) => {
+      try {
+        return {
+          ...item,
+          question: text(item.question, "질문", 2000),
+          answer: text(item.answer, "답변", 20000),
+        };
+      } catch (e) {
+        // Name the sheet and row so a 100-row workbook can be fixed without guessing.
+        throw new PortalError(
+          `${item.folder} 시트 ${item.line}행: ${e instanceof Error ? e.message : "내용을 확인해주세요."}`,
+        );
+      }
+    });
     if (rows.length > 100)
       throw new PortalError("한 번에 100개 이하 Q&A를 가져와주세요.");
     if (!rows.length)
@@ -57,7 +67,7 @@ export async function POST(
       rows.map((r) => r.question),
       await getTenantApiKeyByTenantId(grant.tenant_id),
     );
-    await sql.begin((tx) =>
+    const result = await sql.begin((tx) =>
       importCustomerQa(
         tx as unknown as AccessDatabase,
         user.id,
@@ -68,7 +78,10 @@ export async function POST(
         vectors,
       ),
     );
-    return Response.json({ count: rows.length }, { status: 201 });
+    return Response.json(
+      { count: rows.length, ...result, skippedSheets: report.skippedSheets },
+      { status: 201 },
+    );
   } catch (e) {
     return failure(e);
   }

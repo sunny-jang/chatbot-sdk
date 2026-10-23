@@ -54,3 +54,16 @@
 - 고객사 설정 저장 폼은 `widget_color`가 비어 있는 기존 봇에 공개 위젯·에이전시 설정과 같은 `DEFAULT_WIDGET_COLOR`(#2563eb)를 보낸다. 이름이나 인사말만 바꿔도 실제 위젯 색이 바뀌지 않는다.
 - 같은 제목·같은 본문 문서를 다른 폴더로 다시 업로드하면 임베딩 호출 없이 봇 잠금 아래 대상 폴더의 bot_id를 검사한 뒤 `folder_id`만 갱신한다. 응답은 `skipped: true`에 `moved` 여부를 함께 돌려주고 `knowledge.put` 감사 기록을 남긴다. 임베딩 후 저장 잠금에서 다시 비교하는 경로도 같은 처리를 한다.
 - 추가 DB 검사: 폴더 이동·같은 폴더 재업로드는 `moved: false`·미분류 복귀·다른 봇 폴더 404·감사 기록 수. DB 46건 롤백 통과, 단위 126건, `tsc --noEmit` 통과, 변경 파일 린트 0오류(기존 img 경고 1).
+
+### 독립 리뷰 2차 (2026-10-23, Claude code-review — Codex 사용량 한도로 대체)
+
+Codex 리뷰 봇이 사용량 한도 초과로 `failed`를 돌려줘 별도 리뷰 에이전트로 8건을 받아 모두 반영했다.
+
+- `adminBot`: 에이전시 세션의 잠금 경로에서 `portalUser`/`customerBot`이 던지는 PortalError가 500으로 뭉개지던 것을 모든 경로에서 OperationError로 변환. 고객사 경로는 `resolveBotAccess`+`customerBot`+봇 재조회 3중 확인을 봇의 customer_id 조회 후 `customerBot` 1회로 줄였다.
+- 에이전시 `PUT /api/bots/[id]/qa/[qaId]`: `COALESCE(folder_id || null, folder_id)` 때문에 빈 folder_id로 미분류 이동이 불가능하던 것을 `folder_id === undefined`일 때만 유지하도록 수정.
+- 공유 워크북 파서: 답변 뒤의 `비고·담당자·수정일·메모` 등 관리용 열이 답변에 합쳐지던 것을 건너뛴다(기존 `추가` 같은 임의 열은 답변으로 유지). 7개 시트 초과분을 조용히 버리지 않고 30개까지 읽고 건너뛴 시트 이름을 응답에 포함. 각 행의 시트 행 번호(`line`)를 돌려줘 고객사 가져오기 오류에 `시트명 N행:`을 붙인다. 단위 검사 3건 추가.
+- `importCustomerQa`: 행마다 `customerBot` 재잠금·재검사·감사 행을 남기던 것을 봇 잠금 1회, 시트 폴더 1회 생성/재사용, 직접 upsert, `knowledge.import` 감사 1건으로 정리. 응답에 created/updated 수 포함. 기존 DB 회귀(ID 유지·시트별 폴더) 통과.
+- HTML 업로드: 정규식 태그 제거 대신 cheerio로 `script/style/noscript/template` 본문을 제거하고 블록 요소 사이 공백을 보존. 단위 검사 추가.
+
+검증: 단위 130건, DB 46건 롤백, `tsc`·린트·`git diff --check` 통과. 빌드·HTTP 결과는 아래에 적는다.
+실행 기록(2차 리뷰 반영 후): 프로덕션 빌드 통과, fixture 초기화 후 HTTP 33건 통과.
