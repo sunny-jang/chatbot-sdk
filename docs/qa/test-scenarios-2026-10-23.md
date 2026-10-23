@@ -107,3 +107,22 @@ node --env-file=/tmp/chatbot-qa-runtime/app.env --import tsx tests/demo-http.int
 ## 8. 실행 기록
 
 (아래에 실행 날짜·커밋·결과를 추가한다. 자동 스위트 수치와 수동 항목별 통과/실패/미검증을 적는다.)
+
+### 2026-10-23 1차 실행 — `codex/master-identity` `2e230b2` (= 통합 브랜치 + PR #10)
+
+자동: 단위 142/142 · DB 포털 46·신원 20·데모 13(전부 롤백) · `tsc` 통과 · ERD 렌더 검사 OK · HTTP 포털 40/40 · 데모 HTTP 8/8 · 프로덕션 빌드 Edge 경고 0.
+
+| 수동 항목 | 결과 | 근거 |
+| --- | --- | --- |
+| L13-b 마스터 콘솔·마스터 관리 패널 | 통과 | `master-host-console.jpg`, `master-panel.jpg` |
+| UI-01 로그인 3종·업무 홈·상담함·고객사 관리 디자인 | 통과 | `design-pro-*.jpg` |
+| UI-02 모바일(375px) desk 로그인·상담함·챗봇 관리 | 통과(겹침·잘림 없음, 상단 메뉴 가로 스크롤) | `design-pro-desk-login-mobile.jpg`, `qa-mobile-desk-support.jpg`, `qa-mobile-bot-workspace.jpg` |
+| UI-03 키보드 포커스 링 | 통과(인디고 링 표시) | `qa-keyboard-focus.jpg` |
+| DB-01/02 경계 화면 | 통과 | `analytics-boundary-dashboard.jpg`, `analytics-boundary-logs.jpg` |
+| 초대 흐름 5상태 | 통과 | `common-identity-invite-*.jpg` |
+| L01-a 가입 폼 수동 | 미실행 | 자동(DB) 검증만 |
+| L10 공간 전환 초안 분리 | 미실행 | HTTP 격리 검사만 |
+| L17 전체 흐름 키보드 완주 | 미실행 | 포커스 링만 확인 |
+| 환경 항목(§7) | 미검증(환경) | Google 콘솔·메일·DNS·실모델 키·운영 이관 |
+
+판정: **코드 범위의 자동·수동 시나리오는 전부 통과. main 반영은 §7 환경 체크리스트와 운영 이관 리허설을 수행한 뒤 PR #1 경로로 진행한다.** 미실행 3건은 반영 전 수동으로 한 번 더 돌리는 것을 권한다.
