@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
 import sql from "@/lib/neon";
 import Sidebar from "./Sidebar";
 import WorkspaceFrame from "./WorkspaceFrame";
@@ -7,8 +6,6 @@ import { headers } from "next/headers";
 import { isCustomerPortalHost } from "@/lib/customer-portal/host";
 import { auth } from "@/auth";
 import "./globals.css";
-
-const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Ideal AI Chatbot SDK",
@@ -46,8 +43,15 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="ko" className={geist.className}>
-      <body className="min-h-screen" style={{ backgroundColor: "#f3f6fb" }}>
+    <html lang="ko">
+      <head>
+        {/* Pretendard: Korean-first UI type shared by the agency app, the desk portal and the demo. */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
+      </head>
+      <body className="min-h-screen">
         {tenantName ? (
           <WorkspaceFrame
             customerHost={customerHost}

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import LogoutButton from "./LogoutButton";
 import GuidePanel from "./GuidePanel";
+import NavIcon from "./components/NavIcon";
 
 type Bot = { id: string; name: string; type: string };
 export default function Sidebar({
@@ -31,7 +32,9 @@ export default function Sidebar({
       aria-current={pathname === href ? "page" : undefined}
       className={`workspace-nav-link ${pathname === href ? "active" : ""}`}
     >
-      <span aria-hidden="true">{mark}</span>
+      <span aria-hidden="true">
+        <NavIcon name={mark} />
+      </span>
       {label}
     </Link>
   );
@@ -74,37 +77,37 @@ export default function Sidebar({
         </div>
         <nav aria-label="주 메뉴" className="workspace-navigation">
           <p className="workspace-nav-label">업무</p>
-          {link("/", "업무 홈", "⌂")}
-          {link("/support", "상담함", "☏")}
-          {link("/requests", "문의·견적", "▤")}
+          {link("/", "업무 홈", "home")}
+          {link("/support", "상담함", "inbox")}
+          {link("/requests", "문의·견적", "requests")}
           <p className="workspace-nav-label">관리</p>
-          {link("/customers", "고객사 관리", "▣")}
-          {link("/demos", "고객사 데모", "◈")}
-          {link("/bots", "챗봇 관리", "◇")}
-          {link("/analytics", "이용 현황", "▥")}
-          {link("/settings", "공간 설정", "⚙")}
-          {link("/plan", "요금제", "▧")}
+          {link("/customers", "고객사 관리", "customers")}
+          {link("/demos", "고객사 데모", "demo")}
+          {link("/bots", "챗봇 관리", "bots")}
+          {link("/analytics", "이용 현황", "analytics")}
+          {link("/settings", "공간 설정", "settings")}
+          {link("/plan", "요금제", "plan")}
           {currentBot && (
             <div className="workspace-bot-nav">
               <p className="workspace-nav-label">선택한 챗봇</p>
               <strong className="workspace-bot-name">{currentBot.name}</strong>
-              {link(`/bots/${currentBot.id}`, "설정·설치", "⚙")}
-              {link(`/bots/${currentBot.id}/docs`, "지식 문서", "▤")}
+              {link(`/bots/${currentBot.id}`, "설정·설치", "settings")}
+              {link(`/bots/${currentBot.id}/docs`, "지식 문서", "docs")}
               {currentBot.type === "qa" &&
-                link(`/bots/${currentBot.id}/qa`, "질문과 답변", "≡")}
-              {link(`/bots/${currentBot.id}/test`, "테스트", "▷")}
-              {link(`/bots/${currentBot.id}/logs`, "대화 기록", "◷")}
-              {link(`/bots/${currentBot.id}/requests`, "문의·견적 관리", "▤")}
-              {link(`/bots/${currentBot.id}/analytics`, "챗봇 분석", "▥")}
+                link(`/bots/${currentBot.id}/qa`, "질문과 답변", "qa")}
+              {link(`/bots/${currentBot.id}/test`, "테스트", "test")}
+              {link(`/bots/${currentBot.id}/logs`, "대화 기록", "logs")}
+              {link(`/bots/${currentBot.id}/requests`, "문의·견적 관리", "requests")}
+              {link(`/bots/${currentBot.id}/analytics`, "챗봇 분석", "analytics")}
             </div>
           )}
           <p className="workspace-nav-label">도움말</p>
-          {link("/guide", "이용 가이드", "?")}
-          {link("/sdk-guide", "설치 가이드", "⌘")}
+          {link("/guide", "이용 가이드", "guide")}
+          {link("/sdk-guide", "설치 가이드", "install")}
           {isAdmin && (
             <>
               <p className="workspace-nav-label">마스터 전용</p>
-              {link("/admin", "플랫폼 관리", "⊞")}
+              {link("/admin", "플랫폼 관리", "admin")}
             </>
           )}
         </nav>

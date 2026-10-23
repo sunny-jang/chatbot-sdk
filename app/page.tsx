@@ -46,11 +46,11 @@ export default async function HomePage() {
       </header>
       <section className="workspace-metrics" aria-label="현재 업무 현황">
         {[
-          ["대기 중인 상담", stats.waiting, "/support", "waiting"],
-          ["진행 중인 상담", stats.active, "/support?status=active", "active"],
-          ["새 문의·견적", stats.requests, "/requests", "requests"],
-          ["운영 챗봇", stats.bots, "/bots", "bots"],
-        ].map(([label, count, href, key]) => (
+          ["대기 중인 상담", stats.waiting, "/support", "waiting", "대기 상담 열기"],
+          ["진행 중인 상담", stats.active, "/support?status=active", "active", "진행 상담 보기"],
+          ["새 문의·견적", stats.requests, "/requests", "requests", "접수 내역 보기"],
+          ["운영 챗봇", stats.bots, "/bots", "bots", "챗봇 관리"],
+        ].map(([label, count, href, key, action]) => (
           <Link
             href={String(href)}
             key={key}
@@ -61,7 +61,7 @@ export default async function HomePage() {
               {count}
               <small>{key === "bots" ? "개" : "건"}</small>
             </strong>
-            <span className="workspace-metric-action">확인하기</span>
+            <span className="workspace-metric-action">{action}</span>
           </Link>
         ))}
       </section>

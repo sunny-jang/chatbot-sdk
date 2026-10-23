@@ -3,6 +3,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import Image from "next/image";
+import LoginShowcase from "@/app/components/LoginShowcase";
 export default function CustomerLogin({
   agencyOrigin,
   next,
@@ -41,9 +42,9 @@ export default function CustomerLogin({
     }
   }
   return (
-    <main className="cp-login">
+    <main className="auth-split">
       <section>
-        <Link href="/customer" className="cp-wordmark">
+        <Link href="/customer" className="auth-brand">
           <Image
             src="/logo.png"
             alt="Ideal AI"
@@ -55,38 +56,39 @@ export default function CustomerLogin({
           />
           <span>고객사 상담함</span>
         </Link>
-        <h1>
-          우리 회사의 상담을
-          <br />
-          한곳에서 이어가세요.
-        </h1>
-        <p className="cp-login-description">
-          초대받은 담당자 계정으로 로그인해주세요.
+        <h1>상담함 로그인</h1>
+        <p className="auth-lead">
+          초대받은 담당자 계정으로 로그인하면 우리 회사의 상담만 표시됩니다.
         </p>
         {googleAvailable && (
-          <button
-            className="cp-button"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              void signIn("customer-google", { redirectTo: next });
-            }}
-          >
-            Google로 상담함 로그인
-          </button>
+          <>
+            <button
+              type="button"
+              className="auth-secondary"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void signIn("customer-google", { redirectTo: next });
+              }}
+            >
+              Google로 로그인
+            </button>
+            <div className="auth-divider">또는 이메일로</div>
+          </>
         )}
         <form onSubmit={submit}>
-          <label>
+          <label className="auth-field">
             담당자 이메일
             <input
               type="email"
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.co.kr"
               required
             />
           </label>
-          <label>
+          <label className="auth-field">
             비밀번호
             <input
               type="password"
@@ -97,42 +99,28 @@ export default function CustomerLogin({
             />
           </label>
           {error && (
-            <p role="alert" className="cp-error">
+            <p role="alert" className="auth-error">
               {error}
             </p>
           )}
-          <button disabled={busy}>
-            {busy ? "로그인 중…" : "상담함으로 로그인"}
+          <button className="auth-submit" disabled={busy}>
+            {busy ? "로그인 중…" : "로그인"}
           </button>
         </form>
-        <div className="cp-login-help">
+        <div className="auth-links">
           <Link href="/customer/forgot-password">비밀번호를 잊으셨나요?</Link>
         </div>
-        <div className="cp-login-invite">
+        <div className="auth-note">
           <strong>처음 이용하시나요?</strong>
-          <p>
-            에이전시에서 받은 초대 링크로
-            <br />
-            계정을 활성화해주세요.
-          </p>
+          에이전시에서 받은 초대 링크를 열어 계정을 활성화한 뒤 로그인할 수
+          있습니다.
         </div>
-        <footer className="cp-login-footer">
+        <footer className="auth-footer">
           <span>에이전시 관리자이신가요?</span>
-          <a href={`${agencyOrigin}/login`}>관리자 로그인</a>
+          <a href={`${agencyOrigin}/login`}>에이전시 워크스페이스 로그인</a>
         </footer>
       </section>
-      <aside>
-        <h2>
-          오늘의 문의에
-          <br />
-          집중할 수 있도록.
-        </h2>
-        <p>
-          고객과 나눈 대화를 읽고, 답변하고,
-          <br />
-          접수된 문의를 처리하세요.
-        </p>
-      </aside>
+      <LoginShowcase variant="desk" />
     </main>
   );
 }

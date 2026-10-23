@@ -39,7 +39,8 @@ async function main() {
   await check("서브도메인 로그인은 고객사 전용 화면", async () => {
     const r = await api("/login", desk);
     assert.equal(r.status, 200);
-    assert.ok(r.data.includes("상담함으로 로그인"));
+    assert.ok(r.data.includes("상담함 로그인"));
+    assert.ok(r.data.includes("에이전시 워크스페이스 로그인"));
     assert.ok(!r.data.includes("Google로 로그인"));
   });
   await check("비로그인 상담 루트는 고객사 로그인으로", async () => {

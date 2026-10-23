@@ -5,20 +5,20 @@
  * the portal components, the agency customer pages and the demo manager share one look.
  */
 :root {
-  --cp-text: #17243b;
-  --cp-muted: #59677d;
-  --cp-border: #dce3ee;
-  --cp-border-soft: #e4e9f1;
-  --cp-bg: #f3f6fb;
-  --cp-panel: #fff;
-  --cp-primary: #4059d8;
-  --cp-primary-hover: #2946c7;
-  --cp-primary-soft: #eef2fa;
-  --cp-primary-text: #4059a0;
-  --cp-danger: #c0392b;
-  --cp-danger-bg: #fff1f1;
-  --cp-radius: 12px;
-  --cp-radius-sm: 8px;
+  --cp-text: var(--ink, #141a24);
+  --cp-muted: var(--steel, #5c6675);
+  --cp-border: var(--line, #e2e6ec);
+  --cp-border-soft: var(--line-soft, #eceff3);
+  --cp-bg: var(--canvas, #f4f5f8);
+  --cp-panel: var(--surface, #fff);
+  --cp-primary: var(--brand, #2e55d1);
+  --cp-primary-hover: var(--brand-hover, #2446b1);
+  --cp-primary-soft: var(--brand-soft, #eaf0ff);
+  --cp-primary-text: var(--brand-text, #2446b1);
+  --cp-danger: var(--danger, #c0392b);
+  --cp-danger-bg: var(--danger-bg, #fff1f1);
+  --cp-radius: 10px;
+  --cp-radius-sm: 7px;
 }
 
 /* ---------- Login: two-column layout, workspace tokens ---------- */
