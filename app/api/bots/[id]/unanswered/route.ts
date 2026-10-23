@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import sql from "@/lib/neon";
+import { isRestrictedBot, REQUESTS_NOTICE } from "@/lib/access/visibility";
 import { getEmbedding } from "@/lib/embeddings";
 import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import {
@@ -14,7 +15,9 @@ type Context = { params: Promise<{ id: string }> };
 export async function GET(req: Request, { params }: Context) {
   try {
     const { id } = await params;
-    await adminBot(id);
+    const { tenantId: owner } = await adminBot(id);
+    if (await isRestrictedBot(sql, owner, id))
+      throw new OperationError(REQUESTS_NOTICE, 403);
     const url = new URL(req.url);
     const status = url.searchParams.get("status") || "pending";
     if (!["pending", "resolved", "excluded", "all"].includes(status))
@@ -53,6 +56,8 @@ export async function POST(req: Request, { params }: Context) {
   try {
     const { id } = await params;
     const { tenantId } = await adminBot(id);
+    if (await isRestrictedBot(sql, tenantId, id))
+      throw new OperationError(REQUESTS_NOTICE, 403);
     const body = await jsonBody(req);
     const logId = boundedText(body.logId, "질문 ID", 200);
     const logs =
@@ -121,7 +126,9 @@ export async function POST(req: Request, { params }: Context) {
 export async function PATCH(req: Request, { params }: Context) {
   try {
     const { id } = await params;
-    await adminBot(id);
+    const { tenantId: owner } = await adminBot(id);
+    if (await isRestrictedBot(sql, owner, id))
+      throw new OperationError(REQUESTS_NOTICE, 403);
     const body = await jsonBody(req);
     const logId = boundedText(body.logId, "질문 ID", 200);
     if (body.status !== "pending" && body.status !== "excluded")

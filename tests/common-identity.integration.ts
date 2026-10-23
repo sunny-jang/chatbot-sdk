@@ -8,6 +8,7 @@ import {
   agencySessionValid,
   verifyAgencyCredentials,
 } from "../lib/access/credentials";
+import { restrictedBotIds } from "../lib/access/visibility";
 import { hash } from "bcryptjs";
 import {
   acceptVerifiedInvitation,
@@ -248,6 +249,19 @@ async function main() {
           .token_hash,
         tokenHash(invite.token),
       );
+
+      // Conversation text is restricted for bots assigned to non-default customers only.
+      const homeCustomer = "home-" + suffix,
+        assignedBot = "bot-assigned-" + suffix,
+        homeBot = "bot-home-" + suffix,
+        looseBot = "bot-loose-" + suffix;
+      await tx`INSERT INTO customers(id,tenant_id,name,is_default) VALUES(${homeCustomer},${tenant},'우리 회사',TRUE)`;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${assignedBot},${tenant},${customer},'고객사 봇','qa'),(${homeBot},${tenant},${homeCustomer},'자사 봇','qa'),(${looseBot},${tenant},NULL,'미배정 봇','qa')`;
+      const restrictedSet = await restrictedBotIds(db, tenant);
+      assert.equal(restrictedSet.has(assignedBot), true);
+      assert.equal(restrictedSet.has(homeBot), false);
+      assert.equal(restrictedSet.has(looseBot), false);
+      checks++;
 
       // Agency email login prefers the common identity's password once the users row exists.
       const legacyTenant = "pw-" + suffix,

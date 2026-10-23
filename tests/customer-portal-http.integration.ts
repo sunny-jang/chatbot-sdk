@@ -39,7 +39,8 @@ async function main() {
   await check("서브도메인 로그인은 고객사 전용 화면", async () => {
     const r = await api("/login", desk);
     assert.equal(r.status, 200);
-    assert.ok(r.data.includes("상담함으로 로그인"));
+    assert.ok(r.data.includes("상담함 로그인"));
+    assert.ok(r.data.includes("에이전시 워크스페이스 로그인"));
     assert.ok(!r.data.includes("Google로 로그인"));
   });
   await check("비로그인 상담 루트는 고객사 로그인으로", async () => {
@@ -57,6 +58,79 @@ async function main() {
       "portal-agency-qa",
     ),
   );
+  await check("에이전시 분석은 고객사 봇의 대화 원문을 숨기고 집계만 포함", async () => {
+    const ownBot = "own-bot-" + randomUUID(),
+      customerLog = "log-c-" + randomUUID(),
+      ownLog = "log-o-" + randomUUID();
+    const [home] =
+      await sql`SELECT id FROM customers WHERE tenant_id='portal-agency-qa' AND is_default=TRUE`;
+    await sql`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${ownBot},'portal-agency-qa',${home.id},'우리 회사 봇','qa')`;
+    await sql`INSERT INTO chat_logs(id,bot_id,session_id,user_message,bot_reply,created_at) VALUES(${customerLog},'portal-cafe-bot','s-c','고객사 질문 원문','고객사 답변',EXTRACT(EPOCH FROM NOW())::BIGINT),(${ownLog},${ownBot},'s-o','우리 회사 질문 원문','우리 회사 답변',EXTRACT(EPOCH FROM NOW())::BIGINT)`;
+    try {
+      const r = await api("/api/analytics?days=7&botId=all", agency, owner);
+      assert.equal(r.status, 200);
+      const texts = JSON.stringify([r.data.conversations, r.data.refusedConversations]);
+      assert.ok(!texts.includes("고객사 질문 원문"));
+      assert.ok(texts.includes("우리 회사 질문 원문"));
+      assert.ok(r.data.summary.messages >= 2, "aggregates still count customer bots");
+      assert.ok(r.data.restricted.bots.some((b: { id: string }) => b.id === "portal-cafe-bot"));
+      assert.ok(r.data.restricted.hiddenMessages >= 1);
+      const single = await api("/api/analytics?days=7&botId=portal-cafe-bot", agency, owner);
+      assert.equal(single.data.restricted.selected, true);
+      assert.equal(single.data.conversations.length, 0);
+      assert.ok(single.data.summary.messages >= 1);
+      assert.equal((await api("/api/bots/portal-cafe-bot/logs", agency, owner)).status, 403);
+      assert.equal((await api(`/api/bots/${ownBot}/logs`, agency, owner)).status, 200);
+      const page = await api("/bots/portal-cafe-bot/logs", agency, owner);
+      assert.ok(page.data.includes("고객사 전용 대화 기록"));
+      assert.ok(!page.data.includes("고객사 질문 원문"));
+      // The customer's own administrator still sees the text in the desk portal.
+      const desk = await api("/api/customer/qa-cafe/bots/portal-cafe-bot/logs", "desk.localhost:3012", admin);
+      assert.equal(desk.status, 200);
+      assert.ok(JSON.stringify(desk.data).includes("고객사 질문 원문"));
+    } finally {
+      await sql`DELETE FROM chat_logs WHERE id IN (${customerLog},${ownLog})`;
+      await sql`DELETE FROM bots WHERE id=${ownBot}`;
+    }
+  });
+  await check("고객사 봇의 접수·미응답은 고객사만 처리하고 에이전시 화면에서 빠진다", async () => {
+    assert.equal((await api("/api/bots/portal-cafe-bot/requests", agency, owner)).status, 403);
+    assert.equal((await api("/api/bots/portal-cafe-bot/unanswered", agency, owner)).status, 403);
+    const list = await api("/requests", agency, owner);
+    assert.equal(list.status, 200);
+    assert.ok(!list.data.includes("김방문"), "customer request name must not render for the agency");
+    const home = await api("/", agency, owner);
+    assert.ok(!home.data.includes("김방문"));
+    const botPage = await api("/bots/portal-cafe-bot/requests", agency, owner);
+    assert.ok(botPage.data.includes("고객사가 직접 처리하는 접수"));
+    const desk = await api("/api/customer/qa-cafe/requests", "desk.localhost:3012", admin);
+    assert.equal(desk.status, 200);
+    assert.ok(JSON.stringify(desk.data).includes("김방문"));
+  });
+  await check("마스터 콘솔은 master 호스트에서만, 에이전시 호스트의 /admin은 그쪽으로 보냄", async () => {
+    const master = "master.localhost:3012";
+    // Anonymous root resolves to the console, which then sends non-masters to the shared login.
+    const root = await api("/", master);
+    assert.equal(root.status, 307);
+    assert.ok(root.location?.endsWith("/login"), String(root.location));
+    assert.equal((await api("/login", master)).status, 200);
+    const stray = await api("/customers", master, owner);
+    assert.equal(stray.status, 307);
+    assert.ok(stray.location?.endsWith("/admin"));
+    assert.equal((await api("/api/bots", master, owner)).status, 403);
+    const redirected = await api("/admin", agency, owner);
+    assert.equal(redirected.status, 307);
+    assert.ok(redirected.location?.startsWith("http://" + master + "/admin"), String(redirected.location));
+    assert.equal((await api("/api/admin/tenants", agency, owner)).status, 403);
+    // Non-master agency owners are still refused on the console itself.
+    assert.equal((await api("/api/admin/tenants", master, owner)).status, 403);
+    // Login works on the master host with the shared agency credentials.
+    const masterCookie = await login(f.owner, master, "credentials");
+    assert.equal((await api("/api/auth/session", master, masterCookie)).data.tenant_id, "portal-agency-qa");
+    const providers = (await api("/api/auth/providers", master)).data;
+    assert.deepEqual(Object.keys(providers).sort(), ["credentials", "google"]);
+    assert.ok(providers.google.callbackUrl.startsWith("http://" + master + "/api/auth/callback/"));
+  });
   await check("에이전시 세션은 소유자 auth_version 회수에 즉시 반응", async () => {
     assert.equal((await api("/api/customers", agency, owner)).status, 200);
     await sql`UPDATE users SET auth_version=auth_version+1 WHERE id='portal-owner'`;

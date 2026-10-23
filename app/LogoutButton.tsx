@@ -15,9 +15,10 @@ export default function LogoutButton({
   return (
     <button
       onClick={handleLogout}
-      className="flex items-center gap-2 px-3 py-2 text-sm text-red-500 rounded-lg hover:bg-red-50 transition-colors w-full text-left"
+      className="flex items-center gap-2 text-sm text-left"
+      style={{ color: "var(--steel, #5c6675)" }}
     >
-      <span>🚪</span> 로그아웃
+      로그아웃
     </button>
   );
 }

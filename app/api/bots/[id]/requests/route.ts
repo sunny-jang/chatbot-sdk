@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { after } from "next/server";
 import sql from "@/lib/neon";
+import { isRestrictedBot, REQUESTS_NOTICE } from "@/lib/access/visibility";
 import {
   adminBot,
   boundedText,
@@ -16,6 +17,8 @@ export async function GET(req: Request, { params }: Context) {
   try {
     const { id } = await params;
     const { tenantId } = await adminBot(id);
+    if (await isRestrictedBot(sql, tenantId, id))
+      throw new OperationError(REQUESTS_NOTICE, 403);
     await cleanupOperations();
     const url = new URL(req.url),
       requestId = url.searchParams.get("requestId");
@@ -69,6 +72,8 @@ export async function PATCH(req: Request, { params }: Context) {
   try {
     const { id } = await params;
     const { tenantId } = await adminBot(id);
+    if (await isRestrictedBot(sql, tenantId, id))
+      throw new OperationError(REQUESTS_NOTICE, 403);
     const body = await jsonBody(req),
       requestId = boundedText(body.requestId, "접수", 200);
     if (

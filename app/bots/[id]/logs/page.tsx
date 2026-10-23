@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
+import { isRestrictedBot, RESTRICTED_NOTICE } from "@/lib/access/visibility";
 import { Bot, ChatLog } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
 import BotHeader from "../BotHeader";
@@ -40,6 +41,20 @@ export default async function LogsPage({
   const botRows = await sql`SELECT * FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   const bot = botRows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
+  if (tenantId && (await isRestrictedBot(sql, tenantId, id)))
+    return (
+      <div className="max-w-3xl">
+        <BotHeader bot={bot} current="대화 기록" />
+        <div className="workspace-panel" style={{ padding: 28, marginTop: 16 }}>
+          <strong style={{ display: "block", fontSize: 15, marginBottom: 8 }}>
+            고객사 전용 대화 기록
+          </strong>
+          <p style={{ fontSize: 14, color: "var(--steel)", lineHeight: 1.7 }}>
+            {RESTRICTED_NOTICE} 고객사 관리자는 상담함의 챗봇 관리 → 대화 기록에서 확인할 수 있습니다.
+          </p>
+        </div>
+      </div>
+    );
 
   const logs = (await sql`
     SELECT id, bot_id, session_id, user_message, bot_reply, created_at

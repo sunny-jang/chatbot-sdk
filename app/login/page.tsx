@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import Image from "next/image";
+import LoginShowcase from "@/app/components/LoginShowcase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function LoginPage() {
       router.push("/");
       router.refresh();
     } catch {
-      setError("오류가 발생했습니다. 다시 시도해주세요.");
+      setError("로그인하지 못했습니다. 다시 시도해주세요.");
     } finally {
       setLoading(false);
     }
@@ -53,21 +54,31 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-md shadow-sm">
-        <Link href="/customer/login" className="block text-sm text-blue-700 mb-4">고객사 상담함 로그인</Link>
-        <div className="mb-6">
-          <Image src="/logo.png" alt="Ideal AI" width={140} height={42} priority unoptimized className="mb-3" style={{ width: 140, height: "auto" }} />
-          <h1 className="text-xl font-bold text-gray-900">Ideal AI Chatbot SDK</h1>
-          <p className="text-sm text-gray-500 mt-1">로그인하여 관리자 패널에 접속하세요</p>
-        </div>
+    <main className="auth-split">
+      <section>
+        <Link href="/" className="auth-brand">
+          <Image
+            src="/logo.png"
+            alt="Ideal AI"
+            width={120}
+            height={36}
+            priority
+            unoptimized
+            style={{ width: 120, height: "auto" }}
+          />
+          <span>에이전시 워크스페이스</span>
+        </Link>
+        <h1>로그인</h1>
+        <p className="auth-lead">
+          고객사 챗봇과 상담을 관리하는 에이전시 계정으로 로그인하세요.
+        </p>
 
-        {/* Google 간편 로그인 */}
         <button
+          type="button"
           onClick={() => signIn("google", { callbackUrl: "/" })}
-          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors mb-5"
+          className="auth-secondary"
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -75,77 +86,65 @@ export default function LoginPage() {
           </svg>
           Google로 로그인
         </button>
+        <div className="auth-divider">또는 이메일로</div>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400">또는 이메일로</span>
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
-
-        {/* 이메일/비밀번호 */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">이메일</label>
+        <form onSubmit={handleSubmit}>
+          <label className="auth-field">
+            이메일
             <input
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="example@company.com"
+              placeholder="name@agency.co.kr"
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">비밀번호</label>
+          </label>
+          <label className="auth-field">
+            비밀번호
             <input
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-          </div>
-
+          </label>
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p role="alert" className="auth-error">
               {error}
             </p>
           )}
-
           <button
             type="submit"
             disabled={loading || !email || !password}
-            className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="auth-submit"
           >
-            {loading ? "로그인 중..." : "로그인"}
+            {loading ? "로그인 중…" : "로그인"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-500">
-          계정이 없으신가요?{" "}
-          <Link href="/signup" className="text-blue-600 hover:underline font-medium">
-            회원가입
-          </Link>
-        </p>
+        <div className="auth-links">
+          <span>
+            처음이신가요? <Link href="/signup">에이전시 계정 만들기</Link>
+          </span>
+          <Link href="/customer/login">고객사 상담함 로그인</Link>
+        </div>
 
         {process.env.NODE_ENV === "development" && (
-          <div className="mt-6 pt-5 border-t border-dashed border-gray-200">
+          <div className="auth-dev">
             <button
               type="button"
               onClick={handleTestLogin}
               disabled={testLoading || loading}
-              className="w-full py-2.5 border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium rounded-lg hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="auth-secondary"
             >
-              {testLoading ? "테스트 환경 준비 중..." : "테스트로 넘어가기 →"}
+              {testLoading ? "접속 중…" : "테스트 계정으로 로그인 (개발 환경)"}
             </button>
-            <p className="mt-2 text-center text-xs text-gray-400">
-              로컬 개발 환경에서만 표시됩니다
-            </p>
           </div>
         )}
-      </div>
-    </div>
+      </section>
+      <LoginShowcase variant="agency" />
+    </main>
   );
 }

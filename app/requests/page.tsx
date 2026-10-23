@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import sql from "@/lib/neon";
 import { getTenantId } from "@/lib/auth";
+import { hiddenBotIds, REQUESTS_NOTICE } from "@/lib/access/visibility";
 import { initSchema } from "@/lib/db";
 import { queryValue } from "@/lib/workspace-inbox";
 export const dynamic = "force-dynamic";
@@ -22,14 +23,19 @@ export default async function RequestsPage({
   const requestedStatus = queryValue(params.status);
   const status = Object.hasOwn(labels, requestedStatus) ? requestedStatus : "";
   const q = queryValue(params.q).trim().slice(0, 100);
+  // Requests for customer-assigned bots are handled by that customer in the desk portal.
+  const hidden = await hiddenBotIds(sql, tenant);
   const rows =
-    await sql`SELECT r.id,r.bot_id,r.name,r.kind,r.status,r.message,r.created_at,b.name AS bot_name FROM customer_requests r JOIN bots b ON b.id=r.bot_id WHERE r.tenant_id=${tenant} AND (${status}='' OR r.status=${status}) AND (${q}='' OR r.name ILIKE ${"%" + q + "%"} OR r.message ILIKE ${"%" + q + "%"}) ORDER BY r.created_at DESC LIMIT 100`;
+    await sql`SELECT r.id,r.bot_id,r.name,r.kind,r.status,r.message,r.created_at,b.name AS bot_name FROM customer_requests r JOIN bots b ON b.id=r.bot_id WHERE r.tenant_id=${tenant} AND r.bot_id <> ALL(${hidden}::text[]) AND (${status}='' OR r.status=${status}) AND (${q}='' OR r.name ILIKE ${"%" + q + "%"} OR r.message ILIKE ${"%" + q + "%"}) ORDER BY r.created_at DESC LIMIT 100`;
   return (
     <div className="workspace-page">
       <header className="workspace-page-heading">
         <div>
           <h1>문의·견적</h1>
-          <p>여러 챗봇으로 접수된 신청을 한곳에서 확인하세요.</p>
+          <p>
+            자사 챗봇으로 접수된 신청입니다.
+            {hidden.length > 0 && ` ${REQUESTS_NOTICE}`}
+          </p>
         </div>
       </header>
       <section className="workspace-panel">

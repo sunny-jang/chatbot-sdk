@@ -4,6 +4,12 @@ import {
   isCustomerPortalHost,
   customerHostPath,
 } from "@/lib/customer-portal/host";
+import {
+  isMasterHost,
+  masterHostAllows,
+  masterHostPath,
+  masterOrigin,
+} from "@/lib/master-host";
 
 const TENANT_PUBLIC_PATHS = [
   "/",
@@ -32,16 +38,38 @@ export default auth((req) => {
   const onCustomerHost = isCustomerPortalHost(
     req.headers.get("host") || req.nextUrl.host,
   );
+  const onMasterHost = isMasterHost(
+    req.headers.get("host") || req.nextUrl.host,
+  );
   const originalPath = req.nextUrl.pathname;
   const pathname = onCustomerHost
     ? customerHostPath(originalPath)
-    : originalPath;
+    : onMasterHost
+      ? masterHostPath(originalPath)
+      : originalPath;
   const next = () => {
     if (pathname === originalPath) return NextResponse.next();
     const url = req.nextUrl.clone();
     url.pathname = pathname;
     return NextResponse.rewrite(url);
   };
+  // The master console host serves only the console, its API, auth and the shared login.
+  if (onMasterHost && !masterHostAllows(pathname)) {
+    if (pathname.startsWith("/api/"))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.redirect(new URL("/admin", req.url));
+  }
+  // Once a master host is configured, the console is reachable only there.
+  const master = masterOrigin();
+  if (
+    master &&
+    !onMasterHost &&
+    (pathname.startsWith("/admin") || pathname.startsWith("/api/admin"))
+  ) {
+    if (pathname.startsWith("/api/"))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.redirect(new URL(pathname + req.nextUrl.search, master));
+  }
   // Shared demo capabilities are public on either entry host; their APIs validate expiry and revocation themselves.
   if (pathname.startsWith("/demo/") || pathname.startsWith("/api/demo/"))
     return next();

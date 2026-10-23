@@ -6,6 +6,7 @@ import { createAnalyticsMockData } from "@/lib/analyticsMock";
 import { getMonthlySessionLimit, normalizePlan } from "@/lib/plans";
 import { getMonthlySessionUsage } from "@/lib/monthlyUsage";
 import { readTenantId } from "@/lib/auth";
+import { RESTRICTED_NOTICE, restrictedBotIds } from "@/lib/access/visibility";
 
 type AnalyticsRow = {
   id: string;
@@ -45,6 +46,7 @@ export async function GET(req: Request) {
   const botId = url.searchParams.get("botId");
   const since = Math.floor(Date.now() / 1000) - days * 24 * 60 * 60;
 
+  const restricted = await restrictedBotIds(sql, tenantId);
   const [botRows, logRows, tenantRows] = await Promise.all([
     sql`SELECT id, name FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC`,
     botId && botId !== "all"
@@ -148,11 +150,22 @@ export async function GET(req: Request) {
   const outputTokens = measuredTokens.reduce((sum, log) => sum + (log.output_tokens ?? 0), 0);
   const totalCost = logs.reduce((sum, log) => sum + Number(log.estimated_cost_usd ?? 0), 0);
 
+  // Message bodies and session drill-down are customer data; agencies get them only for their own bots.
+  const visible = logs.filter((log) => !restricted.has(log.bot_id));
+  const restrictedBots = botRows
+    .filter((row) => restricted.has(String(row.id)))
+    .map((row) => ({ id: String(row.id), name: String(row.name) }));
   return NextResponse.json({
     generatedAt: new Date().toISOString(),
     periodDays: days,
     planUsage,
-    bots: botRows.map((row) => ({ id: row.id as string, name: row.name as string })),
+    restricted: {
+      bots: restrictedBots,
+      selected: botId && botId !== "all" ? restricted.has(botId) : false,
+      hiddenMessages: logs.length - visible.length,
+      notice: RESTRICTED_NOTICE,
+    },
+    bots: botRows.map((row) => ({ id: row.id as string, name: row.name as string, restricted: restricted.has(String(row.id)) })),
     coverage: {
       logs: logs.length,
       api: measuredApi.length,
@@ -175,7 +188,7 @@ export async function GET(req: Request) {
     daily: [...dailyMap.entries()].map(([date, value]) => ({ date, messages: value.messages, conversations: value.sessions.size, refusals: value.refusals })),
     intents,
     refusalReasons,
-    refusedConversations: logs.filter((log) => log.refused).slice(0, 50).map((log) => ({
+    refusedConversations: visible.filter((log) => log.refused).slice(0, 50).map((log) => ({
       id: log.id,
       botId: log.bot_id,
       botName: log.bot_name,
@@ -195,7 +208,7 @@ export async function GET(req: Request) {
       toolName: log.tool_name,
     })),
     tools,
-    conversations: logs.slice(0, 100).map((log) => ({
+    conversations: visible.slice(0, 100).map((log) => ({
       id: log.id,
       botId: log.bot_id,
       botName: log.bot_name,
