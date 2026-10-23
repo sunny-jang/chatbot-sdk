@@ -3,6 +3,7 @@ import sql from "@/lib/neon";
 import Sidebar from "./Sidebar";
 import WorkspaceFrame from "./WorkspaceFrame";
 import MasterBar from "./MasterBar";
+import AgencyHelpWidget from "./components/AgencyHelpWidget";
 import { headers } from "next/headers";
 import { isCustomerPortalHost } from "@/lib/customer-portal/host";
 import { isMasterHost, masterOrigin } from "@/lib/master-host";
@@ -82,6 +83,8 @@ export default async function RootLayout({
         ) : (
           <>{children}</>
         )}
+        {/* 파트너 에이전시 화면(에이전시 호스트)에만 안내 챗봇을 설치합니다. */}
+        {!customerHost && !masterHost && <AgencyHelpWidget />}
       </body>
     </html>
   );
