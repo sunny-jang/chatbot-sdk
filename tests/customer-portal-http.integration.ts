@@ -153,6 +153,18 @@ async function main() {
       "portal-agency-qa",
     ),
   );
+  await check("에이전시 세션은 소유자 auth_version 회수에 즉시 반응", async () => {
+    assert.equal((await api("/api/customers", agency, owner)).status, 200);
+    await sql`UPDATE users SET auth_version=auth_version+1 WHERE id='portal-owner'`;
+    try {
+      // Portal-backed routes report 403 (identity no longer usable); legacy tenant routes report 401.
+      assert.ok([401, 403].includes((await api("/api/customers", agency, owner)).status));
+      assert.equal((await api("/api/bots", agency, owner)).status, 401);
+    } finally {
+      await sql`UPDATE users SET auth_version=auth_version-1 WHERE id='portal-owner'`;
+    }
+    assert.equal((await api("/api/customers", agency, owner)).status, 200);
+  });
   await check("desk 호스트 OAuth 처리는 고객사 공급자만 노출", async () => {
     const onDesk = (await api("/api/auth/providers", desk)).data,
       onAgency = (await api("/api/auth/providers", agency)).data;

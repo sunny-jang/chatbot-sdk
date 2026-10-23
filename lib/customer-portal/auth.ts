@@ -23,7 +23,7 @@ export async function portalUser() {
   await requireReady();
   const [user] = session.customer_user_id
     ? await sql`SELECT id,name,email FROM users WHERE id=${session.customer_user_id} AND status='active' AND auth_version=${session.customer_auth_version ?? -1}`
-    : await sql`SELECT u.id,u.name,u.email FROM users u JOIN partner_memberships p ON p.user_id=u.id AND p.tenant_id=${session.tenant_id!} AND p.status='active' WHERE u.legacy_tenant_id=${session.tenant_id!} AND u.status='active'`;
+    : await sql`SELECT u.id,u.name,u.email FROM users u JOIN partner_memberships p ON p.user_id=u.id AND p.tenant_id=${session.tenant_id!} AND p.status='active' WHERE u.legacy_tenant_id=${session.tenant_id!} AND u.status='active' AND (${session.agency_auth_version ?? null}::int IS NULL OR u.auth_version=${session.agency_auth_version ?? null})`;
   if (!user) throw new PortalError("사용할 수 있는 계정이 아닙니다.", 403);
   return {
     id: String(user.id),

@@ -24,7 +24,7 @@ export const GOOGLE_IDENTITY_MESSAGES: Record<GoogleIdentityReason, string> = {
   unverified: "검증된 Google 이메일이 필요합니다.",
   migration: "계정 이관을 먼저 완료해주세요.",
   verify_existing:
-    "기존 계정으로 로그인하고 이메일 확인을 마친 뒤 Google을 연결해주세요.",
+    "이미 등록된 이메일입니다. 기존 비밀번호로 로그인한 뒤 설정에서 Google을 연결해주세요.",
   legacy_email: "기존 에이전시 계정으로 로그인한 뒤 계정 이관을 확인해주세요.",
   no_invitation: "초대받은 Google 계정으로 로그인해주세요.",
   disabled: "사용할 수 없는 계정입니다.",
@@ -72,6 +72,7 @@ export async function googleIdentity(
   db: AccessDatabase,
   profile: GoogleProfile,
   customerOnly: boolean,
+  options: { sessionUserId?: string | null } = {},
 ) {
   if (profile.verified !== true) throw fail("unverified", 403);
   const address = email(profile.email),
@@ -95,7 +96,13 @@ export async function googleIdentity(
   }
   if (!user) {
     [user] = await db`SELECT * FROM users WHERE email=${address} FOR UPDATE`;
-    if (user && !user.email_verified_at) throw fail("verify_existing", 409);
+    // An unverified address links only when its own password session started this flow.
+    if (
+      user &&
+      !user.email_verified_at &&
+      String(user.id) !== options.sessionUserId
+    )
+      throw fail("verify_existing", 409);
   }
   if (!user) {
     const [legacyEmail] =
