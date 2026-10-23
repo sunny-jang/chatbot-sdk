@@ -21,8 +21,12 @@ type Preview = {
 export default function WebSourceManager({
   botId,
   folders,
+  apiBase,
+  onApplied,
 }: {
   botId: string;
+  apiBase?: string;
+  onApplied?: () => void;
   folders: { id: string; name: string }[];
 }) {
   const router = useRouter();
@@ -33,11 +37,11 @@ export default function WebSourceManager({
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState("");
   const load = useCallback(async () => {
-    const r = await fetch(`/api/bots/${botId}/web-sources`);
+    const r = await fetch(`${apiBase || `/api/bots/${botId}`}/web-sources`);
     const d = await r.json();
     if (!r.ok) throw Error(d.error);
     setSources(d);
-  }, [botId]);
+  }, [botId, apiBase]);
   useEffect(() => {
     const timer = setTimeout(
       () => void load().catch((e) => setNotice(e.message)),
@@ -51,7 +55,7 @@ export default function WebSourceManager({
     setNotice("");
     setPreview(null);
     try {
-      const r = await fetch(`/api/bots/${botId}/web-sources`, {
+      const r = await fetch(`${apiBase || `/api/bots/${botId}`}/web-sources`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -76,7 +80,7 @@ export default function WebSourceManager({
     setBusy(true);
     setNotice("");
     try {
-      const r = await fetch(`/api/bots/${botId}/web-sources`, {
+      const r = await fetch(`${apiBase || `/api/bots/${botId}`}/web-sources`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -90,6 +94,7 @@ export default function WebSourceManager({
       setPreview(null);
       setNotice("문서에 반영했습니다.");
       await load();
+      onApplied?.();
       router.refresh();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "반영 실패");
