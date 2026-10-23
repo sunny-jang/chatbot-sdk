@@ -10,7 +10,12 @@ export default function WorkspaceFrame({
   customerHost?: boolean;
 }) {
   const path = usePathname();
-  if (customerHost || path === "/customer" || path.startsWith("/customer/"))
+  if (
+    customerHost ||
+    path === "/customer" ||
+    path.startsWith("/customer/") ||
+    path.startsWith("/demo/")
+  )
     return <>{children}</>;
   return (
     <div className="workspace-shell">

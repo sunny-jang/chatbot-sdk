@@ -1,0 +1,138 @@
+.site-demo {
+  min-height: 100svh;
+  background: #f3f5fa;
+  color: #24334a;
+  font-family: Arial, sans-serif;
+}
+.site-demo-bar {
+  padding: 15px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: white;
+  border-bottom: 1px solid #dce3ec;
+}
+.site-demo-bar strong {
+  font-size: 17px;
+}
+.site-demo-bar p {
+  font-size: 12px;
+  color: #617084;
+  margin-top: 6px;
+  line-height: 1.6;
+}
+.site-demo-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.site-demo-actions a {
+  color: #5b31bd;
+}
+.site-demo-actions button {
+  padding: 10px 14px;
+  border: 1px solid #d5cbee;
+  border-radius: 7px;
+  color: #6538bb;
+  background: #faf8ff;
+  cursor: pointer;
+}
+.site-demo-note {
+  font-size: 12px;
+  color: #5b687e;
+  padding: 10px 24px;
+  line-height: 1.7;
+}
+.site-demo-frame {
+  height: calc(100svh - 130px);
+  min-height: 400px;
+  position: relative;
+  background: white;
+}
+.site-demo-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.site-demo-frame-hint {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  background: #fff;
+  padding: 14px;
+  color: #57657d;
+  font-size: 13px;
+  pointer-events: none;
+}
+.site-demo-fallback {
+  max-width: 1000px;
+  margin: 30px auto;
+  padding: 64px 40px;
+}
+.site-demo-fallback > span {
+  font-size: 13px;
+  color: #6d5f83;
+}
+.site-demo-fallback h1 {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -2px;
+  margin: 22px 0;
+}
+.site-demo-fallback > p {
+  color: #69788b;
+}
+.site-demo-fallback > div {
+  margin-top: 60px;
+  background: white;
+  border-left: 4px solid #7c3aed;
+  padding: 30px;
+}
+.site-demo-fallback h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.site-demo-fallback div p {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #64748b;
+  max-width: 640px;
+}
+.site-demo-unavailable {
+  max-width: 640px;
+  margin: 100px auto;
+  padding: 32px;
+  line-height: 1.8;
+}
+.site-demo-unavailable h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+@media (max-width: 760px) {
+  .site-demo-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 16px;
+    gap: 14px;
+  }
+  .site-demo-actions {
+    flex-wrap: wrap;
+  }
+  .site-demo-note {
+    padding: 10px 16px;
+  }
+  .site-demo-fallback {
+    padding: 35px 22px;
+  }
+  .site-demo-fallback h1 {
+    font-size: 34px;
+  }
+  .site-demo-frame {
+    height: calc(100svh - 215px);
+  }
+}

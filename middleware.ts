@@ -24,6 +24,7 @@ const TENANT_PUBLIC_PREFIXES = [
   "/api/integrations/slack/",
   "/api/tenants",
   "/api/guide",
+  "/api/demo/",
 ];
 
 // 인증은 Auth.js 세션(req.auth) 하나만 신뢰합니다. tenant_id / is_admin 같은 일반 쿠키는 보지 않습니다.
@@ -41,6 +42,9 @@ export default auth((req) => {
     url.pathname = pathname;
     return NextResponse.rewrite(url);
   };
+  // Shared demo capabilities are public on either entry host; their APIs validate expiry and revocation themselves.
+  if (pathname.startsWith("/demo/") || pathname.startsWith("/api/demo/"))
+    return next();
   if (
     onCustomerHost &&
     !(
@@ -120,6 +124,7 @@ export default auth((req) => {
 
   // Tenant public routes
   if (
+    pathname.startsWith("/demo/") ||
     TENANT_PUBLIC_PATHS.includes(pathname) ||
     TENANT_PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
   ) {
