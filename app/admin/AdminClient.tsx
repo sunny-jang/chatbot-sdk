@@ -66,8 +66,21 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`"${name}" 에이전시를 삭제하시겠어요? 해당 에이전시의 모든 고객사와 봇도 삭제됩니다.`)) return;
-    await fetch(`/api/admin/tenants/${id}`, { method: "DELETE" });
+    // Deletion is for deactivated, empty agencies only; the name must be typed back.
+    const typed = prompt(
+      `"${name}" 에이전시를 삭제합니다. 구독이 중지되어 있고 챗봇·고객사·담당자가 없어야 합니다.\n확인을 위해 에이전시 이름을 그대로 입력하세요.`,
+    );
+    if (typed === null) return;
+    const res = await fetch(`/api/admin/tenants/${id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmName: typed }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "삭제하지 못했습니다.");
+      return;
+    }
     setTenants((prev) => prev.filter((t) => t.id !== id));
   }
 

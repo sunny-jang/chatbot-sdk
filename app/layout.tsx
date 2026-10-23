@@ -25,9 +25,16 @@ export default async function RootLayout({
   const masterHost = isMasterHost(host);
   const session = await auth();
   const tenantId = session?.tenant_id ?? null;
+  const platformUserId = session?.platform_user_id ?? null;
   const isAdmin = session?.is_admin === true;
 
   let tenantName: string | null = null;
+  if (!tenantId && platformUserId && masterHost) {
+    try {
+      const [u] = await sql`SELECT name FROM users WHERE id=${platformUserId}`;
+      tenantName = u ? String(u.name) : null;
+    } catch {}
+  }
   let bots: { id: string; name: string; type: string }[] = [];
   if (tenantId) {
     try {

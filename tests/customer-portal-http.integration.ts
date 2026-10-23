@@ -131,6 +131,48 @@ async function main() {
     assert.deepEqual(Object.keys(providers).sort(), ["credentials", "google"]);
     assert.ok(providers.google.callbackUrl.startsWith("http://" + master + "/api/auth/callback/"));
   });
+  await check("에이전시 공간 없는 마스터는 master 호스트에서만 로그인하고 삭제는 보호된다", async () => {
+    const master = "master.localhost:3012",
+      email = "pure-master-" + randomUUID() + "@example.test",
+      pw = "pure-master-password-1",
+      id = "pure-master-" + randomUUID();
+    const { hash } = await import("bcryptjs");
+    await sql`INSERT INTO users(id,name,email,password_hash,email_verified_at,is_platform_admin) VALUES(${id},'플랫폼 전용 마스터',${email},${await hash(pw, 4)},EXTRACT(EPOCH FROM NOW())::BIGINT,TRUE)`;
+    try {
+      const onAgency = await login({ email, password: pw }, agency, "credentials");
+      assert.equal((await api("/api/auth/session", agency, onAgency)).data?.platform_user_id ?? null, null);
+      const cookie = await login({ email, password: pw }, master, "credentials");
+      const session = (await api("/api/auth/session", master, cookie)).data;
+      assert.equal(session.platform_user_id, id);
+      assert.equal(session.tenant_id, null);
+      assert.equal((await api("/api/admin/tenants", master, cookie)).status, 200);
+      const masters = await api("/api/admin/masters", master, cookie);
+      assert.equal(masters.status, 200);
+      assert.ok(masters.data.some((m: { id: string }) => m.id === id));
+      assert.equal((await api("/api/admin/masters", master, owner)).status, 403);
+      assert.equal((await api("/admin", master, cookie)).status, 200);
+      // Active or non-empty agencies cannot be deleted; the name must match.
+      const active = await api("/api/admin/tenants/portal-agency-qa", master, cookie, "DELETE", { confirmName: "QA 웹에이전시" });
+      assert.equal(active.status, 409, JSON.stringify(active.data));
+      // Even when deactivated, a mistyped name is refused and a non-empty agency stays.
+      await sql`UPDATE tenants SET subscription_status='inactive' WHERE id='portal-agency-qa'`;
+      try {
+        const wrong = await api("/api/admin/tenants/portal-agency-qa", master, cookie, "DELETE", { confirmName: "다른 이름" });
+        assert.equal(wrong.status, 400, JSON.stringify(wrong.data));
+        const nonEmpty = await api("/api/admin/tenants/portal-agency-qa", master, cookie, "DELETE", { confirmName: "QA 웹에이전시" });
+        assert.equal(nonEmpty.status, 409, JSON.stringify(nonEmpty.data));
+      } finally {
+        await sql`UPDATE tenants SET subscription_status='active' WHERE id='portal-agency-qa'`;
+      }
+      assert.equal((await sql`SELECT count(*)::int AS n FROM tenants WHERE id='portal-agency-qa'`)[0].n, 1);
+      // Removing the only other master guard: cannot remove self.
+      const self = await api("/api/admin/masters", master, cookie, "DELETE", { userId: id });
+      assert.equal(self.status, 400, JSON.stringify(self.data));
+    } finally {
+      await sql`DELETE FROM platform_audit_logs WHERE actor_user_id=${id}`;
+      await sql`DELETE FROM users WHERE id=${id}`;
+    }
+  });
   await check("에이전시 세션은 소유자 auth_version 회수에 즉시 반응", async () => {
     assert.equal((await api("/api/customers", agency, owner)).status, 200);
     await sql`UPDATE users SET auth_version=auth_version+1 WHERE id='portal-owner'`;

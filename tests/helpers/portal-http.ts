@@ -1,9 +1,17 @@
 import { request } from "node:http";
 export async function localFetch(url: string, init: RequestInit = {}) {
   return new Promise<Response>((resolve, reject) => {
+    // Next rejects chunked request bodies on DELETE, so declare the length whenever a body is sent.
+    const payload = init.body == null ? undefined : String(init.body);
+    const headers = {
+      ...(init.headers as Record<string, string>),
+      ...(payload !== undefined
+        ? { "Content-Length": String(Buffer.byteLength(payload)) }
+        : {}),
+    };
     const req = request(
       url,
-      { method: init.method, headers: init.headers as Record<string, string> },
+      { method: init.method, headers },
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (c) => chunks.push(c));
@@ -27,7 +35,7 @@ export async function localFetch(url: string, init: RequestInit = {}) {
       },
     );
     req.on("error", reject);
-    req.end(init.body == null ? undefined : String(init.body));
+    req.end(payload);
   });
 }
 export const base = "http://127.0.0.1:3012",
