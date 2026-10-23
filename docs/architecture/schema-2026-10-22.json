@@ -1425,6 +1425,15 @@
       "primary_key": false
     },
     {
+      "table_name": "demo_turns",
+      "column_name": "model_started_at",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "ordinal_position": 11,
+      "primary_key": false
+    },
+    {
       "table_name": "doc_folders",
       "column_name": "id",
       "data_type": "text",

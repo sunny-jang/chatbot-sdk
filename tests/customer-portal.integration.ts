@@ -1,3 +1,12 @@
+import {
+  uploadCustomerDocument,
+  unchangedCustomerDocument,
+  importCustomerQa,
+  customerBot,
+  configureCustomerBot,
+  mutateKnowledge,
+  listKnowledge,
+} from "../lib/customer-portal/bots";
 import { updateCustomer, recordDenied } from "../lib/customer-portal/customers";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -392,6 +401,306 @@ async function main() {
           await tx`SELECT count(*)::int AS n FROM access_audit_logs WHERE action='member.invite.revoke' AND target_id=${cancel.id}`
         )[0].n,
         1,
+      );
+      checks++;
+      await assert.rejects(
+        () => customerBot(db, second, customer, bot, "bot.configure"),
+        { status: 404 },
+      );
+      checks++;
+      await assert.rejects(
+        () => customerBot(db, admin, customer, otherBot, "bot.configure"),
+        { status: 404 },
+      );
+      checks++;
+      await configureCustomerBot(db, admin, customer, bot, {
+        widget_title: "고객사 설정",
+        support_mode: "hybrid",
+        greeting_message: "안녕하세요",
+      });
+      assert.equal(
+        (await tx`SELECT widget_title FROM bots WHERE id=${bot}`)[0]
+          .widget_title,
+        "고객사 설정",
+      );
+      checks++;
+      const vec = Array.from({ length: 1536 }, () => 0.01);
+      const uploadInput = {
+        title: "재업로드 검증",
+        content: "초기 본문",
+        folder_id: null,
+      };
+      const firstDoc = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        uploadInput,
+        vec,
+      );
+      const repeated = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        uploadInput,
+        vec,
+      );
+      assert.equal(repeated.id, firstDoc.id);
+      assert.equal(repeated.skipped, true);
+      checks++;
+      const revised = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        { ...uploadInput, content: "수정 본문" },
+        vec,
+      );
+      assert.equal(revised.id, firstDoc.id);
+      assert.equal(revised.updated, true);
+      const matchingDocs =
+        await tx`SELECT content FROM documents WHERE bot_id=${bot} AND title=${uploadInput.title}`;
+      assert.equal(matchingDocs.length, 1);
+      assert.equal(matchingDocs[0].content, "수정 본문");
+      checks++;
+      await assert.rejects(
+        () =>
+          uploadCustomerDocument(db, agent, customer, bot, uploadInput, vec),
+        { status: 403 },
+      );
+      checks++;
+      assert.equal(
+        (
+          await unchangedCustomerDocument(
+            db,
+            admin,
+            customer,
+            bot,
+            uploadInput.title,
+            "수정 본문",
+          )
+        )?.skipped,
+        true,
+      );
+      assert.equal(
+        await unchangedCustomerDocument(
+          db,
+          admin,
+          customer,
+          bot,
+          uploadInput.title,
+          "다른 본문",
+        ),
+        null,
+      );
+      checks++;
+      const docFolder = await mutateKnowledge(
+        db,
+        admin,
+        customer,
+        bot,
+        "folders",
+        "POST",
+        { name: "이동 폴더" },
+        null,
+        null,
+      );
+      const moved = await unchangedCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        uploadInput.title,
+        "수정 본문",
+        docFolder.id,
+      );
+      assert.equal(moved?.skipped, true);
+      assert.equal(moved?.moved, true);
+      assert.equal(
+        (await tx`SELECT folder_id FROM documents WHERE id=${firstDoc.id}`)[0]
+          .folder_id,
+        docFolder.id,
+      );
+      const stayed = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        { ...uploadInput, content: "수정 본문", folder_id: docFolder.id },
+        vec,
+      );
+      assert.equal(stayed.skipped, true);
+      assert.equal(stayed.moved, false);
+      const unclassified = await uploadCustomerDocument(
+        db,
+        admin,
+        customer,
+        bot,
+        { ...uploadInput, content: "수정 본문", folder_id: null },
+        vec,
+      );
+      assert.equal(unclassified.moved, true);
+      assert.equal(
+        (await tx`SELECT folder_id FROM documents WHERE id=${firstDoc.id}`)[0]
+          .folder_id,
+        null,
+      );
+      await assert.rejects(
+        () =>
+          unchangedCustomerDocument(
+            db,
+            admin,
+            customer,
+            bot,
+            uploadInput.title,
+            "수정 본문",
+            randomUUID(),
+          ),
+        { status: 404 },
+      );
+      assert.equal(
+        (
+          await tx`SELECT count(*)::int AS n FROM access_audit_logs WHERE action='knowledge.put' AND target_id=${firstDoc.id}`
+        )[0].n,
+        3,
+      );
+      checks++;
+      const workbookRows = [
+        {
+          folder: "시트 A",
+          question: "반복 가져오기 질문 A",
+          answer: "기존 답변",
+        },
+        {
+          folder: "시트 B",
+          question: "반복 가져오기 질문 B",
+          answer: "다른 답변",
+        },
+      ];
+      await importCustomerQa(db, admin, customer, bot, workbookRows, null, [
+        vec,
+        vec,
+      ]);
+      const beforeImport =
+        await tx`SELECT q.id,q.question,f.name FROM qa_pairs q JOIN qa_folders f ON f.id=q.folder_id WHERE q.bot_id=${bot} AND q.question LIKE '반복 가져오기 질문%' ORDER BY q.question`;
+      assert.deepEqual(
+        beforeImport.map((r) => r.name),
+        ["시트 A", "시트 B"],
+      );
+      checks++;
+      await importCustomerQa(
+        db,
+        admin,
+        customer,
+        bot,
+        workbookRows.map((r) => ({ ...r, answer: "수정된 답변" })),
+        null,
+        [vec, vec],
+      );
+      const afterImport =
+        await tx`SELECT id,answer FROM qa_pairs WHERE bot_id=${bot} AND question LIKE '반복 가져오기 질문%' ORDER BY question`;
+      assert.deepEqual(
+        afterImport.map((r) => r.id),
+        beforeImport.map((r) => r.id),
+      );
+      assert.ok(afterImport.every((r) => r.answer === "수정된 답변"));
+      checks++;
+      const qa = await mutateKnowledge(
+        db,
+        admin,
+        customer,
+        bot,
+        "qa",
+        "POST",
+        { question: "관리자 질문", answer: "관리자 답변" },
+        null,
+        vec,
+      );
+      assert.ok(
+        (await listKnowledge(db, admin, customer, bot, "qa")).some(
+          (r) => r.id === qa.id,
+        ),
+      );
+      checks++;
+      await assert.rejects(
+        () =>
+          mutateKnowledge(
+            db,
+            admin,
+            customer,
+            otherBot,
+            "qa",
+            "DELETE",
+            {},
+            qa.id,
+            null,
+          ),
+        { status: 404 },
+      );
+      checks++;
+      const foreignQa = "foreign-qa-" + suffix;
+      await tx`INSERT INTO qa_pairs(id,bot_id,question,answer) VALUES(${foreignQa},${otherBot},'다른 질문','다른 답변')`;
+      await assert.rejects(
+        () =>
+          mutateKnowledge(
+            db,
+            admin,
+            customer,
+            bot,
+            "qa",
+            "DELETE",
+            {},
+            foreignQa,
+            null,
+          ),
+        { status: 404 },
+      );
+      checks++;
+      const otherFolder = "other-folder-" + suffix;
+      await tx`INSERT INTO qa_folders(id,bot_id,name) VALUES(${otherFolder},${otherBot},'다른 폴더')`;
+      await assert.rejects(
+        () =>
+          mutateKnowledge(
+            db,
+            admin,
+            customer,
+            bot,
+            "qa",
+            "POST",
+            { question: "변조", answer: "변조", folder_id: otherFolder },
+            null,
+            vec,
+          ),
+        { status: 404 },
+      );
+      checks++;
+      await mutateKnowledge(
+        db,
+        admin,
+        customer,
+        bot,
+        "qa",
+        "PUT",
+        { question: "수정 질문", answer: "수정 답변" },
+        qa.id,
+        vec,
+      );
+      await mutateKnowledge(
+        db,
+        admin,
+        customer,
+        bot,
+        "qa",
+        "DELETE",
+        {},
+        qa.id,
+        null,
+      );
+      assert.ok(
+        !(await listKnowledge(db, admin, customer, bot, "qa")).some(
+          (r) => r.id === qa.id,
+        ),
       );
       checks++;
       throw rollback;

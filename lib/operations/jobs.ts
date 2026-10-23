@@ -128,6 +128,10 @@ export async function processJobs(limit = 12) {
 }
 export async function cleanupOperations() {
   await sql.begin(async (tx) => {
+    const [demoSchema] =
+      await tx`SELECT to_regclass('customer_demos') AS demos`;
+    if (demoSchema.demos)
+      await tx`DELETE FROM customer_demos WHERE LEAST(expires_at,COALESCE(revoked_at,expires_at))<EXTRACT(EPOCH FROM NOW())-86400`;
     await tx`DELETE FROM proactive_evaluations WHERE created_at<EXTRACT(EPOCH FROM NOW())-2592000`;
     await tx`DELETE FROM operation_jobs WHERE kind='request_notification' AND target_id IN (SELECT id FROM customer_requests WHERE created_at+retention_days*86400<EXTRACT(EPOCH FROM NOW()))`;
     await tx`DELETE FROM customer_requests WHERE created_at+retention_days*86400<EXTRACT(EPOCH FROM NOW())`;

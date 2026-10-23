@@ -577,20 +577,30 @@
       "source": "PRD-agent-login-and-customer-access.md",
       "requirement": "고객사 관리자 로그인",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "partial",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/4",
+      "review": "docs/reviews/prd-customer-bot-review.md",
+      "evidence": [
+        "docs/reviews/prd-release-safety-review.md",
+        "docs/reviews/prd-customer-lifecycle-review.md",
+        "docs/qa/results/prd-customer-bot-http.json",
+        "tests/customer-portal.integration.ts"
+      ]
     },
     {
       "id": "L05",
       "source": "PRD-agent-login-and-customer-access.md",
       "requirement": "A 담당자가 B 고객사의 봇·세션·신청 ID로 직접 요청",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "partial",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/4",
+      "review": "docs/reviews/prd-customer-bot-review.md",
+      "evidence": [
+        "docs/reviews/prd-release-safety-review.md",
+        "docs/reviews/prd-customer-lifecycle-review.md",
+        "docs/qa/results/prd-customer-bot-http.json",
+        "tests/customer-portal.integration.ts"
+      ]
     },
     {
       "id": "L06",
@@ -627,10 +637,15 @@
       "source": "PRD-agent-login-and-customer-access.md",
       "requirement": "역할 변경·멤버십 해제 후 열린 화면에서 다시 요청",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "partial",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/4",
+      "review": "docs/reviews/prd-customer-bot-review.md",
+      "evidence": [
+        "docs/reviews/prd-release-safety-review.md",
+        "docs/reviews/prd-customer-lifecycle-review.md",
+        "docs/qa/results/prd-customer-bot-http.json",
+        "tests/customer-portal.integration.ts"
+      ]
     },
     {
       "id": "L10",
@@ -647,20 +662,30 @@
       "source": "PRD-agent-login-and-customer-access.md",
       "requirement": "두 담당자 동시 수락 / 종료와 답변 전송 경합",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "partial",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/4",
+      "review": "docs/reviews/prd-customer-bot-review.md",
+      "evidence": [
+        "docs/reviews/prd-release-safety-review.md",
+        "docs/reviews/prd-customer-lifecycle-review.md",
+        "docs/qa/results/prd-customer-bot-http.json",
+        "tests/customer-portal.integration.ts"
+      ]
     },
     {
       "id": "L12",
       "source": "PRD-agent-login-and-customer-access.md",
       "requirement": "요청 본문의 sender_user_id·agentName·역할 변조",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "partial",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/4",
+      "review": "docs/reviews/prd-customer-bot-review.md",
+      "evidence": [
+        "docs/reviews/prd-release-safety-review.md",
+        "docs/reviews/prd-customer-lifecycle-review.md",
+        "docs/qa/results/prd-customer-bot-http.json",
+        "tests/customer-portal.integration.ts"
+      ]
     },
     {
       "id": "L13",
@@ -697,10 +722,15 @@
       "source": "PRD-agent-login-and-customer-access.md",
       "requirement": "일반 담당자에게 고권한 역할 초대 요청 전송",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "partial",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/4",
+      "review": "docs/reviews/prd-customer-bot-review.md",
+      "evidence": [
+        "docs/reviews/prd-release-safety-review.md",
+        "docs/reviews/prd-customer-lifecycle-review.md",
+        "docs/qa/results/prd-customer-bot-http.json",
+        "tests/customer-portal.integration.ts"
+      ]
     },
     {
       "id": "L17",
@@ -877,20 +907,30 @@
       "source": "PRD-workspace-redesign.md",
       "requirement": "업무 화면 정리: 실제 데이터의 업무 홈, 대기 우선 상담함, 통합 문의·견적 목록, 독립 챗봇 목록, 모바일 메뉴, 요금제 접근. 기존 모든 봇별 기능은 유지. 오류·빈 상태·중복 전송·대화 전환 중 오래된 응답 노출을 확인.",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "partial",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/4",
+      "review": "docs/reviews/prd-customer-bot-review.md",
+      "evidence": [
+        "docs/reviews/prd-release-safety-review.md",
+        "docs/reviews/prd-customer-lifecycle-review.md",
+        "docs/qa/results/prd-customer-bot-http.json",
+        "tests/customer-portal.integration.ts"
+      ]
     },
     {
       "id": "WS-02",
       "source": "PRD-workspace-redesign.md",
       "requirement": "고객사·구성원 권한: 파트너 소유 고객사, 봇 연결, 초대 수락·만료·취소, 고객사 관리자/담당자. 모든 조회·수정·내보내기·상담 API에 고객사 범위 검사. URL 직접 접근과 다른 고객사 ID 교체 차단 테스트. 작은 사업장은 한 사람이 두 역할을 겸한다. 화면 전환은 권한 검사를 대신하지 않는다.",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "partial",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/4",
+      "review": "docs/reviews/prd-customer-bot-review.md",
+      "evidence": [
+        "docs/reviews/prd-release-safety-review.md",
+        "docs/reviews/prd-customer-lifecycle-review.md",
+        "docs/qa/results/prd-customer-bot-http.json",
+        "tests/customer-portal.integration.ts"
+      ]
     },
     {
       "id": "WS-03",
@@ -907,10 +947,14 @@
       "source": "PRD-workspace-redesign.md",
       "requirement": "고객사 데모: 사이트 배경 + 실제 위젯. iframe 차단 시 대체 미리보기. 공유 링크 만료·해제, 운영 대화와 테스트 구분.",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "review",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/6",
+      "review": "docs/reviews/prd-homepage-demo-review.md",
+      "evidence": [
+        "docs/qa/results/prd-homepage-demo-http.json",
+        "tests/demo.integration.ts",
+        "docs/verification/prd-execution/demo-fallback-widget.png"
+      ]
     },
     {
       "id": "WS-05",
@@ -927,10 +971,13 @@
       "source": "TODO-widget-upgrades.md",
       "requirement": "위젯 제목·로고·색상 주입 막기",
       "scope": "required",
-      "status": "pending",
-      "pr": null,
-      "review": null,
-      "evidence": []
+      "status": "complete",
+      "pr": "https://github.com/sunny-jang/chatbot-sdk/pull/2",
+      "review": "docs/reviews/prd-release-safety-review.md",
+      "evidence": [
+        "docs/qa/results/prd-release-safety-http.json",
+        "tests/widget-presentation.test.ts"
+      ]
     },
     {
       "id": "WIDGET-02",

@@ -512,7 +512,7 @@
           const session=check.ok?await check.json():null;
           const res=await fetch(`${endpoint}/api/chat/${botId}/requests`,{method:"POST",headers:{"Content-Type":"application/json","X-Bot-Token":botToken},body:JSON.stringify({...values,kind,consent:consent.checked,consentVersion:requestSettings.consentVersion,idempotencyKey:key,sessionId:session?.exists?sessionId:null})});
           const data=await res.json();if(!res.ok)throw Error(data.error||"접수하지 못했습니다.");
-          notice.textContent=`신청을 접수했습니다.\n접수번호: ${data.receipt}`;submit.remove();for(const input of Object.values(fields))input.disabled=true;consent.disabled=true;
+          notice.textContent=data.demo?`데모 접수를 완료했습니다. 실제 상담 요청은 전달되지 않습니다.\n체험 접수번호: ${data.receipt}`:`신청을 접수했습니다.\n접수번호: ${data.receipt}`;submit.remove();for(const input of Object.values(fields))input.disabled=true;consent.disabled=true;
         }catch(error){notice.textContent=error.message||"접수에 실패했습니다. 다시 시도해주세요.";submit.disabled=false}finally{pending=false}
       });
       form.addEventListener("keydown",event=>{
@@ -757,7 +757,7 @@
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
-          body: JSON.stringify({ message: question.question, qaId: question.id, sessionId }),
+          body: JSON.stringify({ message: question.question, qaId: question.id, sessionId, requestId: crypto.randomUUID() }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.handoffActive) {
@@ -818,7 +818,7 @@
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
-          body: JSON.stringify({ message: text, history, sessionId, proactiveContext, mode: isQaBot && qaAiMode ? "rag-ai" : undefined }),
+          body: JSON.stringify({ message: text, history, sessionId, requestId: crypto.randomUUID(), proactiveContext, mode: isQaBot && qaAiMode ? "rag-ai" : undefined }),
         });
         const data = await res.json();
         if (res.ok && data.handoffActive) {
