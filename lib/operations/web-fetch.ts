@@ -67,7 +67,7 @@ function download(
         autoSelectFamily: false,
         headers: {
           "User-Agent": "IdealAI-KnowledgeImporter/1.0",
-          Accept: "text/html",
+          Accept: "text/html, application/xml, text/xml;q=0.9, */*;q=0.1",
           "Accept-Encoding": "identity",
         },
         lookup: (_host, _options, callback) => callback(null, address, family),
@@ -112,7 +112,12 @@ function download(
     request.on("error", reject);
   });
 }
-export async function fetchPublicHtml(input: string) {
+/** 공개 주소만, robots 정책을 지키며 가져옵니다. accept 패턴에 맞는 Content-Type만 허용합니다. */
+export async function fetchPublicResource(
+  input: string,
+  accept: RegExp,
+  typeError: string,
+) {
   const signal = AbortSignal.timeout(15000);
   let url = normalizeWebUrl(input);
   try {
@@ -131,12 +136,14 @@ export async function fetchPublicHtml(input: string) {
         address.family,
         signal,
       );
+      const parsedRobots =
+        robots.status === 200
+          ? robotsParser(robotsUrl.toString(), robots.body)
+          : null;
       if (
-        robots.status === 200 &&
-        robotsParser(robotsUrl.toString(), robots.body).isAllowed(
-          url.toString(),
-          "IdealAI-KnowledgeImporter",
-        ) === false
+        parsedRobots &&
+        parsedRobots.isAllowed(url.toString(), "IdealAI-KnowledgeImporter") ===
+          false
       )
         throw new OperationError(
           "사이트의 robots 정책에서 수집을 허용하지 않습니다.",
@@ -163,11 +170,12 @@ export async function fetchPublicHtml(input: string) {
         throw new OperationError(
           `페이지를 가져오지 못했습니다. (HTTP ${result.status})`,
         );
-      if (!/text\/html|application\/xhtml\+xml/i.test(result.type))
-        throw new OperationError(
-          "HTML 웹페이지만 지원합니다. 파일은 문서 업로드를 이용해주세요.",
-        );
-      return { html: result.body, finalUrl: url.toString() };
+      if (!accept.test(result.type)) throw new OperationError(typeError);
+      return {
+        body: result.body,
+        finalUrl: url.toString(),
+        sitemaps: parsedRobots?.getSitemaps() ?? [],
+      };
     }
   } catch (e) {
     if (e instanceof OperationError) throw e;
@@ -177,5 +185,19 @@ export async function fetchPublicHtml(input: string) {
   }
   throw new OperationError("페이지를 가져오지 못했습니다.");
 }
+export async function fetchPublicHtml(input: string) {
+  const r = await fetchPublicResource(
+    input,
+    /text\/html|application\/xhtml\+xml/i,
+    "HTML 웹페이지만 지원합니다. 파일은 문서 업로드를 이용해주세요.",
+  );
+  return { html: r.body, body: r.body, finalUrl: r.finalUrl, sitemaps: r.sitemaps };
+}
+export const fetchPublicXml = (input: string) =>
+  fetchPublicResource(
+    input,
+    /xml|text\/plain/i,
+    "사이트맵은 XML 형식만 지원합니다.",
+  );
 export const contentHash = (content: string) =>
   createHash("sha256").update(content).digest("hex");

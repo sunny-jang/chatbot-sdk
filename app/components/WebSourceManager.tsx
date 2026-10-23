@@ -11,6 +11,13 @@ type Source = {
   applied_at: number;
   last_error: string | null;
 };
+type Discovered = {
+  via: "sitemap" | "links";
+  startUrl: string;
+  pages: { url: string; registered: boolean }[];
+};
+type ImportResult = { url: string; ok: boolean; message: string };
+const IMPORT_BATCH = 3;
 type Preview = {
   previewId: string;
   title: string;
@@ -35,7 +42,15 @@ export default function WebSourceManager({
     [preview, setPreview] = useState<Preview | null>(null),
     [folder, setFolder] = useState(""),
     [busy, setBusy] = useState(false),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [site, setSite] = useState(""),
+    [discovered, setDiscovered] = useState<Discovered | null>(null),
+    [selected, setSelected] = useState<Set<string>>(new Set()),
+    [progress, setProgress] = useState<{
+      done: number;
+      total: number;
+      results: ImportResult[];
+    } | null>(null);
   const load = useCallback(async () => {
     const r = await fetch(`${apiBase || `/api/bots/${botId}`}/web-sources`);
     const d = await r.json();
@@ -102,6 +117,95 @@ export default function WebSourceManager({
       setBusy(false);
     }
   }
+  async function discover() {
+    setBusy(true);
+    setNotice("");
+    setDiscovered(null);
+    setProgress(null);
+    try {
+      const r = await fetch(`${apiBase || `/api/bots/${botId}`}/web-sources`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "discover", url: site }),
+      });
+      const d = (await r.json()) as Discovered & { error?: string };
+      if (!r.ok) throw Error(d.error);
+      setDiscovered(d);
+      setSelected(
+        new Set(d.pages.filter((p) => !p.registered).map((p) => p.url)),
+      );
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "페이지를 찾지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function importSelected() {
+    const urls = [...selected];
+    if (!urls.length) return;
+    setBusy(true);
+    setNotice("");
+    const results: ImportResult[] = [];
+    setProgress({ done: 0, total: urls.length, results });
+    try {
+      for (let i = 0; i < urls.length; i += IMPORT_BATCH) {
+        const batch = urls.slice(i, i + IMPORT_BATCH);
+        let r = await fetch(`${apiBase || `/api/bots/${botId}`}/web-sources`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "import",
+            urls: batch,
+            folderId: folder || null,
+          }),
+        });
+        if (r.status === 429) {
+          // 고객사 데스크의 분당 요청 한도. 잠시 기다렸다가 같은 묶음을 한 번 더 보냅니다.
+          await new Promise((ok) => setTimeout(ok, 30000));
+          r = await fetch(`${apiBase || `/api/bots/${botId}`}/web-sources`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "import",
+              urls: batch,
+              folderId: folder || null,
+            }),
+          });
+        }
+        const d = await r.json();
+        if (!r.ok) throw Error(d.error);
+        results.push(...(d.results as ImportResult[]));
+        setProgress({
+          done: Math.min(i + batch.length, urls.length),
+          total: urls.length,
+          results: [...results],
+        });
+      }
+      const failed = results.filter((x) => !x.ok).length;
+      setNotice(
+        failed
+          ? `${results.length - failed}개 반영, ${failed}개 실패`
+          : `${results.length}개 페이지를 문서에 반영했습니다.`,
+      );
+      setDiscovered(null);
+      setSelected(new Set());
+      await load();
+      onApplied?.();
+      router.refresh();
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "가져오기 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+  function toggle(url: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  }
   const btn =
     "border border-gray-200 rounded-lg px-3 py-2 text-sm disabled:opacity-40";
   return (
@@ -137,6 +241,143 @@ export default function WebSourceManager({
           {notice}
         </p>
       )}
+      <div className="border-t border-gray-200 mt-5 pt-4">
+        <h3 className="font-semibold">사이트 전체 가져오기</h3>
+        <p className="text-sm text-gray-500 my-2">
+          사이트 주소를 넣으면 사이트맵(sitemap.xml)을 따라 페이지를 찾고, 고른
+          페이지를 검토 없이 한 번에 문서로 저장합니다. 사이트맵이 없으면 첫
+          페이지의 링크로 대신합니다. 한 번에 최대 300페이지.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void discover();
+          }}
+          className="flex flex-wrap gap-2"
+        >
+          <input
+            aria-label="사이트 주소"
+            required
+            type="url"
+            maxLength={2000}
+            value={site}
+            onChange={(e) => setSite(e.target.value)}
+            placeholder="https://example.com"
+            className="border border-gray-200 rounded-lg p-2 flex-1 min-w-48"
+          />
+          <button disabled={busy} className={btn}>
+            {busy && !progress ? "찾는 중..." : "페이지 찾기"}
+          </button>
+        </form>
+        {discovered && (
+          <div className="border border-gray-200 rounded-xl p-4 mt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span>
+                {discovered.via === "sitemap" ? "사이트맵" : "첫 페이지 링크"}
+                에서 {discovered.pages.length}개 발견 · {selected.size}개 선택
+              </span>
+              <span className="flex gap-2">
+                <button
+                  type="button"
+                  className={btn}
+                  disabled={busy}
+                  onClick={() =>
+                    setSelected(
+                      new Set(
+                        discovered.pages
+                          .filter((p) => !p.registered)
+                          .map((p) => p.url),
+                      ),
+                    )
+                  }
+                >
+                  새 페이지 모두 선택
+                </button>
+                <button
+                  type="button"
+                  className={btn}
+                  disabled={busy}
+                  onClick={() => setSelected(new Set())}
+                >
+                  선택 해제
+                </button>
+              </span>
+            </div>
+            <ul className="max-h-72 overflow-auto mt-3 text-sm divide-y divide-gray-100">
+              {discovered.pages.map((p) => (
+                <li key={p.url} className="py-1.5">
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      disabled={busy || p.registered}
+                      checked={selected.has(p.url)}
+                      onChange={() => toggle(p.url)}
+                    />
+                    <span className="break-all">
+                      {p.url}
+                      {p.registered && (
+                        <span className="ml-2 text-xs text-gray-500">
+                          이미 등록됨
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <label className="text-sm">
+                폴더
+                <select
+                  value={folder}
+                  onChange={(e) => setFolder(e.target.value)}
+                  className="border border-gray-200 rounded-lg p-2 ml-2"
+                >
+                  <option value="">미분류</option>
+                  {folders.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={busy || !selected.size}
+                onClick={importSelected}
+                className={btn + " bg-violet-600 text-white"}
+              >
+                {progress
+                  ? `가져오는 중 ${progress.done}/${progress.total}`
+                  : `${selected.size}개 페이지 가져오기`}
+              </button>
+            </div>
+            {progress && progress.results.some((x) => !x.ok) && (
+              <ul className="mt-3 text-sm text-red-600 space-y-1">
+                {progress.results
+                  .filter((x) => !x.ok)
+                  .map((x) => (
+                    <li key={x.url} className="break-all">
+                      {x.url} — {x.message}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {!discovered && progress && progress.results.some((x) => !x.ok) && (
+          <ul className="mt-3 text-sm text-red-600 space-y-1">
+            {progress.results
+              .filter((x) => !x.ok)
+              .map((x) => (
+                <li key={x.url} className="break-all">
+                  {x.url} — {x.message}
+                </li>
+              ))}
+          </ul>
+        )}
+      </div>
       {preview && (
         <div className="border border-gray-200 rounded-xl p-4 mt-4">
           <p className="text-sm text-gray-500 break-all">
