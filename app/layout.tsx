@@ -29,7 +29,7 @@ export default async function RootLayout({
   const isAdmin = session?.is_admin === true;
 
   let tenantName: string | null = null;
-  if (!tenantId && platformUserId) {
+  if (!tenantId && platformUserId && masterHost) {
     try {
       const [u] = await sql`SELECT name FROM users WHERE id=${platformUserId}`;
       tenantName = u ? String(u.name) : null;

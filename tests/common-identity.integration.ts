@@ -303,14 +303,24 @@ async function main() {
         process.env.MASTER_ORIGIN = saved;
       }
       await assert.rejects(() => removePlatformAdmin(db, masterA, masterA), { status: 400 });
+      const [beforeOwner] = await tx`SELECT auth_version FROM users WHERE id=${owner}`;
       await removePlatformAdmin(db, masterA, created.id);
       await removePlatformAdmin(db, masterA, owner);
       assert.equal((await tx`SELECT is_platform_admin FROM users WHERE id=${owner}`)[0].is_platform_admin, false);
+      // In this fixture `owner` has no legacy tenant, so it counts as tenantless and is logged out like `created`.
+      assert.equal((await tx`SELECT auth_version FROM users WHERE id=${owner}`)[0].auth_version, Number(beforeOwner.auth_version) + 1);
+      assert.equal((await tx`SELECT auth_version FROM users WHERE id=${created.id}`)[0].auth_version, 2);
+      // An agency owner (legacy tenant attached) keeps its session when the master flag is removed.
+      const attached = "attached-master-" + suffix, attachedTenant = "attached-tenant-" + suffix;
+      await tx`INSERT INTO tenants(id,name,api_key) VALUES(${attachedTenant},'소속 에이전시',${randomUUID()})`;
+      await tx`INSERT INTO users(id,legacy_tenant_id,name,email,email_verified_at,is_platform_admin) VALUES(${attached},${attachedTenant},'소속 마스터',${attached + "@example.test"},1,TRUE)`;
+      await removePlatformAdmin(db, masterA, attached);
+      assert.equal((await tx`SELECT auth_version,is_platform_admin FROM users WHERE id=${attached}`)[0].auth_version, 1);
       // The last-master guard counts the whole database (shared QA fixtures), so only the unknown-id path is asserted here.
       await assert.rejects(() => removePlatformAdmin(db, masterA, "nobody"), { status: 404 });
       assert.equal(
         (await tx`SELECT count(*)::int AS n FROM platform_audit_logs WHERE actor_user_id=${masterA}`)[0].n,
-        4,
+        5,
       );
       checks++;
 
@@ -326,7 +336,9 @@ async function main() {
       await assert.rejects(() => deleteEmptyTenant(db, masterA, tenant, "테스트 에이전시"), { status: 409 }, "tenant with bots");
       await deleteEmptyTenant(db, masterA, emptyTenant, "빈 에이전시");
       assert.equal(await count("tenants", "id", emptyTenant), 0);
-      assert.equal(await count("users", "id", "empty-owner-" + suffix), 0);
+      const [detached] = await tx`SELECT legacy_tenant_id,status FROM users WHERE id=${"empty-owner-" + suffix}`;
+      assert.equal(detached.legacy_tenant_id, null);
+      assert.equal(detached.status, "disabled");
       assert.equal(
         (await tx`SELECT count(*)::int AS n FROM platform_audit_logs WHERE action='tenant.delete' AND target_id=${emptyTenant}`)[0].n,
         1,

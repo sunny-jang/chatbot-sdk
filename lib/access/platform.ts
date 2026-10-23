@@ -56,6 +56,7 @@ export async function verifyPlatformCredentials(
   emailInput: string,
   passwordInput: string,
   host: string | null,
+  ip = "unknown",
 ) {
   if (!isMasterHost(host)) return null;
   if (!(await platformReady(db))) return null;
@@ -65,6 +66,16 @@ export async function verifyPlatformCredentials(
   } catch {
     return null;
   }
+  // Ten attempts per email+address per minute, like the customer login.
+  const digest = Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(address))),
+  )
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const bucket = `master-login:${digest}:${ip}:${Math.floor(Date.now() / 60000)}`;
+  const [rate] =
+    await db`INSERT INTO api_rate_limits(bucket_key,request_count,expires_at) VALUES(${bucket},1,EXTRACT(EPOCH FROM NOW())::BIGINT+120) ON CONFLICT(bucket_key) DO UPDATE SET request_count=api_rate_limits.request_count+1 RETURNING request_count`;
+  if (Number(rate.request_count) > 10) return null;
   const [user] =
     await db`SELECT id,name,email,password_hash,auth_version FROM users WHERE email=${address} AND status='active' AND is_platform_admin=TRUE AND legacy_tenant_id IS NULL`;
   if (!user?.password_hash || !(await compare(passwordInput, String(user.password_hash)))) return null;
@@ -123,8 +134,9 @@ export async function removePlatformAdmin(db: AccessDatabase, actorUserId: strin
   const [count] =
     await db`SELECT count(*)::int AS n FROM users WHERE is_platform_admin=TRUE AND status='active'`;
   if (Number(count.n) <= 1) throw new PortalError("마지막 마스터는 해제할 수 없습니다.", 409);
+  // A tenantless master's session is purely a platform session, so it ends; an agency owner keeps working.
   const changed =
-    await db`UPDATE users SET is_platform_admin=FALSE,auth_version=auth_version+1 WHERE id=${userId} AND is_platform_admin=TRUE RETURNING id,legacy_tenant_id`;
+    await db`UPDATE users SET is_platform_admin=FALSE,auth_version=CASE WHEN legacy_tenant_id IS NULL THEN auth_version+1 ELSE auth_version END WHERE id=${userId} AND is_platform_admin=TRUE RETURNING id,legacy_tenant_id`;
   if (!changed.length) throw new PortalError("마스터를 찾을 수 없습니다.", 404);
   if (changed[0].legacy_tenant_id)
     await db`UPDATE tenants SET is_admin=FALSE WHERE id=${changed[0].legacy_tenant_id}`;
@@ -165,10 +177,11 @@ export async function deleteEmptyTenant(
     await db`DELETE FROM customer_invitations WHERE customer_id IN (SELECT id FROM customers WHERE tenant_id=${tenantId})`;
     await db`DELETE FROM customers WHERE tenant_id=${tenantId}`;
     await db`DELETE FROM partner_memberships WHERE tenant_id=${tenantId}`;
-    // The owner identity stays only if it is also a platform master; otherwise it goes with the workspace.
-    await db`DELETE FROM user_accounts WHERE user_id IN (SELECT id FROM users WHERE legacy_tenant_id=${tenantId} AND is_platform_admin=FALSE)`;
-    await db`DELETE FROM users WHERE legacy_tenant_id=${tenantId} AND is_platform_admin=FALSE`;
-    await db`UPDATE users SET legacy_tenant_id=NULL WHERE legacy_tenant_id=${tenantId}`;
+    // The owner identity is detached, never deleted: other tables (reset tokens, messages, audit rows,
+    // memberships in other agencies) may reference it. Identities with nothing left are disabled.
+    await db`UPDATE users u SET legacy_tenant_id=NULL,auth_version=auth_version+1,
+      status=CASE WHEN u.is_platform_admin OR EXISTS(SELECT 1 FROM customer_memberships m WHERE m.user_id=u.id AND m.status='active') THEN u.status ELSE 'disabled' END
+      WHERE u.legacy_tenant_id=${tenantId}`;
   }
   await db`DELETE FROM tenants WHERE id=${tenantId}`;
   if (await platformReady(db))

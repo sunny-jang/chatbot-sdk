@@ -23,7 +23,7 @@ export default function MastersPanel({
     [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const existing = masters.some((m) => m.email === email.trim().toLowerCase());
+  // The server flags an existing identity and ignores name/password; new identities need both.
   async function add(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -32,7 +32,7 @@ export default function MastersPanel({
       const r = await fetch("/api/admin/masters", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(existing ? { email } : { email, name, password }),
+        body: JSON.stringify({ email, ...(name ? { name } : {}), ...(password ? { password } : {}) }),
       });
       const d = await r.json();
       if (!r.ok) throw Error(d.error);
@@ -118,12 +118,8 @@ export default function MastersPanel({
             <strong style={{ fontSize: 14 }}>마스터 추가</strong>
             <div className="workspace-search" style={{ flexWrap: "wrap" }}>
               <input type="email" required placeholder="이메일" value={email} onChange={(e) => setEmail(e.target.value)} />
-              {!existing && (
-                <>
-                  <input placeholder="이름" value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} />
-                  <input type="password" placeholder="초기 비밀번호 (12자 이상)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} autoComplete="new-password" />
-                </>
-              )}
+              <input placeholder="이름 (새 계정일 때)" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+              <input type="password" placeholder="초기 비밀번호 (새 계정일 때, 12자 이상)" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
               {/* .workspace-search button would repaint this white; keep the primary look explicit. */}
               <button
                 className="workspace-primary"
@@ -134,7 +130,7 @@ export default function MastersPanel({
               </button>
             </div>
             <p className="workspace-list-note" style={{ padding: 0 }}>
-              이미 있는 계정 이메일이면 권한만 켜고, 없으면 에이전시 공간 없는 마스터 계정을 만듭니다. 새 마스터는 master 주소에서만 로그인합니다.
+              이미 있는 계정 이메일이면 권한만 켜고 이름·비밀번호는 무시합니다. 없으면 에이전시 공간 없는 마스터 계정을 만들며, 새 마스터는 master 주소에서만 로그인합니다. 초기 비밀번호는 전달 후 본인이 바꾸게 안내하세요.
             </p>
             {error && <p className="auth-error" role="alert">{error}</p>}
           </form>
