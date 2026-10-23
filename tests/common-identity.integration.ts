@@ -9,6 +9,12 @@ import {
   verifyAgencyCredentials,
 } from "../lib/access/credentials";
 import { restrictedBotIds } from "../lib/access/visibility";
+import {
+  addPlatformAdmin,
+  deleteEmptyTenant,
+  removePlatformAdmin,
+  verifyPlatformCredentials,
+} from "../lib/access/platform";
 import { hash } from "bcryptjs";
 import {
   acceptVerifiedInvitation,
@@ -261,6 +267,70 @@ async function main() {
       assert.equal(restrictedSet.has(assignedBot), true);
       assert.equal(restrictedSet.has(homeBot), false);
       assert.equal(restrictedSet.has(looseBot), false);
+      checks++;
+
+      // Platform masters: flag existing identities, create tenantless ones, never remove yourself or the last one.
+      const masterA = "master-a-" + suffix;
+      await tx`INSERT INTO users(id,name,email,email_verified_at,is_platform_admin) VALUES(${masterA},'마스터 A',${masterA + "@example.test"},1,TRUE)`;
+      await assert.rejects(() => addPlatformAdmin(db, owner, { email: "x@example.test" }), { status: 403 });
+      const flagged = await addPlatformAdmin(db, masterA, { email: owner + "@example.test" });
+      assert.equal(flagged.id, owner);
+      await assert.rejects(() => addPlatformAdmin(db, masterA, { email: owner + "@example.test" }), { status: 409 });
+      const created = await addPlatformAdmin(db, masterA, {
+        email: "master-new-" + suffix + "@example.test",
+        name: "신규 마스터",
+        password: "master-initial-password",
+      });
+      assert.equal(
+        (await tx`SELECT legacy_tenant_id,is_platform_admin FROM users WHERE id=${created.id}`)[0].legacy_tenant_id,
+        null,
+      );
+      assert.equal(await count("partner_memberships", "user_id", created.id), 0);
+      await assert.rejects(
+        () => addPlatformAdmin(db, masterA, { email: "placeholder-" + suffix + "@example.test", name: "x", password: "short" }),
+        { status: 400 },
+      );
+      // Tenantless masters sign in only on the master host.
+      const saved = process.env.MASTER_ORIGIN;
+      process.env.MASTER_ORIGIN = "https://master.example.com";
+      try {
+        assert.equal(await verifyPlatformCredentials(db, created.email, "master-initial-password", "app.example.com"), null);
+        assert.equal(await verifyPlatformCredentials(db, created.email, "wrong-password-value", "master.example.com"), null);
+        assert.equal((await verifyPlatformCredentials(db, created.email.toUpperCase(), "master-initial-password", "master.example.com"))?.id, created.id);
+        // Flagged agency owners are not tenantless and keep using the agency login.
+        assert.equal(await verifyPlatformCredentials(db, owner + "@example.test", "anything", "master.example.com"), null);
+      } finally {
+        process.env.MASTER_ORIGIN = saved;
+      }
+      await assert.rejects(() => removePlatformAdmin(db, masterA, masterA), { status: 400 });
+      await removePlatformAdmin(db, masterA, created.id);
+      await removePlatformAdmin(db, masterA, owner);
+      assert.equal((await tx`SELECT is_platform_admin FROM users WHERE id=${owner}`)[0].is_platform_admin, false);
+      // The last-master guard counts the whole database (shared QA fixtures), so only the unknown-id path is asserted here.
+      await assert.rejects(() => removePlatformAdmin(db, masterA, "nobody"), { status: 404 });
+      assert.equal(
+        (await tx`SELECT count(*)::int AS n FROM platform_audit_logs WHERE actor_user_id=${masterA}`)[0].n,
+        4,
+      );
+      checks++;
+
+      // Agency deletion: deactivated, empty, and confirmed by name only.
+      const emptyTenant = "empty-" + suffix;
+      await tx`INSERT INTO tenants(id,name,api_key) VALUES(${emptyTenant},'빈 에이전시',${randomUUID()})`;
+      await tx`INSERT INTO users(id,legacy_tenant_id,name,email) VALUES(${"empty-owner-" + suffix},${emptyTenant},'빈 소유자',${"empty-owner-" + suffix + "@example.test"})`;
+      await tx`INSERT INTO partner_memberships(tenant_id,user_id) VALUES(${emptyTenant},${"empty-owner-" + suffix})`;
+      await tx`INSERT INTO customers(id,tenant_id,name,is_default) VALUES(${"empty-home-" + suffix},${emptyTenant},'우리 회사',TRUE)`;
+      await assert.rejects(() => deleteEmptyTenant(db, masterA, emptyTenant, "빈 에이전시"), { status: 409 });
+      await tx`UPDATE tenants SET subscription_status='inactive' WHERE id=${emptyTenant}`;
+      await assert.rejects(() => deleteEmptyTenant(db, masterA, emptyTenant, "다른 이름"), { status: 400 });
+      await assert.rejects(() => deleteEmptyTenant(db, masterA, tenant, "테스트 에이전시"), { status: 409 }, "tenant with bots");
+      await deleteEmptyTenant(db, masterA, emptyTenant, "빈 에이전시");
+      assert.equal(await count("tenants", "id", emptyTenant), 0);
+      assert.equal(await count("users", "id", "empty-owner-" + suffix), 0);
+      assert.equal(
+        (await tx`SELECT count(*)::int AS n FROM platform_audit_logs WHERE action='tenant.delete' AND target_id=${emptyTenant}`)[0].n,
+        1,
+      );
       checks++;
 
       // Agency email login prefers the common identity's password once the users row exists.

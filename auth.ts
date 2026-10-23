@@ -11,6 +11,10 @@ import {
   agencySessionValid,
   verifyAgencyCredentials,
 } from "@/lib/access/credentials";
+import {
+  tenantOwnerIsPlatformAdmin,
+  verifyPlatformCredentials,
+} from "@/lib/access/platform";
 import type { AccessDatabase } from "@/lib/access/schema";
 
 declare module "next-auth" {
@@ -20,11 +24,13 @@ declare module "next-auth" {
     customer_user_id: string | null;
     customer_auth_version: number | null;
     agency_auth_version: number | null;
+    platform_user_id: string | null;
   }
   interface User {
     customerPortal?: boolean;
     customerAuthVersion?: number;
     agencyAuthVersion?: number | null;
+    platformAdmin?: boolean;
   }
 }
 
@@ -99,7 +105,7 @@ export const authConfig: NextAuthConfig = {
       id: "credentials",
       name: "이메일",
       credentials: { email: {}, password: {} },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const email =
           typeof credentials.email === "string" ? credentials.email.trim() : "";
         const password =
@@ -108,7 +114,24 @@ export const authConfig: NextAuthConfig = {
         await initSchema();
         // The common identity's password wins once the owner's users row exists.
         const found = await verifyAgencyCredentials(sql, email, password);
-        if (!found) return null;
+        if (!found) {
+          // A platform master without an agency workspace signs in only on the master host.
+          const master = await verifyPlatformCredentials(
+            sql,
+            email,
+            password,
+            request.headers.get("host"),
+          );
+          return master
+            ? {
+                id: master.id,
+                name: master.name,
+                email: master.email,
+                platformAdmin: true,
+                agencyAuthVersion: master.authVersion,
+              }
+            : null;
+        }
         if (found.email) await syncAdminRole(found.tenantId, found.email);
         await sql.begin((tx) =>
           provisionAgencyOwner(tx as unknown as AccessDatabase, found.tenantId),
@@ -215,9 +238,22 @@ export const authConfig: NextAuthConfig = {
         token.is_admin = false;
         return token;
       }
+      if (user?.id && user.platformAdmin) {
+        token.customer_user_id = null;
+        token.customer_auth_version = null;
+        token.tenant_id = null;
+        token.platform_user_id = user.id;
+        token.agency_auth_version =
+          typeof user.agencyAuthVersion === "number"
+            ? user.agencyAuthVersion
+            : null;
+        token.is_admin = true;
+        return token;
+      }
       if (user?.id) {
         token.customer_user_id = null;
         token.customer_auth_version = null;
+        token.platform_user_id = null;
         token.agency_auth_version =
           typeof user.agencyAuthVersion === "number"
             ? user.agencyAuthVersion
@@ -228,7 +264,7 @@ export const authConfig: NextAuthConfig = {
           await sql`SELECT is_admin FROM tenants WHERE id = ${user.id}`;
         token.is_admin =
           (rows[0] as { is_admin: boolean | null } | undefined)?.is_admin ===
-          true;
+            true || (await tenantOwnerIsPlatformAdmin(sql, user.id));
       }
       return token;
     },
@@ -242,6 +278,10 @@ export const authConfig: NextAuthConfig = {
           ? token.customer_user_id
           : null;
       session.tenant_id = (token.tenant_id as string) ?? null;
+      session.platform_user_id =
+        typeof token.platform_user_id === "string"
+          ? token.platform_user_id
+          : null;
       session.agency_auth_version =
         typeof token.agency_auth_version === "number"
           ? token.agency_auth_version

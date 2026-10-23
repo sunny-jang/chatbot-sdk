@@ -5,15 +5,20 @@ export const tokenHash = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 export const newToken = () => randomBytes(32).toString("base64url");
 export { customerReturnPath as safeNext } from "./return-path";
+/** Dedicated hosts (desk, master) compare against their configured origin; everything else against the request URL. */
 export function sameOrigin(req: Request) {
   const origin = req.headers.get("origin");
-  const configured = process.env.CUSTOMER_PORTAL_ORIGIN;
-  const portalOrigin = configured ? new URL(configured).origin : null;
-  const isPortalRequest =
-    portalOrigin &&
-    req.headers.get("host")?.toLowerCase() ===
-      new URL(portalOrigin).host.toLowerCase();
-  const expected = isPortalRequest ? portalOrigin : new URL(req.url).origin;
+  const host = req.headers.get("host")?.toLowerCase() ?? null;
+  const configuredOrigin = [process.env.CUSTOMER_PORTAL_ORIGIN, process.env.MASTER_ORIGIN]
+    .map((value) => {
+      try {
+        return value ? new URL(value).origin : null;
+      } catch {
+        return null;
+      }
+    })
+    .find((candidate) => candidate && new URL(candidate).host.toLowerCase() === host);
+  const expected = configuredOrigin ?? new URL(req.url).origin;
   if (!origin || origin !== expected)
     throw new PortalError("요청 출처를 확인해주세요.", 403);
 }

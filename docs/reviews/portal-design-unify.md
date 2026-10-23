@@ -65,3 +65,14 @@
 - QA 환경 `app.env`에 `MASTER_ORIGIN=http://master.localhost:3012` 추가.
 - 검증: 단위 3건(호스트 판정·허용 경로·전용 호스트 공급자), HTTP 1건(익명 루트 → 로그인, 소유자의 `/customers` → `/admin`, `/api/bots` 403, 에이전시 `/admin` → master 리디렉션·`/api/admin` 403, 비마스터 소유자 콘솔 API 403, master 호스트 자격 증명 로그인 세션 발급, providers=credentials·google·callback이 master origin). 총 HTTP 39건.
 - 미검증: 실제 마스터 계정(`ADMIN_EMAILS`)으로 콘솔 화면 왕복 — QA fixture에는 마스터 이메일이 없다. 운영 DNS/TLS·Google 콘솔 URI 등록.
+
+
+## 독립 마스터 신원·삭제 보호 (2026-10-23, 브랜치 `codex/master-identity`)
+
+- `lib/access/platform.ts`: `verifyPlatformCredentials`(공간 없는 마스터, master 호스트 전용), `isPlatformAdminUser`/`tenantOwnerIsPlatformAdmin`(live 검사), `addPlatformAdmin`/`removePlatformAdmin`(자기 자신·마지막 마스터 보호, 해제 시 auth_version+1), `deleteEmptyTenant`(비활성·빈 에이전시·이름 확인·정리 순서·감사), `platform_audit_logs` 테이블(명시적 이관에서 생성).
+- `auth.ts`: 에이전시 자격 증명이 실패하면 master 호스트에서만 공간 없는 마스터를 인증. 세션에 `platform_user_id`. 에이전시 세션의 `is_admin`은 `tenants.is_admin` 또는 소유자 신원의 `is_platform_admin`.
+- `lib/auth.ts isAdminRequest()`: 세션 종류별 live 검사(요청당 1회 캐시). `platformActorId()`로 감사 행위자.
+- 콘솔: `/api/admin/masters` GET/POST/DELETE + `MastersPanel`. 에이전시 삭제는 이름 입력 확인 + 서버 거부 사유 표시.
+- 레이아웃: 공간 없는 마스터 세션도 master 호스트에서 `MasterBar` 셸.
+- 검증: DB 2건(마스터 추가/해제/호스트 게이트/감사 4건, 삭제 보호·정리·감사), HTTP 1건(에이전시 호스트 로그인 거부·master 로그인·콘솔 200·비마스터 403·활성 에이전시 삭제 409·이름 불일치 400·자기 해제 400).
+검증(최종): 단위 142건, DB common-identity 20건·portal 46건·demo 13건 롤백, 빌드(Edge 경고 0)·tsc·린트 통과, HTTP 포털 40건·데모 8건 통과. 테스트 HTTP 헬퍼는 본문이 있으면 Content-Length를 선언한다(Next가 chunked DELETE 본문을 거부). `sameOrigin`은 desk·master 전용 호스트의 설정 origin을 기대값으로 쓴다.

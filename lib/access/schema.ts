@@ -1,5 +1,6 @@
 import type sql from "../neon";
 import { createCustomerPortalSchema } from "../customer-portal/schema";
+import { createPlatformSchema } from "./platform";
 export type AccessDatabase = Pick<typeof sql, "unsafe"> & typeof sql;
 
 /** 호출자의 트랜잭션 안에서만 실행. initSchema나 공개 요청에서 자동 실행하지 않는다. */
@@ -98,4 +99,5 @@ export async function createAccessSchema(db: AccessDatabase) {
   await db`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS assigned_agent_user_id TEXT REFERENCES users(id)`;
   await db`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sender_user_id TEXT REFERENCES users(id)`;
   await createCustomerPortalSchema(db);
+  await createPlatformSchema(db);
 }
