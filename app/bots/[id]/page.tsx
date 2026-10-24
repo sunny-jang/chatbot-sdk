@@ -65,7 +65,7 @@ const chatbot = await initIdealAIChatbot({
 });`;
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <BotHeader bot={bot} current="설정" actions={<HelpButton content={HELP} />} />
 
       <BotSettings bot={bot} />

@@ -43,7 +43,7 @@ export default async function LogsPage({
   if (!bot) notFound();
   if (tenantId && (await isRestrictedBot(sql, tenantId, id)))
     return (
-      <div className="max-w-3xl">
+      <div>
         <BotHeader bot={bot} current="대화 기록" />
         <div className="workspace-panel" style={{ padding: 28, marginTop: 16 }}>
           <strong style={{ display: "block", fontSize: 15, marginBottom: 8 }}>
@@ -63,7 +63,7 @@ export default async function LogsPage({
   `) as unknown as ChatLog[];
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <BotHeader bot={bot} current="대화 기록" actions={<HelpButton content={HELP} />} />
       <LogsClient logs={logs} />
     </div>

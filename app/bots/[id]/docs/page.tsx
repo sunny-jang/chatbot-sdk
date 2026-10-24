@@ -58,7 +58,7 @@ export default async function DocsPage({
   `) as unknown as Document[];
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <BotHeader bot={bot} current="문서 관리" actions={<HelpButton content={HELP} />} />
       <WebSourceManager botId={id} folders={folders}/>
       <DocsManager key={JSON.stringify(docs.map(d=>[d.id,d.title,d.content]))} botId={id} initialDocs={docs} initialFolders={folders} />
