@@ -1,31 +1,53 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
 import sql from "@/lib/neon";
 import Sidebar from "./Sidebar";
+import WorkspaceFrame from "./WorkspaceFrame";
+import MasterBar from "./MasterBar";
+import AgencyHelpWidget from "./components/AgencyHelpWidget";
+import { headers } from "next/headers";
+import { isCustomerPortalHost } from "@/lib/customer-portal/host";
+import { isMasterHost, masterOrigin } from "@/lib/master-host";
 import { auth } from "@/auth";
 import "./globals.css";
-
-const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Ideal AI Chatbot SDK",
   description: "Ideal AI Chatbot SDK Admin Panel",
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   // 모든 로그인 방식(Google·이메일·개발 로그인)이 Auth.js 세션 하나를 사용합니다.
+  const host = (await headers()).get("host");
+  const customerHost = isCustomerPortalHost(host);
+  const masterHost = isMasterHost(host);
   const session = await auth();
   const tenantId = session?.tenant_id ?? null;
+  const platformUserId = session?.platform_user_id ?? null;
   const isAdmin = session?.is_admin === true;
 
   let tenantName: string | null = null;
+  if (!tenantId && platformUserId && masterHost) {
+    try {
+      const [u] = await sql`SELECT name FROM users WHERE id=${platformUserId}`;
+      tenantName = u ? String(u.name) : null;
+    } catch {}
+  }
   let bots: { id: string; name: string; type: string }[] = [];
   if (tenantId) {
     try {
       const rows = await sql`SELECT name FROM tenants WHERE id = ${tenantId}`;
       tenantName = (rows[0] as { name: string } | undefined)?.name ?? null;
       if (tenantName) {
-        bots = (await sql`SELECT id, name, type FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC`) as unknown as { id: string; name: string; type: string }[];
+        bots =
+          (await sql`SELECT id, name, type FROM bots WHERE tenant_id = ${tenantId} ORDER BY created_at DESC`) as unknown as {
+            id: string;
+            name: string;
+            type: string;
+          }[];
       }
     } catch {
       // DB might not be ready yet (first load)
@@ -33,16 +55,36 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <html lang="ko" className={geist.className}>
-      <body className="min-h-screen" style={{ backgroundColor: "#f8f7ff" }}>
+    <html lang="ko">
+      <head>
+        {/* Pretendard: Korean-first UI type shared by the agency app, the desk portal and the demo. */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
+      </head>
+      <body className="min-h-screen">
         {tenantName ? (
-          <div className="flex min-h-screen">
-            <Sidebar tenantName={tenantName} bots={bots} isAdmin={isAdmin} />
-            <main className="flex-1 p-8">{children}</main>
-          </div>
+          <WorkspaceFrame
+            customerHost={customerHost}
+            masterHost={masterHost}
+            masterNavigation={<MasterBar tenantName={tenantName} />}
+            navigation={
+              <Sidebar
+                tenantName={tenantName}
+                bots={bots}
+                isAdmin={isAdmin}
+                masterOrigin={masterOrigin()}
+              />
+            }
+          >
+            {children}
+          </WorkspaceFrame>
         ) : (
           <>{children}</>
         )}
+        {/* 파트너 에이전시 화면(에이전시 호스트)에만 안내 챗봇을 설치합니다. */}
+        {!customerHost && !masterHost && <AgencyHelpWidget />}
       </body>
     </html>
   );

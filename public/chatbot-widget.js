@@ -87,10 +87,17 @@
     .catch(() => init({}));
 
   function init(settings) {
-    const color = settings.color || "#2563eb";
+    const color = typeof settings.color === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(settings.color) ? settings.color : "#2563eb";
     const title = settings.title || "💬 Ideal AI";
     const greeting = settings.greeting || null;
-    const logo = settings.logo || `${endpoint}/chatbot-default.svg`;
+    const defaultLogo = `${endpoint}/chatbot-default.svg`;
+    function safeLogo(value) {
+      if (typeof value !== "string" || value.length > 2800000) return defaultLogo;
+      if (/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) return value;
+      try { const u = new URL(value); if (["http:", "https:"].includes(u.protocol) && !u.username && !u.password) return u.href; } catch {}
+      return defaultLogo;
+    }
+    const logo = safeLogo(settings.logo);
     const fabLogo = logo;
     const qaFolders = settings.qaFolders || [];
     const isQaBot = settings.type === "qa";
@@ -116,7 +123,7 @@
       }
       #__chatbot-fab .fab-logo {
         width: 52px; height: 52px; padding: 0; border-radius: 50%;
-        object-fit: contain; display: block; flex: 0 0 52px; min-width: 52px; max-width: 52px; min-height: 52px; max-height: 52px; box-sizing: border-box; background: white;
+        object-fit: contain; display: block; flex: 0 0 52px; min-width: 52px; max-width: 52px; min-height: 52px; max-height: 52px; box-sizing: border-box; background: transparent;
       }
       #__chatbot-fab:hover { transform: scale(1.05); box-shadow: 0 6px 20px ${color}88; }
       #__chatbot-panel {
@@ -138,7 +145,7 @@
       #__chatbot-header .title { display: flex; align-items: center; gap: 9px; min-width: 0; }
       #__chatbot-header .title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #__chatbot-header .close { flex-shrink: 0; margin-left: 12px; }
-      #__chatbot-header .logo { width: 30px; height: 30px; border-radius: 8px; background: white; object-fit: contain; flex: 0 0 30px; min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; display: block; }
+      #__chatbot-header .logo { width: 30px; height: 30px; border-radius: 8px; background: transparent; object-fit: contain; flex: 0 0 30px; min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; display: block; }
       #__chatbot-header .close { background: none; border: none; color: white; cursor: pointer; font-size: 18px; line-height: 1; opacity: 0.8; }
       #__chatbot-header .close:hover { opacity: 1; }
       #__chatbot-messages {
@@ -219,7 +226,7 @@
     panel.inert = true;
     panel.innerHTML = `
       <div id="__chatbot-header">
-        <span class="title">${logo ? `<img class="logo" src="${logo}" alt="" />` : "💬"}<span>${title}</span></span>
+        <span class="title"><img class="logo" alt="" /><span></span></span>
         <button class="close" aria-label="닫기">✕</button>
       </div>
       <div id="__chatbot-messages"></div>
@@ -234,6 +241,10 @@
         </button>
       </div>
     `;
+    panel.querySelector(".title > span").textContent = String(title).slice(0, 100);
+    const headerLogo = panel.querySelector(".title > img");
+    headerLogo.src = logo;
+    headerLogo.addEventListener("error", () => { headerLogo.src = defaultLogo; }, { once: true });
     root.appendChild(panel);
 
     // ── Logic ─────────────────────────────────────────────────────────────────
@@ -501,7 +512,7 @@
           const session=check.ok?await check.json():null;
           const res=await fetch(`${endpoint}/api/chat/${botId}/requests`,{method:"POST",headers:{"Content-Type":"application/json","X-Bot-Token":botToken},body:JSON.stringify({...values,kind,consent:consent.checked,consentVersion:requestSettings.consentVersion,idempotencyKey:key,sessionId:session?.exists?sessionId:null})});
           const data=await res.json();if(!res.ok)throw Error(data.error||"접수하지 못했습니다.");
-          notice.textContent=`신청을 접수했습니다.\n접수번호: ${data.receipt}`;submit.remove();for(const input of Object.values(fields))input.disabled=true;consent.disabled=true;
+          notice.textContent=data.demo?`데모 접수를 완료했습니다. 실제 상담 요청은 전달되지 않습니다.\n체험 접수번호: ${data.receipt}`:`신청을 접수했습니다.\n접수번호: ${data.receipt}`;submit.remove();for(const input of Object.values(fields))input.disabled=true;consent.disabled=true;
         }catch(error){notice.textContent=error.message||"접수에 실패했습니다. 다시 시도해주세요.";submit.disabled=false}finally{pending=false}
       });
       form.addEventListener("keydown",event=>{
@@ -746,7 +757,7 @@
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
-          body: JSON.stringify({ message: question.question, qaId: question.id, sessionId }),
+          body: JSON.stringify({ message: question.question, qaId: question.id, sessionId, requestId: crypto.randomUUID() }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.handoffActive) {
@@ -807,7 +818,7 @@
         const res = await fetch(`${endpoint}/api/chat/${botId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Bot-Token": botToken },
-          body: JSON.stringify({ message: text, history, sessionId, proactiveContext, mode: isQaBot && qaAiMode ? "rag-ai" : undefined }),
+          body: JSON.stringify({ message: text, history, sessionId, requestId: crypto.randomUUID(), proactiveContext, mode: isQaBot && qaAiMode ? "rag-ai" : undefined }),
         });
         const data = await res.json();
         if (res.ok && data.handoffActive) {

@@ -49,7 +49,10 @@ export default async function BotDetailPage({
 
   const headersList = await headers();
   const host = headersList.get("host") ?? "localhost:3000";
-  const proto = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
+  const hostname = host.split(":")[0];
+  const local =
+    hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "127.0.0.1";
+  const proto = headersList.get("x-forwarded-proto") ?? (local ? "http" : "https");
   const baseUrl = `${proto}://${host}`;
   const embedCode = `<script src="${baseUrl}/chatbot-widget.js" data-bot-id="${bot.id}" data-bot-token="${bot.public_token}" data-endpoint="${baseUrl}"></script>`;
   const npmInstallCode = "npm install ideal-ai-widget-sdk";
@@ -62,9 +65,8 @@ const chatbot = await initIdealAIChatbot({
 });`;
 
   return (
-    <div className="max-w-2xl">
-      <BotHeader bot={bot} current="설정" />
-      <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
+    <div>
+      <BotHeader bot={bot} current="설정" actions={<HelpButton content={HELP} />} />
 
       <BotSettings bot={bot} />
 

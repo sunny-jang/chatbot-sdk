@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
+import { isRestrictedBot } from "@/lib/access/visibility";
 import { initSchema } from "@/lib/db";
 import { readTenantId } from "@/lib/auth";
 
@@ -14,6 +15,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   await initSchema();
   const botRows = await sql`SELECT id, name, type FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   const bot = botRows[0];
+  const restricted = await isRestrictedBot(sql, tenantId, id);
   if (!bot) return NextResponse.json({ error: "Bot not found" }, { status: 404 });
   if (bot.type !== "qa") return NextResponse.json({ error: "Q&A bot only" }, { status: 400 });
   const url = new URL(req.url);
@@ -63,6 +65,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     daily: [...dailyMap.entries()].map(([date, value]) => ({ date, questions: value.questions, sessions: value.sessions.size, matched: value.matched })),
     topQuestions: [...questionMap.values()].sort((a, b) => b.count - a.count).slice(0, 10),
     folders: [...folderMap.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
-    unmatched: unmatched.slice(0, 20).map((row) => ({ id: String(row.id), question: String(row.user_message), createdAt: row.created_at, sessionId: String(row.session_id) })),
+    restricted,
+    unmatched: restricted ? [] : unmatched.slice(0, 20).map((row) => ({ id: String(row.id), question: String(row.user_message), createdAt: row.created_at, sessionId: String(row.session_id) })),
   });
 }

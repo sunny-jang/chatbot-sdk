@@ -1,0 +1,27 @@
+# PRD 실행 01 — 작성자 코드 리뷰
+
+범위: 에이전시 상담 API 공통화, 위젯 입력 방어, 폴더 없는 Q&A. 이 문서는 작성자 리뷰이며 독립 리뷰로 표현하지 않는다.
+
+## 확인과 수정
+
+- 에이전시 POST/PATCH가 tenant 소유 세션의 고객사를 서버에서 찾고, 공통 서비스가 live membership 및 세션·인계 행을 잠근 뒤 변경하는지 확인.
+- 요청의 agentName/sender_user_id를 버리고 인증된 사용자 이름/ID로 작성하는지 HTTP로 확인.
+- 같은 전송 키 재시도는 동일 메시지, 다른 내용은 409. 종료 후 새 답변은 409이며 상태 유지.
+- 종료 알림과 외부 전송은 커밋 성공 후에만 실행하며 중복 전송은 refs=null로 방지.
+- 리뷰 중 에이전시 목록에 assigned_agent_user_id가 빠져 응답 버튼이 비활성화될 수 있는 문제 발견. 조회 컬럼과 페이지의 사용자/인계 props를 추가해 수정.
+- 위젯의 저장된 과거 제목/색상/로고도 공개 응답과 브라우저에서 방어. 제목은 textContent, 로고는 src 속성, CSS 색상은 hex 제한.
+- 업로드는 2MB와 raster signature/MIME를 검사하고 SVG 업로드는 거부. 외부 HTTP 이미지 로드는 기존 제품 허용 범위이며 서버에서 URL 내용을 가져오지 않음.
+- 폴더 없는 Q&A만 기본 그룹으로 추가하고 기존 그룹 질문을 중복하지 않음.
+
+## 검증
+
+- 위젯 표시값·이미지 시그니처/상담 시간 단위 7개 통과.
+- 실제 로그인 HTTP 26개 통과. 추가 2개는 에이전시 작성자/멱등/종료 정책과 위험 입력/기존 저장값/폴더 없는 Q&A 회귀.
+- TypeScript, 변경 TS/TSX ESLint, JS 구문, production build 통과.
+- 통합 검증은 격리 로컬 chatbot_qa DB에서만 수행.
+
+고객사 관리자 전체 기능·데모·Google·실메일/운영 이관은 이 PR의 완료 범위가 아니다. 인수 전체 항목을 통과 처리하지 않는다.
+
+## 독립 리뷰·머지 결과
+
+PR #2의 커밋 61874e9에 대해 GitHub Codex 리뷰 completed, has_any_findings=false, has_unresolved_findings=false 확인. Vercel chatbot/chatbot-sdk 두 체크 성공 후 기준 브랜치에 merge 519ba7b. 최종 전체 단위 121개·DB 22개·HTTP 26개 통과.

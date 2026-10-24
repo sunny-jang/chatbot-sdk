@@ -15,5 +15,5 @@ export default async function BotAnalyticsPage({ params }: { params: Promise<{ i
   const rows = await sql`SELECT * FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   const bot = rows[0] as unknown as Bot | undefined;
   if (!bot) notFound();
-  return <div><div className="max-w-6xl"><BotHeader bot={bot} current={bot.type === "qa" ? "Q&A 분석" : "분석"} /></div>{bot.type === "qa" ? <QaAnalyticsDashboard botId={bot.id} botName={bot.name} /> : <BotAnalyticsDashboard botId={bot.id} botName={bot.name} />}</div>;
+  return <div><div><BotHeader bot={bot} current={bot.type === "qa" ? "Q&A 분석" : "분석"} /></div>{bot.type === "qa" ? <QaAnalyticsDashboard botId={bot.id} botName={bot.name} /> : <BotAnalyticsDashboard botId={bot.id} botName={bot.name} />}</div>;
 }

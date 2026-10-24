@@ -12,6 +12,7 @@ export type GeminiResponse = {
 
 export async function generateGeminiContent(options: {
   apiKey: string;
+  signal?: AbortSignal;
   model: string;
   systemInstruction?: string;
   contents: GeminiMessage[];
@@ -20,23 +21,35 @@ export async function generateGeminiContent(options: {
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(options.model)}:generateContent?key=${encodeURIComponent(options.apiKey)}`,
     {
       method: "POST",
+      signal: options.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...(options.systemInstruction
-          ? { systemInstruction: { parts: [{ text: options.systemInstruction }] } }
+          ? {
+              systemInstruction: {
+                parts: [{ text: options.systemInstruction }],
+              },
+            }
           : {}),
         contents: options.contents,
       }),
     },
   );
 
-  if (!response.ok) throw new Error(`Gemini request failed (${response.status})`);
-  const data = await response.json() as {
+  if (!response.ok)
+    throw new Error(`Gemini request failed (${response.status})`);
+  const data = (await response.json()) as {
     modelVersion?: string;
     candidates?: { content?: { parts?: { text?: string }[] } }[];
-    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    usageMetadata?: {
+      promptTokenCount?: number;
+      candidatesTokenCount?: number;
+    };
   };
-  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+  const text =
+    data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? "")
+      .join("") ?? "";
   return {
     text,
     model: data.modelVersion ?? options.model,

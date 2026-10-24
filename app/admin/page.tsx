@@ -3,7 +3,9 @@ import { initSchema } from "@/lib/db";
 import AdminClient from "./AdminClient";
 import { getMonthlySessionLimit, normalizePlan } from "@/lib/plans";
 import { getMonthlySessionUsage } from "@/lib/monthlyUsage";
-import { isAdminRequest } from "@/lib/auth";
+import { isAdminRequest, platformActorId } from "@/lib/auth";
+import { listPlatformAdmins, platformReady } from "@/lib/access/platform";
+import MastersPanel from "./MastersPanel";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -43,5 +45,22 @@ export default async function AdminPage() {
     return { ...tenant, monthly_session_count: usage?.used ?? 0 };
   }));
 
-  return <AdminClient initialTenants={tenants} />;
+  const ready = await platformReady(sql);
+  const masters = ready ? await listPlatformAdmins(sql) : [];
+  return (
+    <>
+      <AdminClient initialTenants={tenants} />
+      <MastersPanel
+        ready={ready}
+        selfId={await platformActorId()}
+        initial={masters.map((m) => ({
+          id: String(m.id),
+          name: String(m.name),
+          email: String(m.email),
+          legacy_tenant_id: m.legacy_tenant_id ? String(m.legacy_tenant_id) : null,
+          tenant_name: m.tenant_name ? String(m.tenant_name) : null,
+        }))}
+      />
+    </>
+  );
 }

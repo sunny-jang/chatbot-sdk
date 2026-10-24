@@ -58,8 +58,7 @@ export default async function QaPage({
 
   return (
     <div className="max-w-3xl">
-      <BotHeader bot={bot} current="Q&A 관리" />
-      <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
+      <BotHeader bot={bot} current="Q&A 관리" actions={<HelpButton content={HELP} />} />
       <QaManager botId={id} initialPairs={pairs} initialFolders={folders} />
     </div>
   );

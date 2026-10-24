@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { ChatLog } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
+import { isRestrictedBot, RESTRICTED_NOTICE } from "@/lib/access/visibility";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const tenantId = await getTenantId();
@@ -10,6 +11,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const check = await sql`SELECT id FROM bots WHERE id = ${id} AND tenant_id = ${tenantId}`;
   if (!check[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (await isRestrictedBot(sql, tenantId, id))
+    return NextResponse.json({ error: RESTRICTED_NOTICE }, { status: 403 });
 
   const url = new URL(req.url);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
