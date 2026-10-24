@@ -27,6 +27,9 @@ button{font:inherit}
 
 .workspace-shell{display:flex;min-height:100vh;color:var(--ink)}
 .workspace-main{flex:1;min-width:0;padding:32px clamp(20px,3vw,44px)}
+/* 분석 화면은 자체 상단바·여백을 가진 풀블리드 셸이라 바깥 여백을 없앱니다. */
+.workspace-main:has(>.analytics-app){padding:0}
+.workspace-main>.analytics-app{min-height:100dvh}
 .workspace-sidebar{width:232px;flex:none;background:var(--surface);border-right:1px solid var(--line);height:100dvh;position:sticky;top:0;display:flex;flex-direction:column}
 .workspace-brand{padding:22px 20px 14px;display:flex;flex-direction:column;gap:8px}
 .workspace-brand img{height:auto;width:104px}
