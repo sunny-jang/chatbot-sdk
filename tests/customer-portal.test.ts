@@ -47,7 +47,7 @@ test("홈페이지/이메일 검증과 외부 리디렉션 차단", () => {
   assert.equal(safeNext("/customer/\\evil.test"), "/customer");
 });
 test("비밀번호 길이와 bcrypt 바이트 상한 적용", () => {
-  assert.equal(password("a".repeat(12)), "a".repeat(12));
+  assert.equal(password("a".repeat(8)), "a".repeat(8));
   assert.throws(() => password("short"));
   assert.throws(() => password("가".repeat(25)));
 });
