@@ -1,5 +1,6 @@
 import sql from "@/lib/neon";
-import { requireReady } from "@/lib/customer-portal/auth";
+import { portalUser, requireReady } from "@/lib/customer-portal/auth";
+import { auth } from "@/auth";
 import { tokenHash } from "@/lib/customer-portal/input";
 import Activate from "./Activate";
 import { AuthHero } from "@/app/customer/components/AuthHero";
@@ -32,12 +33,26 @@ export default async function ActivatePage({
     );
   const address = String(challenge.email),
     masked = address[0] + "***@" + address.split("@")[1];
+  // 이미 계정이 있는 사람이 로그인한 채로 돌아오면 바로 수락할 수 있게 현재 로그인 정보를 넘깁니다.
+  let viewer: { email: string | null; matches: boolean } | null = null;
+  try {
+    const u = await portalUser();
+    viewer = { email: u.email, matches: u.email === address };
+  } catch {
+    const session = await auth();
+    if (session?.tenant_id) {
+      const [u] =
+        await sql`SELECT email FROM users WHERE legacy_tenant_id=${session.tenant_id} AND status='active'`;
+      if (u) viewer = { email: String(u.email), matches: String(u.email) === address };
+    }
+  }
   return (
     <Activate
       token={token}
       existing={Boolean(challenge.existing)}
       customerName={String(challenge.name)}
       maskedEmail={masked}
+      viewer={viewer}
     />
   );
 }
