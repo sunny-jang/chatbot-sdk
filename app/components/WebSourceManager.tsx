@@ -44,6 +44,7 @@ export default function WebSourceManager({
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
     [siteNotice, setSiteNotice] = useState(""),
+    [discovering, setDiscovering] = useState(false),
     [site, setSite] = useState(""),
     [discovered, setDiscovered] = useState<Discovered | null>(null),
     [selected, setSelected] = useState<Set<string>>(new Set()),
@@ -120,6 +121,7 @@ export default function WebSourceManager({
   }
   async function discover() {
     setBusy(true);
+    setDiscovering(true);
     setSiteNotice("");
     setDiscovered(null);
     setProgress(null);
@@ -141,6 +143,7 @@ export default function WebSourceManager({
       );
     } finally {
       setBusy(false);
+      setDiscovering(false);
     }
   }
   async function importSelected() {
@@ -263,15 +266,54 @@ export default function WebSourceManager({
             required
             type="url"
             maxLength={2000}
+            disabled={busy}
             value={site}
             onChange={(e) => setSite(e.target.value)}
             placeholder="https://example.com"
             className="border border-gray-200 rounded-lg p-2 flex-1 min-w-48"
           />
           <button disabled={busy} className={btn}>
-            {busy && !progress ? "찾는 중..." : "페이지 찾기"}
+            {discovering ? "탐색 중..." : "페이지 찾기"}
           </button>
         </form>
+        {discovering && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-2 text-sm text-gray-600 mt-3"
+          >
+            <span
+              aria-hidden="true"
+              className="inline-block h-4 w-4 rounded-full border-2 border-violet-200 border-t-violet-600 animate-spin"
+            />
+            사이트맵을 탐색하고 있어요. 사이트맵이 크거나 느린 사이트는 30초
+            넘게 걸릴 수 있어요.
+          </p>
+        )}
+        {progress && busy && (
+          <div className="mt-3" role="status" aria-live="polite">
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-4 w-4 rounded-full border-2 border-violet-200 border-t-violet-600 animate-spin"
+                />
+                페이지를 가져와 문서로 저장하고 있어요
+              </span>
+              <span>
+                {progress.done}/{progress.total}
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-violet-600 transition-[width] duration-300"
+                style={{
+                  width: `${Math.round((progress.done / progress.total) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
         {siteNotice && (
           <p role="status" className="text-sm text-violet-700 mt-3">
             {siteNotice}
