@@ -15,10 +15,7 @@ export default function HelpButton({ content, label = "이 화면 사용방법 �
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors"
-        style={{ backgroundColor: "#ede9ff", color: "#6949f4", fontWeight: 500 }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "#ddd6fe"; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "#ede9ff"; }}
+        className="help-button"
       >
         <span style={{ fontSize: 13 }}>?</span>
         {label}

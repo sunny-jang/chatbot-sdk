@@ -11,7 +11,6 @@ import NavIcon from "./components/NavIcon";
 type Bot = { id: string; name: string; type: string };
 export default function Sidebar({
   tenantName,
-  bots,
   isAdmin,
   masterOrigin,
 }: {
@@ -23,9 +22,6 @@ export default function Sidebar({
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
   const [guideSection, setGuideSection] = useState<string | null>(null);
-  const currentBot = bots.find(
-    (b) => b.id === pathname.match(/^\/bots\/([^/]+)/)?.[1],
-  );
   const link = (href: string, label: string, mark: string) => (
     <Link
       key={href}
@@ -89,20 +85,6 @@ export default function Sidebar({
           {link("/analytics", "이용 현황", "analytics")}
           {link("/settings", "공간 설정", "settings")}
           {link("/plan", "요금제", "plan")}
-          {currentBot && (
-            <div className="workspace-bot-nav">
-              <p className="workspace-nav-label">선택한 챗봇</p>
-              <strong className="workspace-bot-name">{currentBot.name}</strong>
-              {link(`/bots/${currentBot.id}`, "설정·설치", "settings")}
-              {link(`/bots/${currentBot.id}/docs`, "지식 문서", "docs")}
-              {currentBot.type === "qa" &&
-                link(`/bots/${currentBot.id}/qa`, "질문과 답변", "qa")}
-              {link(`/bots/${currentBot.id}/test`, "테스트", "test")}
-              {link(`/bots/${currentBot.id}/logs`, "대화 기록", "logs")}
-              {link(`/bots/${currentBot.id}/requests`, "문의·견적 관리", "requests")}
-              {link(`/bots/${currentBot.id}/analytics`, "챗봇 분석", "analytics")}
-            </div>
-          )}
           <p className="workspace-nav-label">도움말</p>
           {link("/guide", "이용 가이드", "guide")}
           {link("/sdk-guide", "설치 가이드", "install")}
