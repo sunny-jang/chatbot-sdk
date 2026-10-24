@@ -1230,10 +1230,16 @@ form.cp-row {
   text-overflow: ellipsis;
 }
 .cp-request-main small {
-  display: block;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   margin-top: 4px;
   font-size: 13px;
   color: var(--cp-muted);
+}
+.cp-chip-inline {
+  display: none;
+  margin-left: 10px;
 }
 .cp-request-main i,
 .cp-detail-meta i {
@@ -1425,12 +1431,14 @@ form.cp-row {
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 8px;
   }
-  .cp-request-row .cp-request-cell:nth-of-type(1),
-  .cp-request-row .cp-request-cell:nth-of-type(2) {
-    display: none;
-  }
+  .cp-request-bot,
+  .cp-request-date,
+  .cp-request-status,
   .cp-request-chevron {
     display: none;
+  }
+  .cp-chip-inline {
+    display: inline-flex;
   }
   .cp-facts {
     grid-template-columns: 1fr;

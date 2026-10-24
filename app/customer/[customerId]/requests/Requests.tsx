@@ -239,12 +239,19 @@ export default function CustomerRequests({
                   {r.receipt}
                   <i>|</i>
                   {r.kind === "quote" ? "견적 요청" : "상담 신청"}
+                  <span
+                    className={`cp-chip cp-chip-inline ${chipTone[r.status] ?? "muted"}`}
+                  >
+                    {labels[r.status] ?? r.status}
+                  </span>
                 </small>
               </span>
             </span>
-            <span className="cp-request-cell">{r.bot_name}</span>
-            <span className="cp-request-cell">{when(r.created_at)}</span>
-            <span className="cp-request-cell">
+            <span className="cp-request-cell cp-request-bot">{r.bot_name}</span>
+            <span className="cp-request-cell cp-request-date">
+              {when(r.created_at)}
+            </span>
+            <span className="cp-request-cell cp-request-status">
               <span className={`cp-chip ${chipTone[r.status] ?? "muted"}`}>
                 {labels[r.status] ?? r.status}
               </span>
