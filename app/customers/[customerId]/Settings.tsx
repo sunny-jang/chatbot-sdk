@@ -74,6 +74,11 @@ export default function Settings({
             onChange={(e) => setWebsite(e.target.value)}
             placeholder="https://"
           />
+          <small className="cp-note">
+            주소를 등록하면 이 고객사 챗봇의 대화 API는 해당 도메인(과 우리
+            서비스 호스트)에서만 동작합니다. 비워두면 모든 사이트에서 호출할 수
+            있어요.
+          </small>
         </label>
         {owner && (
           <label>

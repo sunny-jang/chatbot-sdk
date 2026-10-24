@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AccessDatabase } from "../access/schema";
 import { resolveCustomerAccess } from "../access/queries";
 import { PortalError, text, website } from "./input";
+import { forgetBotWebsite } from "@/lib/widget-origin";
 export async function updateCustomer(
   db: AccessDatabase,
   userId: string,
@@ -41,6 +42,8 @@ export async function updateCustomer(
     await db`UPDATE customer_invitations SET status='revoked' WHERE customer_id=${customerId} AND status='pending'`;
   }
   await db`UPDATE customers SET name=COALESCE(${name},name),website=CASE WHEN ${site !== undefined} THEN ${site ?? null} ELSE website END,status=COALESCE(${input.status === undefined ? null : String(input.status)},status) WHERE id=${customerId}`;
+  // 홈페이지 주소가 바뀌면 위젯 API의 허용 출처 캐시를 비웁니다.
+  if (site !== undefined) forgetBotWebsite();
   await db`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${userId},${c.tenant_id},${customerId},'customer.update',${customerId},'success')`;
 }
 /** Record only a scoped denial; never persist request payloads, passwords or invitation tokens. */

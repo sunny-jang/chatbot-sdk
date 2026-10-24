@@ -119,7 +119,7 @@ export default function MastersPanel({
             <div className="workspace-search" style={{ flexWrap: "wrap" }}>
               <input type="email" required placeholder="이메일" value={email} onChange={(e) => setEmail(e.target.value)} />
               <input placeholder="이름 (새 계정일 때)" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
-              <input type="password" placeholder="초기 비밀번호 (새 계정일 때, 12자 이상)" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+              <input type="password" placeholder="초기 비밀번호 (새 계정일 때, 8자 이상)" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
               {/* .workspace-search button would repaint this white; keep the primary look explicit. */}
               <button
                 className="workspace-primary"

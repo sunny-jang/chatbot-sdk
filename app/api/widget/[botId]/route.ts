@@ -1,3 +1,4 @@
+import { withWidgetCors } from "@/lib/widget-origin";
 import {
   widgetTitle,
   widgetColor,
@@ -10,7 +11,7 @@ import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { getSupportStatus } from "@/lib/supportHours";
 
-export async function GET(
+async function GETHandler(
   _: Request,
   { params }: { params: Promise<{ botId: string }> },
 ) {
@@ -99,3 +100,5 @@ export async function GET(
     { headers: { "Cache-Control": "no-store" } },
   );
 }
+
+export const GET = withWidgetCors(GETHandler);

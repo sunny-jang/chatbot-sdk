@@ -18,6 +18,9 @@ const paths: Record<string, string> = {
   guide: "M12 17h.01M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z",
   install: "M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14",
   admin: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  members:
+    "M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 19v-1a4 4 0 0 0-3-3.9M15 4.1a3.5 3.5 0 0 1 0 6.8",
+  switch: "M4 7h13l-3-3M20 17H7l3 3",
 };
 export default function NavIcon({ name }: { name: keyof typeof paths | string }) {
   return (

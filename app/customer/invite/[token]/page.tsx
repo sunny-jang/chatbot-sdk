@@ -4,6 +4,7 @@ import { portalUser, requireReady } from "@/lib/customer-portal/auth";
 import { tokenHash } from "@/lib/customer-portal/input";
 import { googleLoginAvailable } from "@/lib/access/google";
 import Invite from "./Invite";
+import { AuthHero } from "@/app/customer/components/AuthHero";
 export default async function CustomerInvite({
   params,
 }: {
@@ -24,39 +25,51 @@ export default async function CustomerInvite({
   // The member who already accepted this link keeps a way into the inbox instead of an "expired" dead end.
   if (invite && viewer && invite.accepted_by === viewer.id)
     return (
-      <main className="cp-pick cp-panel">
-        <h1>이미 수락한 초대입니다</h1>
-        <p>{String(invite.name)} 상담함을 바로 열 수 있습니다.</p>
-        <Link className="cp-link" href={`/customer/${invite.customer_id}/support`}>
-          {String(invite.name)} 상담함 열기
-        </Link>
-      </main>
+      <AuthHero
+        chip="이미 수락한 초대"
+        chipIcon="check"
+        title={`${String(invite.name)} 상담함을`}
+        accent="바로 열 수 있어요"
+      >
+        <div className="cp-hero-actions">
+          <Link className="cp-button" href={`/customer/${invite.customer_id}/support`}>
+            {String(invite.name)} 상담함 열기
+          </Link>
+        </div>
+      </AuthHero>
     );
   if (!invite?.usable)
     return (
-      <main className="cp-pick">
-        <h1>사용할 수 없는 초대입니다</h1>
-        <p>
-          만료되었거나 취소된 링크입니다. 에이전시에 새 초대를 요청해주세요.
+      <AuthHero
+        chip="사용할 수 없는 초대"
+        chipIcon="warn"
+        title="이 초대 링크는"
+        accent="더 이상 쓸 수 없어요"
+        art="key"
+      >
+        <p className="cp-hero-lead">
+          만료되었거나 취소된 링크입니다. 에이전시 또는 고객사 관리자에게 새
+          초대를 요청해주세요.
         </p>
-      </main>
+        <div className="cp-hero-actions">
+          <Link className="cp-button cp-button-secondary" href="/customer/login">
+            상담함 로그인으로
+          </Link>
+        </div>
+      </AuthHero>
     );
   const address = String(invite.email),
     masked = address[0] + "***@" + address.split("@")[1];
   return (
-    <main className="cp-pick cp-panel">
-      <h1>{String(invite.name)} 상담함에 초대되었습니다</h1>
-      <p>
-        초대한 곳: {String(invite.partner)} · 역할:{" "}
-        {invite.role === "admin" ? "고객사 관리자" : "상담 담당자"}
-      </p>
-      <p>초대받은 이메일: {masked}</p>
-      <Invite
-        token={token}
-        viewer={viewer && { name: viewer.name, email: viewer.email }}
-        matches={viewer?.email === address}
-        googleAvailable={googleLoginAvailable()}
-      />
-    </main>
+    <Invite
+      token={token}
+      customerName={String(invite.name)}
+      partnerName={String(invite.partner)}
+      role={String(invite.role)}
+      maskedEmail={masked}
+      viewer={viewer && { name: viewer.name, email: viewer.email }}
+      matches={viewer?.email === address}
+      googleAvailable={googleLoginAvailable()}
+    />
   );
 }
