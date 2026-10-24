@@ -64,8 +64,7 @@ export default async function LogsPage({
 
   return (
     <div className="max-w-3xl">
-      <BotHeader bot={bot} current="대화 기록" />
-      <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
+      <BotHeader bot={bot} current="대화 기록" actions={<HelpButton content={HELP} />} />
       <LogsClient logs={logs} />
     </div>
   );

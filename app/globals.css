@@ -273,6 +273,10 @@ button{font:inherit}
 .bot-crumbs span[aria-hidden]{color:#c3cad6}
 .bot-crumbs strong{color:var(--ink);font-weight:600}
 .bot-identity{display:flex;align-items:center;gap:14px;min-width:0}
+.bot-actions{margin-left:auto;flex:none;display:flex;gap:8px;align-items:center}
+.help-button{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:var(--r-control);border:1px solid var(--line);background:var(--surface);color:var(--steel);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.help-button:hover{background:var(--canvas);color:var(--ink)}
+.help-button>span:first-child{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--brand-soft);color:var(--brand-text);font-size:12px;font-weight:700}
 .bot-avatar{width:48px;height:48px;flex:none;border-radius:12px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:20px}
 .bot-identity h1{font-size:22px;font-weight:700;letter-spacing:-.4px;margin:0}
 .bot-identity>div{min-width:0}
@@ -286,4 +290,4 @@ button{font:inherit}
 .bot-tabs a:hover{color:var(--ink)}
 .bot-tabs a[aria-current="page"]{color:var(--brand-text);border-bottom-color:var(--brand);font-weight:600}
 .bot-tabs a[aria-current="page"] svg{color:var(--brand)}
-@media(max-width:700px){.bot-header{padding:14px 16px 0}.bot-prompt{display:none}.bot-tabs a{padding:11px 10px;font-size:13px}}
+@media(max-width:700px){.bot-header{padding:14px 16px 0}.bot-prompt{display:none}.bot-tabs a{padding:11px 10px;font-size:13px}.bot-identity{flex-wrap:wrap}.bot-actions{margin-left:0;width:100%}}
