@@ -43,6 +43,7 @@ export default function WebSourceManager({
     [folder, setFolder] = useState(""),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
+    [siteNotice, setSiteNotice] = useState(""),
     [site, setSite] = useState(""),
     [discovered, setDiscovered] = useState<Discovered | null>(null),
     [selected, setSelected] = useState<Set<string>>(new Set()),
@@ -119,7 +120,7 @@ export default function WebSourceManager({
   }
   async function discover() {
     setBusy(true);
-    setNotice("");
+    setSiteNotice("");
     setDiscovered(null);
     setProgress(null);
     try {
@@ -135,7 +136,9 @@ export default function WebSourceManager({
         new Set(d.pages.filter((p) => !p.registered).map((p) => p.url)),
       );
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : "페이지를 찾지 못했습니다.");
+      setSiteNotice(
+        e instanceof Error ? e.message : "페이지를 찾지 못했습니다.",
+      );
     } finally {
       setBusy(false);
     }
@@ -144,7 +147,7 @@ export default function WebSourceManager({
     const urls = [...selected];
     if (!urls.length) return;
     setBusy(true);
-    setNotice("");
+    setSiteNotice("");
     const results: ImportResult[] = [];
     setProgress({ done: 0, total: urls.length, results });
     try {
@@ -182,7 +185,7 @@ export default function WebSourceManager({
         });
       }
       const failed = results.filter((x) => !x.ok).length;
-      setNotice(
+      setSiteNotice(
         failed
           ? `${results.length - failed}개 반영, ${failed}개 실패`
           : `${results.length}개 페이지를 문서에 반영했습니다.`,
@@ -193,7 +196,7 @@ export default function WebSourceManager({
       onApplied?.();
       router.refresh();
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : "가져오기 실패");
+      setSiteNotice(e instanceof Error ? e.message : "가져오기 실패");
     } finally {
       setBusy(false);
     }
@@ -269,6 +272,11 @@ export default function WebSourceManager({
             {busy && !progress ? "찾는 중..." : "페이지 찾기"}
           </button>
         </form>
+        {siteNotice && (
+          <p role="status" className="text-sm text-violet-700 mt-3">
+            {siteNotice}
+          </p>
+        )}
         {discovered && (
           <div className="border border-gray-200 rounded-xl p-4 mt-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
