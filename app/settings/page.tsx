@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { signIn } from "next-auth/react";
 import HelpButton from "@/app/HelpButton";
 
 const HELP = {
@@ -32,6 +33,26 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showInput, setShowInput] = useState(false);
+  const [googleLinked, setGoogleLinked] = useState(false);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
+
+  useEffect(() => {
+    async function loadIdentity() {
+      // Returning from the Google callback with ?google=linked confirms the link without a second round-trip.
+      if (new URLSearchParams(window.location.search).get("google") === "linked")
+        setMessage({ type: "success", text: "Google 계정을 연결했습니다. 다음부터 Google로도 로그인할 수 있습니다." });
+      try {
+        const providers = await (await fetch("/api/auth/providers")).json();
+        setGoogleAvailable(Boolean(providers?.google));
+        const settings = await (await fetch("/api/tenants/settings")).json();
+        setGoogleLinked(Boolean(settings.googleLinked));
+      } catch {
+        setGoogleAvailable(false);
+      }
+    }
+    const timer = setTimeout(() => void loadIdentity(), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     fetch("/api/tenants/settings")
@@ -96,6 +117,25 @@ export default function SettingsPage() {
         <HelpButton content={HELP} />
       </div>
 
+      {googleAvailable && (
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-6">
+          <h3 className="text-base font-semibold text-gray-900">로그인 계정</h3>
+          <p className="text-sm text-gray-500 mt-1 mb-4">
+            {googleLinked
+              ? "이 작업 공간은 Google 계정으로도 로그인할 수 있습니다."
+              : "지금 로그인한 비밀번호 계정에 같은 이메일의 Google 계정을 연결합니다. 이메일이 다르면 연결되지 않습니다."}
+          </p>
+          {!googleLinked && (
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm"
+              onClick={() => void signIn("google", { redirectTo: "/settings?google=linked" })}
+            >
+              Google 계정 연결
+            </button>
+          )}
+        </div>
+      )}
       <div className="bg-white border border-gray-200 rounded-2xl p-6">
         <div className="flex items-start justify-between mb-1">
           <div>

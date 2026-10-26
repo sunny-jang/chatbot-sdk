@@ -1,3 +1,4 @@
+import { withWidgetCors } from "@/lib/widget-origin";
 import { initProactiveSchema } from "@/lib/proactive-db";
 import sql from "@/lib/neon";
 import { normalizeOrigin, normalizeProactive } from "@/lib/proactive";
@@ -18,7 +19,7 @@ async function smallBody(req: Request) {
   try{const value=JSON.parse(Buffer.concat(chunks).toString("utf8"));if(!value||typeof value!=="object"||Array.isArray(value))throw new Error();return value}catch{throw new OperationError("올바른 요청 형식이 아닙니다.")}
 }
 
-export async function POST(req:Request,{params}:Context){
+async function POSTHandler(req:Request,{params}:Context){
   let reservedId:string|null=null;
   try{
     const {botId}=await params;await initProactiveSchema();
@@ -81,3 +82,5 @@ export async function POST(req:Request,{params}:Context){
     return failure(error)
   }
 }
+
+export const POST = withWidgetCors(POSTHandler);

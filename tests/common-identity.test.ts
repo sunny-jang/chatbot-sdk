@@ -1,0 +1,128 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { customerReturnPath } from "../lib/customer-portal/return-path";
+import {
+  customerPortalAuthConfig,
+  customerPortalAuthOrigin,
+} from "../lib/customer-portal/auth-host";
+import { agencySessionValid } from "../lib/access/credentials";
+import {
+  GOOGLE_IDENTITY_MESSAGES,
+  displayName,
+  googleLoginAvailable,
+  isGoogleIdentityReason,
+} from "../lib/access/google";
+
+test("로그인 복귀 경로는 고객사 내부 경로만 허용하고 인증 화면 루프를 막음", () => {
+  assert.equal(customerReturnPath("/customer/one/support?tab=waiting#x"), "/customer/one/support?tab=waiting#x");
+  assert.equal(customerReturnPath("/customer"), "/customer");
+  assert.equal(customerReturnPath("/customer/invite/abc"), "/customer/invite/abc");
+  for (const bad of [
+    undefined,
+    "",
+    "https://evil.test/customer",
+    "//evil.test/customer",
+    "/customers/x",
+    "/customer/../admin",
+    "/customer/\\evil.test",
+    "/customer/login",
+    "/customer/login?next=/customer",
+    "/customer/forgot-password",
+    "/customer/reset-password/t",
+    "/customer/one\r\nSet-Cookie: x",
+    "/customer/ one",
+  ])
+    assert.equal(customerReturnPath(bad), "/customer", String(bad));
+});
+
+test("desk 호스트는 설정된 정확한 Host와 같은 스킴일 때만 전용 OAuth 처리", () => {
+  const env = {
+    CUSTOMER_PORTAL_ORIGIN: "https://desk.example.com",
+    AUTH_URL: "https://app.example.com",
+  };
+  const at = (host: string) =>
+    new Request("http://ignored.invalid/api/auth/signin", { headers: { host } });
+  assert.equal(customerPortalAuthOrigin(at("desk.example.com"), env)?.href, "https://desk.example.com/");
+  assert.equal(customerPortalAuthOrigin(at("DESK.example.com"), env)?.href, "https://desk.example.com/");
+  assert.equal(customerPortalAuthOrigin(at("app.example.com"), env), null);
+  assert.equal(customerPortalAuthOrigin(at("desk.example.com.evil.test"), env), null);
+  assert.equal(customerPortalAuthOrigin(at("desk.example.com:444"), env), null);
+  assert.equal(customerPortalAuthOrigin(at("desk.example.com"), { AUTH_URL: env.AUTH_URL }), null);
+  assert.equal(
+    customerPortalAuthOrigin(at("desk.example.com"), { ...env, AUTH_URL: "http://app.example.com" }),
+    null,
+  );
+  assert.equal(
+    customerPortalAuthOrigin(at("desk.example.com"), { ...env, CUSTOMER_PORTAL_ORIGIN: "ftp://desk.example.com" }),
+    null,
+  );
+  assert.equal(
+    customerPortalAuthOrigin(at("desk.localhost:3012"), {
+      CUSTOMER_PORTAL_ORIGIN: "http://desk.localhost:3012/",
+      AUTH_URL: "http://localhost:3012",
+    })?.href,
+    "http://desk.localhost:3012/",
+  );
+});
+
+test("desk 전용 설정은 고객사 공급자만 남기고 기본 경로를 고정", () => {
+  // Google({ id: "customer-google" }) keeps the default id and stores the custom one in options.
+  const provider = (id: string, options?: { id: string }) =>
+    ({ id, name: id, type: "credentials", options }) as never;
+  const config = customerPortalAuthConfig({
+    providers: [
+      provider("google"),
+      provider("google", { id: "customer-google" }),
+      provider("credentials"),
+      provider("credentials", { id: "customer-credentials" }),
+      provider("customer-google"),
+      provider("credentials", { id: "dev-login" }),
+      () => provider("credentials", { id: "later" }),
+    ],
+  });
+  assert.deepEqual(
+    config.providers.map((p) =>
+      typeof p === "function" ? "fn" : ((p as { options?: { id: string } }).options?.id ?? p.id),
+    ),
+    ["customer-google", "customer-credentials", "customer-google"],
+  );
+  assert.equal(config.basePath, "/api/auth");
+  assert.equal(config.trustHost, true);
+});
+
+test("Google 표시 이름은 로그인을 막지 않고 정리·절단·대체", () => {
+  assert.equal(displayName("  홍길동 ", "a@b.test"), "홍길동");
+  assert.equal(displayName("", "a@b.test"), "a@b.test");
+  assert.equal(displayName(undefined, "a@b.test"), "a@b.test");
+  assert.equal(displayName("x".repeat(100), "a@b.test").length, 80);
+  assert.equal(displayName("bad\u0000\u000bname", "a@b.test"), "bad  name");
+  assert.equal(displayName("\u0000\u0001", "a@b.test"), "a@b.test");
+});
+
+test("Google 버튼은 명시 env 또는 AUTH_GOOGLE_* 기본값이 모두 있을 때만", () => {
+  assert.equal(googleLoginAvailable({}), false);
+  assert.equal(googleLoginAvailable({ GOOGLE_CLIENT_ID: "id" }), false);
+  assert.equal(googleLoginAvailable({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" }), true);
+  assert.equal(googleLoginAvailable({ AUTH_GOOGLE_ID: "id", AUTH_GOOGLE_SECRET: "s" }), true);
+  assert.equal(googleLoginAvailable({ GOOGLE_CLIENT_ID: "id", AUTH_GOOGLE_SECRET: "s" }), true);
+});
+
+test("users 테이블이 없는 이관 전 배포에서는 tenant 세션이 그대로 유효", async () => {
+  const queries: string[] = [];
+  const db = (async (strings: TemplateStringsArray) => {
+    queries.push(strings.join("?"));
+    return [{ users: null }];
+  }) as unknown as Parameters<typeof agencySessionValid>[0];
+  assert.equal(await agencySessionValid(db, "tenant-1", 7), true);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0], /to_regclass\('users'\)/);
+});
+
+test("Google 로그인 실패 사유는 알려진 코드만 안내문으로 변환", () => {
+  for (const reason of Object.keys(GOOGLE_IDENTITY_MESSAGES))
+    assert.equal(isGoogleIdentityReason(reason), true);
+  assert.equal(isGoogleIdentityReason("constructor"), false);
+  assert.equal(isGoogleIdentityReason("toString"), false);
+  assert.equal(isGoogleIdentityReason("<script>"), false);
+  assert.equal(isGoogleIdentityReason(undefined), false);
+});

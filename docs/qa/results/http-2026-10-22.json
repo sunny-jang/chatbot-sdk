@@ -1,0 +1,162 @@
+[
+  {
+    "id": "AUTH-session",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "A01",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "A02",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "A05",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "W06-general",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "A03",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "A04",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "S01",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "S02",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "S03-R06",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "S04",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "R01-R02",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "R04",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "R05",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "S12-HTTP",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "S13-closed-late-send",
+    "status": "fail",
+    "note": "종료 상담 POST가 거부되어야 하나 HTTP 200"
+  },
+  {
+    "id": "S13-double-accept",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "S13-double-close",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "W01-counts",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "BOT-isolation-update",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "U01-current-regression",
+    "status": "fail",
+    "note": "악성 설정 저장이 거부되어야 하나 HTTP 200\n\n200 !== 400\n"
+  },
+  {
+    "id": "BOT-pages",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T02-01-create-edit",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T08-01-bot-limits",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T03-08-folderless-widget",
+    "status": "fail",
+    "note": "관리자에 저장된 폴더 없는 Q&A가 실제 위젯 선택지에 없음"
+  },
+  {
+    "id": "T07-02-fallback-retry",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T06-01-off",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T06-06-origin-token",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T06-02-dwell",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T06-04-fallback",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T06-07-cooldown",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  },
+  {
+    "id": "T05-04-disabled",
+    "status": "pass",
+    "note": "격리 로컬 DB + 실제 HTTP 검증 통과"
+  }
+]

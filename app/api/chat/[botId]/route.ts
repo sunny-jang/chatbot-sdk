@@ -1,3 +1,4 @@
+import { withWidgetCors } from "@/lib/widget-origin";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { Bot, QaPair, initSchema } from "@/lib/db";
@@ -115,7 +116,7 @@ async function findRelevantDocs(
   return scored.map((r) => ({ title: r.title, content: contentMap.get(r.id) ?? "", score: r.score }));
 }
 
-export async function POST(
+async function POSTHandler(
   req: Request,
   { params }: { params: Promise<{ botId: string }> }
 ) {
@@ -425,3 +426,5 @@ export async function POST(
   const usedDocs = relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) }));
   return NextResponse.json({ reply, usedDocs, usage: reservation.usage, handoffAvailable: supportLive && (refusal.refused || relevantDocs.length === 0) });
 }
+
+export const POST = withWidgetCors(POSTHandler);

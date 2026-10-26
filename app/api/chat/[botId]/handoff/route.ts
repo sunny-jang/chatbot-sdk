@@ -1,3 +1,4 @@
+import { withWidgetCors } from "@/lib/widget-origin";
 import { randomUUID } from "crypto";
 import { after } from "next/server";
 import { enqueueSummary, processJobs } from "@/lib/operations/jobs";
@@ -11,7 +12,7 @@ import { getSupportStatus } from "@/lib/supportHours";
 
 export const maxDuration = 60;
 
-export async function POST(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+async function POSTHandler(req: Request, { params }: { params: Promise<{ botId: string }> }) {
   const { botId } = await params;
   const { sessionId, reason, customerName, message } = await req.json();
   if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
@@ -144,7 +145,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
   }, { status: 201 });
 }
 
-export async function GET(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+async function GETHandler(req: Request, { params }: { params: Promise<{ botId: string }> }) {
   const { botId } = await params;
   const url = new URL(req.url);
   const sessionId = url.searchParams.get("sessionId");
@@ -162,3 +163,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ botId: s
   `;
   return NextResponse.json({ ...sessions[0], exists: true, messages });
 }
+
+export const POST = withWidgetCors(POSTHandler);
+
+export const GET = withWidgetCors(GETHandler);

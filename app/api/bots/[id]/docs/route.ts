@@ -1,3 +1,4 @@
+import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { Document } from "@/lib/db";
@@ -10,13 +11,18 @@ async function getTenantId() {
 }
 
 async function botBelongsToTenant(botId: string, tenantId: string) {
-  const rows = await sql`SELECT id FROM bots WHERE id = ${botId} AND tenant_id = ${tenantId}`;
+  const rows =
+    await sql`SELECT id FROM bots WHERE id = ${botId} AND tenant_id = ${tenantId}`;
   return !!rows[0];
 }
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const tenantId = await getTenantId();
-  if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!tenantId)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   if (!(await botBelongsToTenant(id, tenantId))) {
@@ -30,9 +36,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   return NextResponse.json(rows as unknown as Document[]);
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const tenantId = await getTenantId();
-  if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!tenantId)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   if (!(await botBelongsToTenant(id, tenantId))) {
@@ -41,10 +51,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { title, content, folder_id } = await req.json();
   if (!title || !content) {
-    return NextResponse.json({ error: "title and content are required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "title and content are required" },
+      { status: 400 },
+    );
   }
 
-  const embedding = await getEmbedding(content.slice(0, 8000));
+  if (
+    folder_id &&
+    !(
+      await sql`SELECT id FROM doc_folders WHERE id=${folder_id} AND bot_id=${id}`
+    )[0]
+  )
+    return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+  const embedding = await getEmbedding(
+    content.slice(0, 8000),
+    await getTenantApiKeyByTenantId(tenantId),
+  );
   const docId = randomUUID();
   const rows = await sql`
     INSERT INTO documents (id, bot_id, folder_id, title, content, embedding)

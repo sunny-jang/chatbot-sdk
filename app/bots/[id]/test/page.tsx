@@ -54,9 +54,8 @@ export default async function TestPage({
     : [];
 
   return (
-    <div className="max-w-2xl">
-      <BotHeader bot={bot} current="테스트" />
-      <div className="flex justify-end mb-4"><HelpButton content={HELP} /></div>
+    <div>
+      <BotHeader bot={bot} current="테스트" actions={<HelpButton content={HELP} />} />
       <TestChat botId={id} folders={folders} qaPairs={qaPairs} logoUrl={bot.logo_url} themeColor={bot.widget_color ?? "#a855f7"} />
       <ProactiveTest botId={id} />
       <WidgetPreview botId={id} botToken={bot.public_token || ""}/>

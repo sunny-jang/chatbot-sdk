@@ -2,15 +2,26 @@ import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { encrypt } from "@/lib/crypto";
 import { normalizePlan } from "@/lib/plans";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, platformActorId } from "@/lib/auth";
+import type { AccessDatabase } from "@/lib/access/schema";
+import { deleteEmptyTenant } from "@/lib/access/platform";
+import { failure } from "@/lib/customer-portal/input";
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   // 미들웨어와 별도로 DB의 관리자 여부를 다시 확인합니다.
   const denied = await requireAdmin();
   if (denied) return denied;
-  const { id } = await params;
-  await sql`DELETE FROM tenants WHERE id = ${id}`;
-  return NextResponse.json({ ok: true });
+  try {
+    const { id } = await params;
+    const input = (await req.json().catch(() => ({}))) as { confirmName?: unknown };
+    const actor = await platformActorId();
+    await sql.begin((tx) =>
+      deleteEmptyTenant(tx as unknown as AccessDatabase, actor, id, input.confirmName),
+    );
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return failure(e);
+  }
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {

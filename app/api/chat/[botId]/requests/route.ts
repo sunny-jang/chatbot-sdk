@@ -1,3 +1,4 @@
+import { withWidgetCors } from "@/lib/widget-origin";
 import { randomUUID } from "crypto";
 import { after } from "next/server";
 import sql from "@/lib/neon";
@@ -24,7 +25,7 @@ async function publicBot(req: Request, id: string) {
     throw new OperationError("구독이 비활성 상태입니다.", 403);
   return bot;
 }
-export async function GET(req: Request, { params }: Context) {
+async function GETHandler(req: Request, { params }: Context) {
   try {
     const { botId } = await params;
     const bot = await publicBot(req, botId);
@@ -33,7 +34,7 @@ export async function GET(req: Request, { params }: Context) {
     return failure(e);
   }
 }
-export async function POST(req: Request, { params }: Context) {
+async function POSTHandler(req: Request, { params }: Context) {
   try {
     const { botId } = await params;
     const bot = await publicBot(req, botId);
@@ -91,3 +92,7 @@ export async function POST(req: Request, { params }: Context) {
     return failure(e);
   }
 }
+
+export const GET = withWidgetCors(GETHandler);
+
+export const POST = withWidgetCors(POSTHandler);
