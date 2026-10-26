@@ -53,7 +53,7 @@ export default async function DocsPage({
   `) as unknown as DocFolder[];
 
   const docs = (await sql`
-    SELECT id, bot_id, folder_id, title, content, created_at
+    SELECT id, bot_id, folder_id, title, content, created_at, source_kind, archived_at
     FROM documents WHERE bot_id = ${id} ORDER BY created_at DESC
   `) as unknown as Document[];
 

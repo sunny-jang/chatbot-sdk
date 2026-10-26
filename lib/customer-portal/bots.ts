@@ -118,7 +118,7 @@ export async function listKnowledge(
 ) {
   await customerBot(db, userId, customerId, botId, "knowledge.manage");
   if (kind === "docs")
-    return db`SELECT id,bot_id,folder_id,title,content,created_at FROM documents WHERE bot_id=${botId} ORDER BY created_at DESC,id`;
+    return db`SELECT id,bot_id,folder_id,title,content,created_at,source_kind,archived_at FROM documents WHERE bot_id=${botId} ORDER BY created_at DESC,id`;
   if (kind === "qa")
     return db`SELECT id,bot_id,folder_id,question,answer,created_at FROM qa_pairs WHERE bot_id=${botId} ORDER BY created_at DESC,id`;
   if (kind === "folders")

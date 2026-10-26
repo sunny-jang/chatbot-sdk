@@ -38,7 +38,7 @@ export async function answerDemo(
       503,
     );
   const docs =
-    await sql`SELECT title,content,embedding FROM documents WHERE bot_id=${demo.bot_id} ORDER BY created_at DESC LIMIT 500`;
+    await sql`SELECT title,content,embedding FROM documents WHERE bot_id=${demo.bot_id} AND archived_at IS NULL ORDER BY created_at DESC LIMIT 500`;
   const candidates = [
     ...docs.map((d) => ({
       title: String(d.title),
