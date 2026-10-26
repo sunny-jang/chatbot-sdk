@@ -158,8 +158,6 @@ async function main() {
         () => postgresConnector.sample(fixture, "public", "no_such_table"),
         (e: unknown) => (e as { status?: number }).status === 404,
       );
-      const writer = await import("../lib/data-connections/connectors/postgres");
-      void writer;
       // 읽기 전용 트랜잭션 확인: sample()과 같은 경로로 INSERT를 시도하면 25006
       const { PortalError } = await import("../lib/customer-portal/validation");
       let readOnlyError = "";

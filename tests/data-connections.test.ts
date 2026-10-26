@@ -60,34 +60,45 @@ test("splitTableName handles schema-qualified names", () => {
   assert.throws(() => splitTableName("a.b.c"), PortalError);
   assert.throws(() => splitTableName(""), PortalError);
 });
-test("buildRowQuery binds filter values and quotes identifiers", () => {
-  const q = buildRowQuery({
+test("buildRowQuery binds filter values, quotes identifiers, compares by column kind", () => {
+  const query = {
     schema: "public",
     table: 'me"nu',
     columns: ["name", "price"],
     keyColumn: "id",
     filters: [
-      { column: "is_active", op: "eq", value: 1 },
-      { column: "category", op: "in", value: ["커피", "'; DROP TABLE menu; --"] },
-      { column: "price", op: "lte", value: 20000 },
-      { column: "description", op: "not_null" },
+      { column: "is_active", op: "eq" as const, value: 1 },
+      { column: "category", op: "in" as const, value: ["커피", "'; DROP TABLE menu; --"] },
+      { column: "price", op: "lte" as const, value: "20,000", kind: "number" as const },
+      { column: "description", op: "not_null" as const },
     ],
-  });
+  };
+  const q = buildRowQuery(query);
   assert.match(q.sql, /FROM "public"\."me""nu"/);
   assert.match(q.sql, /"is_active" = \$1/);
   assert.match(q.sql, /"category"::text IN \(\$2,\$3\)/);
-  assert.match(q.sql, /"price" <= \$4/);
+  assert.match(q.sql, /"price" <= \$4/, "number kind compares natively even when the value is a string");
   assert.match(q.sql, /"description" IS NOT NULL/);
   assert.ok(!q.sql.includes("DROP"), "values never appear in sql text");
-  assert.deepEqual(q.params.slice(0, 4), [1, "커피", "'; DROP TABLE menu; --", 20000]);
-  assert.equal(q.cursorIndex, 5);
-  assert.match(q.sql, /ORDER BY "id"::text ASC LIMIT 500/);
+  assert.deepEqual(q.params, [1, "커피", "'; DROP TABLE menu; --", 20000]);
+  assert.equal(q.cursorIndex, null);
+  assert.match(q.sql, /ORDER BY "id" ASC LIMIT 500$/);
+  const paged = buildRowQuery(query, "postgres", 100, true);
+  assert.equal(paged.cursorIndex, 5);
+  assert.match(paged.sql, /"id" > \$5/, "keyset cursor compares on the native key type");
+  assert.match(paged.sql, /LIMIT 100$/);
+  const bare = buildRowQuery({ schema: "public", table: "m", columns: [], keyColumn: "id", filters: [] });
+  assert.equal(bare.sql.replace(/\s+/g, " "), 'SELECT "id" FROM "public"."m" ORDER BY "id" ASC LIMIT 500');
   assert.throws(
     () => buildRowQuery({ schema: "public", table: "m", columns: [], keyColumn: "id", filters: [{ column: "a", op: "like" as never, value: "x" }] }),
     PortalError,
   );
   assert.throws(
     () => buildRowQuery({ schema: "public", table: "m", columns: [], keyColumn: "id", filters: [{ column: "a", op: "in", value: [] }] }),
+    PortalError,
+  );
+  assert.throws(
+    () => buildRowQuery({ schema: "public", table: "m", columns: [], keyColumn: "id", filters: [{ column: "a", op: "lt", value: "abc", kind: "number" }] }),
     PortalError,
   );
 });

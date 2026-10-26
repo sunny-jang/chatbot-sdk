@@ -216,6 +216,7 @@ export async function updateDataConnection(
     name=${values.name}, kind=${values.kind}, host=${values.host}, port=${values.port}, database=${values.database}, username=${values.username}, ssl=${values.ssl},
     secret_enc=${values.password === null ? row.secret_enc : encrypt(values.password)},
     status=${credentialsChanged ? "untested" : row.status}, last_error=${credentialsChanged ? null : row.last_error},
+    last_tested_at=${credentialsChanged ? null : row.last_tested_at}, table_count=${credentialsChanged ? null : row.table_count},
     updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT
     WHERE id=${connectionId} RETURNING *`;
   await audit(db, userId, grant, "data_connection.update", connectionId);
@@ -260,7 +261,7 @@ export async function testConnectionInput(
     password,
     ssl: values.ssl,
   });
-  await audit(db, userId, grant, "data_connection.test", existing?.id ?? null);
+  await audit(db, userId, grant, result.ok ? "data_connection.test" : "data_connection.test_failed", existing?.id ?? null);
   return result;
 }
 
@@ -278,7 +279,7 @@ export async function testDataConnection(
     table_count=${result.ok ? result.tableCount : row.table_count},
     last_tested_at=EXTRACT(EPOCH FROM NOW())::BIGINT, updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT
     WHERE id=${connectionId} AND status<>'deleted' RETURNING *`;
-  await audit(db, userId, grant, "data_connection.test", connectionId);
+  await audit(db, userId, grant, result.ok ? "data_connection.test" : "data_connection.test_failed", connectionId);
   return { result, connection: toView(updated ?? row) };
 }
 

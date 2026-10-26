@@ -7,6 +7,8 @@ import { PortalError } from "@/lib/customer-portal/validation";
 import { enforceRateLimit } from "@/lib/support";
 import {
   createDataConnection,
+  dataConnection,
+  toView,
   deleteDataConnection,
   listConnectionTables,
   listDataConnections,
@@ -52,10 +54,8 @@ export async function handleConnection(req: Request, customerId: string, connect
   try {
     if (req.method === "GET") {
       const user = await guard(req, false, 0);
-      const items = await listDataConnections(sql as AccessDatabase, user.id, customerId);
-      const item = items.find((c) => c.id === connectionId);
-      if (!item) throw new PortalError("데이터 연결을 찾을 수 없습니다.", 404);
-      return Response.json(item);
+      const { row } = await dataConnection(sql as AccessDatabase, user.id, customerId, connectionId);
+      return Response.json(toView(row));
     }
     const user = await guard(req, true, 40);
     if (req.method === "DELETE")

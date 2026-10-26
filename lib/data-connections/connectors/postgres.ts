@@ -32,7 +32,7 @@ async function withReadOnly<T>(config: ConnectionConfig, fn: (tx: Tx) => Promise
     username: config.username,
     password: config.password,
     // 호스트 이름으로 SNI를 보내되, IP 주소에는 servername을 줄 수 없다(Node TLS 제약).
-    ssl: config.ssl ? { rejectUnauthorized: false, ...(isIP(config.host) ? {} : { servername: config.host }) } : false,
+    ssl: config.ssl ? { rejectUnauthorized: false, ...(/^[a-z0-9.-]+$/.test(config.host) && !isIP(config.host) ? { servername: config.host } : {}) } : false,
     max: POOL_MAX,
     connect_timeout: CONNECT_TIMEOUT_S,
     idle_timeout: 5,
@@ -105,36 +105,49 @@ async function columnsOf(tx: Tx, schema: string, table: string): Promise<ColumnI
 }
 
 const OPS: Record<string, string> = { eq: "=", neq: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" };
-/** 필터는 컬럼 인용 + 값 바인딩으로만 만든다. 연산자는 목록 밖이면 거부. */
-export function buildRowQuery(query: RowQuery, kind: "postgres" = "postgres", batch = READ_BATCH) {
+function numeric(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(String(value).replace(/,/g, "").trim());
+  if (!Number.isFinite(n) || String(value).trim() === "") throw new PortalError("숫자 필터 값을 확인해주세요.");
+  return n;
+}
+/**
+ * 필터는 컬럼 인용 + 값 바인딩으로만 만든다. 연산자는 목록 밖이면 거부.
+ * 비교 방식은 필터의 kind(컬럼 타입에서 정함)로 정한다: number면 숫자 비교, 아니면 텍스트 비교.
+ * 고유키는 네이티브 타입으로 정렬·비교해 기본키 인덱스를 쓴다(withCursor일 때 마지막 파라미터가 커서).
+ */
+export function buildRowQuery(query: RowQuery, kind: "postgres" = "postgres", batch = READ_BATCH, withCursor = false) {
   const params: unknown[] = [];
   const where: string[] = [];
   for (const f of query.filters) {
     const col = quoteIdentifier(f.column, kind);
+    const asNumber = f.kind === "number" || (f.kind === undefined && typeof f.value === "number");
     if (f.op === "is_null") where.push(`${col} IS NULL`);
     else if (f.op === "not_null") where.push(`${col} IS NOT NULL`);
     else if (f.op === "in" || f.op === "not_in") {
       const list = Array.isArray(f.value) ? f.value : [];
       if (!list.length) throw new PortalError("필터 값을 입력해주세요.");
       const marks = list.map((v) => {
-        params.push(v);
+        params.push(asNumber ? numeric(v) : String(v));
         return `$${params.length}`;
       });
-      where.push(`${col}::text ${f.op === "in" ? "IN" : "NOT IN"} (${marks.join(",")})`);
+      where.push(`${asNumber ? col : `${col}::text`} ${f.op === "in" ? "IN" : "NOT IN"} (${marks.join(",")})`);
     } else if (f.op in OPS) {
       if (f.value === undefined || Array.isArray(f.value)) throw new PortalError("필터 값을 입력해주세요.");
-      params.push(f.value);
-      // 숫자 비교는 숫자로, 나머지는 텍스트로 비교한다. 컬럼 타입 캐스트 실패는 DB 오류로 돌아온다.
-      where.push(typeof f.value === "number" ? `${col} ${OPS[f.op]} $${params.length}` : `${col}::text ${OPS[f.op]} $${params.length}`);
+      params.push(asNumber ? numeric(f.value) : String(f.value));
+      where.push(asNumber ? `${col} ${OPS[f.op]} $${params.length}` : `${col}::text ${OPS[f.op]} $${params.length}`);
     } else throw new PortalError("지원하지 않는 필터예요.");
   }
   const key = quoteIdentifier(query.keyColumn, kind);
   const cols = [...new Set([query.keyColumn, ...query.columns])].map((c) => quoteIdentifier(c, kind)).join(", ");
-  params.push(null); // cursor placeholder, replaced per batch
-  const cursorIndex = params.length;
-  const sql = `SELECT ${cols} FROM ${qualifiedName(query.schema, query.table, kind)}
-    WHERE ${[...where, `($${cursorIndex}::text IS NULL OR ${key}::text > $${cursorIndex}::text)`].join(" AND ")}
-    ORDER BY ${key}::text ASC LIMIT ${Math.max(1, Math.min(batch, READ_BATCH))}`;
+  let cursorIndex: number | null = null;
+  if (withCursor) {
+    params.push(null);
+    cursorIndex = params.length;
+    where.push(`${key} > $${cursorIndex}`);
+  }
+  const sql = `SELECT ${cols} FROM ${qualifiedName(query.schema, query.table, kind)}${
+    where.length ? ` WHERE ${where.join(" AND ")}` : ""
+  } ORDER BY ${key} ASC LIMIT ${Math.max(1, Math.min(batch, READ_BATCH))}`;
   return { sql, params, cursorIndex };
 }
 
@@ -162,19 +175,20 @@ export const postgresConnector: Connector = {
   },
   readRows(config, query, onBatch, batch = READ_BATCH) {
     return withReadOnly(config, async (tx) => {
-      const built = buildRowQuery(query, "postgres", batch);
-      let cursor: string | null = null;
+      const first = buildRowQuery(query, "postgres", batch, false);
+      const next = buildRowQuery(query, "postgres", batch, true);
+      let cursor: unknown = undefined;
       while (true) {
+        const built = cursor === undefined ? first : next;
         const params = [...built.params];
-        params[built.cursorIndex - 1] = cursor;
+        if (built.cursorIndex) params[built.cursorIndex - 1] = cursor;
         const rows = (await tx.unsafe(built.sql, params as never[])) as unknown as Record<string, unknown>[];
         if (!rows.length) return;
-        const plain = rows.map(plainRow);
-        const stop = await onBatch(plain);
+        const stop = await onBatch(rows.map(plainRow));
         if (stop === false || rows.length < batch) return;
-        const last = plain[plain.length - 1][query.keyColumn];
-        cursor = last === null || last === undefined ? null : String(last);
-        if (cursor === null) return;
+        // 커서는 변환 전 원본 값으로 넘겨 컬럼 타입 그대로 비교한다.
+        cursor = rows[rows.length - 1][query.keyColumn];
+        if (cursor === null || cursor === undefined) return;
       }
     });
   },

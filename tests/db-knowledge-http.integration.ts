@@ -22,14 +22,16 @@ async function main() {
   if (!["localhost", "127.0.0.1"].includes(u.hostname) || u.pathname != "/chatbot_qa") throw Error("전용 로컬 QA DB만 허용");
   const f = JSON.parse(await readFile("/tmp/chatbot-qa-runtime/portal-fixture.json", "utf8"));
   const db = JSON.parse(await readFile("/tmp/chatbot-qa-runtime/db-fixture.json", "utf8"));
-  const conn = { name: "달빛 카페 샘플 DB", kind: db.kind, host: db.host, port: db.port, database: db.database, username: db.username, password: db.password, ssl: db.ssl };
+  const PREFIX = "QA-HTTP ";
+  const conn = { name: PREFIX + "달빛 카페 샘플 DB", kind: db.kind, host: db.host, port: db.port, database: db.database, username: db.username, password: db.password, ssl: db.ssl };
   const admin = await login(f.admin, desk),
     agent = await login(f.agent, desk),
     other = await login(f.other, desk),
     owner = await login(f.owner, agency, "credentials");
   const deskBase = "/api/customer/qa-cafe/data-connections",
     agencyBase = "/api/customers/qa-cafe/data-connections";
-  await sql`UPDATE data_connections SET secret_enc=NULL,status='deleted',deleted_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE customer_id IN ('qa-cafe','qa-shop') AND status<>'deleted'`.catch(() => null);
+  // 이 스위트가 만든 연결만 정리한다(이름 접두사). 다른 세션이 만든 QA 연결은 건드리지 않는다.
+  await sql`UPDATE data_connections SET secret_enc=NULL,status='deleted',deleted_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE customer_id IN ('qa-cafe','qa-shop') AND status<>'deleted' AND name LIKE ${PREFIX + "%"}`.catch(() => null);
   let id = "";
   await check("A-01 데스크 관리자: 저장 전 연결 테스트 성공·테이블 목록", async () => {
     const r = await api(deskBase, desk, admin, "POST", { action: "test", ...conn });
@@ -50,15 +52,16 @@ async function main() {
     assert.equal(t.data.connection.status, "ok");
     const list = await api(deskBase, desk, admin);
     assert.equal(list.status, 200);
-    assert.equal(list.data.length, 1);
-    assert.equal(list.data[0].status, "ok");
+    const mine = list.data.filter((c: { name: string }) => c.name.startsWith(PREFIX));
+    assert.equal(mine.length, 1);
+    assert.equal(mine[0].status, "ok");
     const [audit] = await sql`SELECT 1 FROM access_audit_logs WHERE action='data_connection.create' AND target_id=${id} AND customer_id='qa-cafe'`;
     assert.ok(audit);
   });
   await check("A-03 에이전시 소유자도 같은 연결을 /api/customers 경로로 조회·테스트", async () => {
     const list = await api(agencyBase, agency, owner);
     assert.equal(list.status, 200, JSON.stringify(list.data));
-    assert.equal(list.data[0].id, id);
+    assert.ok(list.data.some((c: { id: string }) => c.id === id));
     const tables = await api(`${agencyBase}/${id}`, agency, owner, "POST", { action: "tables" });
     assert.equal(tables.status, 200);
     assert.ok(tables.data.tables.some((t: { name: string }) => t.name === "menu_big"));
@@ -118,9 +121,9 @@ async function main() {
     assert.equal((await api(agencyBase, desk, admin)).status, 403);
   });
   await check("A-11 비밀번호 없이 수정하면 유지, 상태는 재테스트 전까지 미확인", async () => {
-    const r = await api(`${deskBase}/${id}`, desk, admin, "PATCH", { name: "달빛 카페 DB", host: conn.host, port: conn.port, database: conn.database, username: conn.username, ssl: conn.ssl, password: "" });
+    const r = await api(`${deskBase}/${id}`, desk, admin, "PATCH", { name: PREFIX + "달빛 카페 DB", host: conn.host, port: conn.port, database: conn.database, username: conn.username, ssl: conn.ssl, password: "" });
     assert.equal(r.status, 200, JSON.stringify(r.data));
-    assert.equal(r.data.name, "달빛 카페 DB");
+    assert.equal(r.data.name, PREFIX + "달빛 카페 DB");
     assert.equal(r.data.has_secret, true);
     const t = await api(`${deskBase}/${id}`, desk, admin, "POST", { action: "test" });
     assert.equal(t.data.result.ok, true, "저장된 비밀번호로 여전히 연결");
@@ -130,12 +133,12 @@ async function main() {
   });
   await check("A-12 연결 4개째는 거부", async () => {
     const extra: string[] = [];
-    for (const name of ["둘", "셋"]) {
+    for (const name of [PREFIX + "둘", PREFIX + "셋"]) {
       const r = await api(deskBase, desk, admin, "POST", { action: "create", ...conn, name });
       assert.equal(r.status, 201);
       extra.push(r.data.id);
     }
-    const r = await api(deskBase, desk, admin, "POST", { action: "create", ...conn, name: "넷" });
+    const r = await api(deskBase, desk, admin, "POST", { action: "create", ...conn, name: PREFIX + "넷" });
     assert.equal(r.status, 409);
     assert.match(r.data.error, /3개까지/);
     for (const x of extra) assert.equal((await api(`${deskBase}/${x}`, desk, admin, "DELETE")).status, 200);
@@ -157,7 +160,7 @@ async function main() {
     const [row] = await sql`SELECT secret_enc,status FROM data_connections WHERE id=${id}`;
     assert.equal(row.secret_enc, null);
     assert.equal(row.status, "deleted");
-    assert.equal((await api(deskBase, desk, admin)).data.length, 0);
+    assert.ok(!(await api(deskBase, desk, admin)).data.some((c: { id: string }) => c.id === id));
     assert.equal((await api(`${deskBase}/${id}`, desk, admin)).status, 404);
     const [audit] = await sql`SELECT 1 FROM access_audit_logs WHERE action='data_connection.delete' AND target_id=${id}`;
     assert.ok(audit);

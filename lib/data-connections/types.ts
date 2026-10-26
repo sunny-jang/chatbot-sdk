@@ -49,6 +49,8 @@ export type RowFilter = {
   column: string;
   op: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "not_in" | "is_null" | "not_null";
   value?: string | number | boolean | (string | number)[];
+  /** 컬럼 타입에서 정한 비교 방식. number면 숫자 비교, 없으면 값의 JS 타입으로 추정. */
+  kind?: "number" | "text";
 };
 
 export type Connector = {

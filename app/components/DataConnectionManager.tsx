@@ -42,6 +42,7 @@ const EMPTY: Form = {
   ssl: true,
 };
 const KIND_LABEL = { postgres: "PostgreSQL", mysql: "MySQL" } as const;
+const LIMIT = 3;
 const STATUS = {
   untested: { label: "테스트 전", className: "cp-chip muted" },
   ok: { label: "정상", className: "cp-chip ok" },
@@ -297,9 +298,12 @@ export default function DataConnectionManager({
       )}
       {items && items.length > 0 && !form && canManage && (
         <div className="cp-row" style={{ marginTop: 12 }}>
-          <button type="button" className="cp-button" onClick={() => open()} disabled={busy !== null}>
+          <button type="button" className="cp-button" onClick={() => open()} disabled={busy !== null || items.length >= LIMIT}>
             연결 추가
           </button>
+          {items.length >= LIMIT && (
+            <small className="cp-note">고객사당 데이터 연결은 {LIMIT}개까지예요. 새로 만들려면 기존 연결을 삭제해주세요.</small>
+          )}
         </div>
       )}
       {notice && (
