@@ -178,3 +178,22 @@ QA 서버에는 OpenAI 키가 없다. 가져오기·답변 미리보기를 끝�
 ### 2026-10-26 — 시나리오 문서 작성 (코드 전)
 
 실행 없음. 단계 A PR부터 기록한다.
+
+### 2026-10-26 — 단계 A 실행 (PR #22 `feat/db-knowledge-a-connections`, 리뷰 반영 커밋 `2d495a3`)
+
+자동: 단위 159/159(`tests/data-connections.test.ts` 10건 포함) · DB `db-knowledge.integration.ts` 9건(전부 롤백) · HTTP `db-knowledge-http.integration.ts` 13/13 (3013 QA 서버) · `tsc`·`eslint` 통과 · 프로덕션 빌드 통과.
+
+| 항목 | 결과 | 근거 |
+| --- | --- | --- |
+| C1 사설 IP 거부 | 통과 | 단위 `connectionHost rejects…`, HTTP A-05, 수동 `a-error-private-host.jpg` |
+| C2 틀린 비밀번호 | 통과 | HTTP A-06, DB A-D4, 수동 `a-error-password.jpg` |
+| C3 저장 후 비밀번호 비표시 | 통과 | HTTP A-08, 수동 `a-edit-keeps-secret-test-ok.jpg` |
+| C8 다른 고객사 404 | 통과 | HTTP A-09, DB A-D5 |
+| C12 앞부분(삭제 → 접속 정보 파기) | 통과 | HTTP A-10, DB A-D2, 수동 `a-delete.jpg` (소스 비활성·문서 보관은 C단계) |
+| A-M1 빈 상태·폼·테스트 중·성공 결과 | 통과 | `a-desk-connection-empty.jpg`, `a-desk-connection-form.jpg`, `a-desk-connection-list-tables.jpg` |
+| A-M2 에이전시 고객사 화면 | 통과(사이드바 프리페치로 목록 표시가 수 초 늦게 나타나는 기존 환경 특성) | `a-agency-connection.jpg` |
+| A-M7 요청서 공유 페이지 | 통과(사이드바 없이 단독 레이아웃, 인쇄 버튼) | `a-request-sheet.jpg`, `a-request-sheet-mobile.jpg` |
+| A-M8 모바일 390px | 통과 | `a-desk-connection-mobile.jpg` |
+| A-13 요청서 양쪽 호스트 공개 | 통과 | HTTP A-13 |
+
+리뷰(/code-review high) 지적 9건 반영: 필터 비교를 컬럼 타입(kind) 기준으로, 키셋 페이징을 네이티브 키 타입으로, 접속 정보 변경 시 last_tested_at·table_count 초기화, 실패 테스트는 `data_connection.test_failed`로 감사, 단건 GET은 `dataConnection()` 사용, 3개 한도에서 추가 버튼 비활성, HTTP 스위트 정리 범위를 `QA-HTTP ` 접두사로 한정, TLS servername은 ASCII 호스트명에만.
