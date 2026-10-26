@@ -27,7 +27,9 @@ export default function WorkspaceFrame({
     customerHost ||
     path === "/customer" ||
     path.startsWith("/customer/") ||
-    path.startsWith("/demo/")
+    path.startsWith("/demo/") ||
+    // 연결 요청서는 호스팅 업체에 전달하는 한 장짜리 공개 문서라 사이드바 없이 보여준다.
+    path === "/db-connection-request"
   )
     return <>{children}</>;
   return (

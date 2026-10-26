@@ -1,5 +1,6 @@
 import { createDemoSchema } from "../demo/schema";
 import type { AccessDatabase } from "../access/schema";
+import { createDataKnowledgeSchema } from "../data-connections/schema";
 /** Called only by the explicit access migration, inside its transaction. */
 export async function createCustomerPortalSchema(db: AccessDatabase) {
   await createDemoSchema(db);
@@ -22,4 +23,5 @@ export async function createCustomerPortalSchema(db: AccessDatabase) {
    PRIMARY KEY(session_id,request_key)
  )`;
   await db`CREATE INDEX IF NOT EXISTS customer_challenge_invitation_idx ON customer_invite_challenges(invitation_id)`;
+  await createDataKnowledgeSchema(db);
 }

@@ -1,5 +1,7 @@
 import sql from "../neon";
 import {initProactiveSchema} from "../proactive-db";
+import { createDataKnowledgeSchema } from "../data-connections/schema";
+import type { AccessDatabase } from "../access/schema";
 
 export async function initOperationsSchema() {
   await initProactiveSchema();
@@ -56,4 +58,7 @@ export async function initOperationsSchema() {
     available_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
     locked_at BIGINT, last_error TEXT, UNIQUE(kind,target_id,channel)
   )`;
+  // 고객사 DB 연결 테이블은 customers(접근 마이그레이션)가 있어야 만들 수 있다.
+  const [ready] = await sql`SELECT to_regclass('customers') AS customers, to_regclass('users') AS users`;
+  if (ready?.customers && ready?.users) await createDataKnowledgeSchema(sql as unknown as AccessDatabase);
 }

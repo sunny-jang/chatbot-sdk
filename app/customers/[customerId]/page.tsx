@@ -5,6 +5,7 @@ import sql from "@/lib/neon";
 import { agencyOwner } from "@/lib/customer-portal/auth";
 import Members from "./Members";
 import Bots from "./Bots";
+import DataConnectionManager from "@/app/components/DataConnectionManager";
 import "@/app/customer/portal.css";
 export default async function CustomerManagement({
   params,
@@ -50,6 +51,7 @@ export default async function CustomerManagement({
         status={String(customer.status)}
         owner
       />
+      <DataConnectionManager customerId={customerId} canManage />
       <Bots customerId={customerId} bots={bots} />
       <Members customerId={customerId} owner />
     </div>
