@@ -19,6 +19,7 @@ const TENANT_PUBLIC_PATHS = [
   "/plan",
   "/brochure.html",
   "/customer/login",
+  "/db-connection-request",
   "/sitemap.xml",
   "/robots.txt",
 ];
@@ -75,6 +76,8 @@ export default auth((req) => {
   // Shared demo capabilities are public on either entry host; their APIs validate expiry and revocation themselves.
   if (pathname.startsWith("/demo/") || pathname.startsWith("/api/demo/"))
     return next();
+  // The DB connection request sheet is a public one-pager customers forward to their hosting provider.
+  if (pathname === "/db-connection-request") return next();
   if (
     onCustomerHost &&
     !(

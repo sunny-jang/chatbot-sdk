@@ -1,13 +1,15 @@
 import sql from "@/lib/neon";
 import { customerPageAccess } from "@/lib/customer-portal/page";
 import Settings from "@/app/customers/[customerId]/Settings";
+import DataConnectionManager from "@/app/components/DataConnectionManager";
+import { hasPermission } from "@/lib/access/policy";
 export default async function CustomerSettings({
   params,
 }: {
   params: Promise<{ customerId: string }>;
 }) {
   const { customerId } = await params;
-  await customerPageAccess(customerId, "customer.update");
+  const access = await customerPageAccess(customerId, "customer.update");
   const [c] =
     await sql`SELECT name,website,status FROM customers WHERE id=${customerId}`;
   return (
@@ -18,6 +20,11 @@ export default async function CustomerSettings({
         initialName={String(c.name)}
         initialWebsite={c.website ? String(c.website) : null}
         status={String(c.status)}
+      />
+      <DataConnectionManager
+        customerId={customerId}
+        portal
+        canManage={hasPermission(access.grant.role, "settings.manage")}
       />
     </>
   );

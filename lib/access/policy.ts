@@ -15,6 +15,7 @@ export type Permission =
   | "bot.delete"
   | "bot.move"
   | "knowledge.manage"
+  | "settings.manage"
   | "bot.test"
   | "installation.read"
   | "members.agent"
@@ -37,6 +38,7 @@ const admin: readonly Permission[] = [
   "bot.read",
   "bot.configure",
   "knowledge.manage",
+  "settings.manage",
   "bot.test",
   "installation.read",
   "members.agent",
