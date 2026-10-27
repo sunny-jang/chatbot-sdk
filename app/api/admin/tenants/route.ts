@@ -4,6 +4,7 @@ import { initSchema, Tenant } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { randomUUID } from "crypto";
 import { requireAdmin } from "@/lib/auth";
+import { dbKnowledgeStats } from "@/lib/db-sources/stats";
 
 export async function GET() {
   // 미들웨어와 별도로 DB의 관리자 여부를 다시 확인합니다.
@@ -20,7 +21,8 @@ export async function GET() {
              t.subscription_status, t.enterprise_bot_limit, t.enterprise_monthly_session_limit
     ORDER BY t.created_at DESC
   `;
-  return NextResponse.json(rows);
+  const stats = await dbKnowledgeStats();
+  return NextResponse.json(rows.map((r) => ({ ...r, db_knowledge: stats.get(String(r.id)) ?? null })));
 }
 
 export async function POST(req: Request) {

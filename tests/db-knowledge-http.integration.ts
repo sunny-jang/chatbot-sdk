@@ -305,6 +305,56 @@ async function main() {
     const del = await api(agencySrc, agency, owner, "POST", { action: "delete", sourceId: menuSourceId, documents: "delete" });
     assert.equal(del.status, 200);
   });
+  // ---------- 단계 E ----------
+  const my = JSON.parse(await readFile("/tmp/chatbot-qa-runtime/mysql-fixture.json", "utf8"));
+  const myConn = { name: PREFIX + "MySQL 메뉴", kind: "mysql", host: my.host, port: my.port, database: my.database, username: my.username, password: my.password, ssl: false };
+  await check("E-01 MySQL 연결·테스트·테이블·소스·가져오기(Postgres와 같은 흐름)", async () => {
+    const t = await api(deskBase, desk, admin, "POST", { action: "test", ...myConn });
+    assert.equal(t.status, 200, JSON.stringify(t.data));
+    assert.equal(t.data.ok, true, JSON.stringify(t.data));
+    assert.ok(t.data.tables.some((x: { name: string }) => x.name === "menu"));
+    const c = await api(deskBase, desk, admin, "POST", { action: "create", ...myConn });
+    assert.equal(c.status, 201, JSON.stringify(c.data));
+    const draft = await api(deskSrc, desk, admin, "POST", { action: "draft", connectionId: c.data.id, table: "menu" });
+    assert.equal(draft.status, 200, JSON.stringify(draft.data));
+    const role = Object.fromEntries(draft.data.draft.columns.map((x: { column: string; role: string }) => [x.column, x.role]));
+    assert.equal(role.id, "key");
+    assert.equal(role.name, "title");
+    const src = await api(deskSrc, desk, admin, "POST", {
+      action: "create", connectionId: c.data.id, table: "menu", titleColumn: "name", keyColumn: "id",
+      bodyColumns: [{ column: "price", label: "가격", unit: "원", type: "decimal" }],
+      filters: [{ column: "is_active", op: "eq", value: "1", kind: "number" }], schedule: "manual",
+    });
+    assert.equal(src.status, 201, JSON.stringify(src.data));
+    const state = await importAll(deskSrc, desk, admin, src.data.id);
+    assert.equal(state.created, 4);
+    const [doc] = await sql`SELECT d.content FROM documents d JOIN db_source_rows r ON r.document_id=d.id WHERE r.source_id=${src.data.id} AND d.title='원두 선물세트 소'`;
+    assert.match(doc.content, /가격: 15,000원/);
+    assert.equal((await api(deskSrc, desk, admin, "POST", { action: "delete", sourceId: src.data.id, documents: "delete" })).status, 200);
+    assert.equal((await api(`${deskBase}/${c.data.id}`, desk, admin, "DELETE")).status, 200);
+  });
+  await check("E-02 MySQL 틀린 비밀번호·닫힌 포트는 사람 말 안내(비밀번호 미포함)", async () => {
+    const wrong = await api(deskBase, desk, admin, "POST", { action: "test", ...myConn, password: "wrong-pass" });
+    assert.equal(wrong.data.ok, false);
+    assert.match(wrong.data.error, /비밀번호가 틀렸어요/);
+    assert.ok(!JSON.stringify(wrong.data).includes("wrong-pass"));
+    const closed = await api(deskBase, desk, admin, "POST", { action: "test", ...myConn, port: 55499 });
+    assert.equal(closed.data.ok, false);
+    assert.match(closed.data.error, /연결을 거부|닿지 못했어요/);
+  });
+  await check("E-03 무료 요금제 에이전시는 DB 연결을 만들 수 없음(403)", async () => {
+    const [t] = await sql`SELECT tenant_id FROM customers WHERE id='qa-cafe'`;
+    const [before] = await sql`SELECT plan FROM tenants WHERE id=${t.tenant_id}`;
+    await sql`UPDATE tenants SET plan='starter' WHERE id=${t.tenant_id}`;
+    try {
+      const r = await api(deskBase, desk, admin, "POST", { action: "create", ...myConn, name: PREFIX + "무료" });
+      assert.equal(r.status, 403, JSON.stringify(r.data));
+      assert.match(r.data.error, /무료 요금제/);
+    } finally {
+      await sql`UPDATE tenants SET plan=${before.plan} WHERE id=${t.tenant_id}`;
+    }
+  });
+
   // ---------- 단계 C ----------
   let syncSourceId = "";
   await check("C-01 /api/cron/db-sync 는 CRON_SECRET 없이는 401, 있으면 실행 결과(접속 정보 없음)", async () => {

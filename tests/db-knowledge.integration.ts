@@ -41,6 +41,10 @@ async function main() {
     checks++;
     console.log("PASS", name);
   };
+  // 스키마 변경(컬럼 추가)은 검사 트랜잭션 밖에서 먼저 반영한다. 안에서 하면 표 잠금이 끝까지 남아
+  // 트랜잭션 밖의 조회(예: 요금제·API 키 읽기)가 기다리게 된다.
+  const { createDataKnowledgeSchema } = await import("../lib/data-connections/schema");
+  await createDataKnowledgeSchema(sql as unknown as AccessDatabase);
   try {
     await sql.begin(async (tx) => {
       const db = tx as unknown as AccessDatabase;
@@ -54,7 +58,7 @@ async function main() {
         admin = "admin-" + suffix,
         agent = "agent-" + suffix,
         otherAdmin = "other-admin-" + suffix;
-      await tx`INSERT INTO tenants(id,name,api_key) VALUES(${tenant},'테스트 에이전시',${randomUUID()}),(${foreign},'다른 에이전시',${randomUUID()})`;
+      await tx`INSERT INTO tenants(id,name,api_key,plan) VALUES(${tenant},'테스트 에이전시',${randomUUID()},'pro'),(${foreign},'다른 에이전시',${randomUUID()},'pro')`;
       await tx`INSERT INTO users(id,name,email) VALUES(${owner},'에이전시 소유자',${owner + "@example.test"}),(${admin},'고객사 관리자',${admin + "@example.test"}),(${agent},'담당자',${agent + "@example.test"}),(${otherAdmin},'다른 고객사 관리자',${otherAdmin + "@example.test"})`;
       await tx`INSERT INTO partner_memberships(tenant_id,user_id) VALUES(${tenant},${owner})`;
       await tx`INSERT INTO customers(id,tenant_id,name) VALUES(${customer},${tenant},'카페 A'),(${other},${tenant},'쇼핑몰 B')`;
@@ -298,6 +302,46 @@ async function main() {
       assert.equal((await tx`SELECT count(*)::int AS n FROM db_source_rows WHERE source_id=${big.id}`)[0].n, 50);
       pass("B-D3 행 상한: 50행만 반영하고 초과 5,150행을 결과에 기록");
 
+      // E-D2 요금제 한도(에이전시 합계): 이미 65행(menu 15 + menu_big 50)을 쓰는 중에 한도 70이면 새 소스는 5행만
+      await tx`UPDATE tenants SET plan='enterprise', enterprise_db_row_limit=70 WHERE id=${tenant}`;
+      const bot3 = "bot3-" + suffix;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${bot3},${tenant},${customer},'한도 봇','ai')`;
+      const quota = await createDbSource(db, actor, { id: bot3, customer_id: customer }, {
+        connectionId: live.id, table: "menu_big", titleColumn: "name", keyColumn: "id",
+        bodyColumns: [{ column: "price", label: "가격", unit: "원", type: "integer" }], rowLimit: 100, schedule: "manual",
+      });
+      const quotaSource = await dbSource(db, bot3, quota.id);
+      let qs = await beginImport(quotaSource, tx as never);
+      assert.equal(qs.total, 5);
+      assert.equal(qs.planLimited, 95);
+      assert.equal(qs.planLimit, 70);
+      while (!qs.done) qs = await importStep(quotaSource, null, tx as never);
+      assert.equal(qs.created, 5);
+      await deleteDbSource(db, actor, { id: bot3, customer_id: customer }, quota.id, "delete");
+      // E-D1 무료 요금제: 연결·소스 만들기와 가져오기 모두 거부
+      await tx`UPDATE tenants SET plan='starter', enterprise_db_row_limit=NULL WHERE id=${tenant}`;
+      await assert.rejects(() => createDataConnection(db, admin, customer, { ...input, name: "무료" }), (e: unknown) => (e as { status?: number }).status === 403 && /무료 요금제/.test((e as Error).message));
+      await assert.rejects(() => createDbSource(db, actor, { id: bot3, customer_id: customer }, { ...menuConfig }), { status: 403 });
+      await assert.rejects(() => beginImport(source, tx as never), { status: 403 });
+      const { testConnectionInput } = await import("../lib/data-connections/store");
+      await assert.rejects(() => testConnectionInput(db, admin, customer, { ...input }), { status: 403 });
+      await tx`UPDATE tenants SET plan='pro' WHERE id=${tenant}`;
+      pass("E-D1/E-D2 무료 요금제는 DB 연동 불가(403), 엔터프라이즈 한도는 에이전시 합계에서 남은 만큼만 가져옴");
+
+      // E-D4 동시에 시작한 두 가져오기는 서로의 예약분을 빼고 계산해 합쳐서 한도를 넘지 않음
+      await tx`UPDATE tenants SET plan='enterprise', enterprise_db_row_limit=75 WHERE id=${tenant}`;
+      const bot4 = "bot4-" + suffix, bot5 = "bot5-" + suffix;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${bot4},${tenant},${customer},'동시 1','ai'),(${bot5},${tenant},${customer},'동시 2','ai')`;
+      const big4 = await createDbSource(db, actor, { id: bot4, customer_id: customer }, { connectionId: live.id, table: "menu_big", titleColumn: "name", keyColumn: "id", bodyColumns: [{ column: "price", label: "가격", type: "integer" }], rowLimit: 100, schedule: "manual" });
+      const big5 = await createDbSource(db, actor, { id: bot5, customer_id: customer }, { connectionId: live.id, table: "menu_big", titleColumn: "name", keyColumn: "id", bodyColumns: [{ column: "price", label: "가격", type: "integer" }], rowLimit: 100, schedule: "manual" });
+      const s4 = await beginImport(await dbSource(db, bot4, big4.id), tx as never);
+      const s5 = await beginImport(await dbSource(db, bot5, big5.id), tx as never);
+      assert.equal(s4.total + s5.total, 10, "65행 사용 중 한도 75 → 두 실행 합계 10행");
+      await deleteDbSource(db, actor, { id: bot4, customer_id: customer }, big4.id, "delete");
+      await deleteDbSource(db, actor, { id: bot5, customer_id: customer }, big5.id, "delete");
+      await tx`UPDATE tenants SET plan='pro', enterprise_db_row_limit=NULL WHERE id=${tenant}`;
+      pass("E-D4 동시에 시작한 가져오기도 예약분을 빼서 에이전시 한도를 넘지 않음");
+
       // 리뷰 반영: 진행 상태는 서버가 들고, 시작 없이 단계 호출은 거부, 고유키 중복 거부, 화면 실패는 연속 실패에 안 셈
       await assert.rejects(() => importStep(source, null, tx as never), { status: 409 });
       const dupKey = await createDbSource(db, actor, { id: bot, customer_id: customer }, {
@@ -343,6 +387,49 @@ async function main() {
       assert.equal(kept[0].n, 15);
       assert.equal((await listDbSources(db, bot)).length, 0);
       pass("B-D5 소스 삭제: 기본은 문서 보관(검색 제외), 선택 시 문서까지 삭제");
+
+      // ---------- 단계 E: MySQL 커넥터 ----------
+      const my = JSON.parse(await readFile("/tmp/chatbot-qa-runtime/mysql-fixture.json", "utf8")) as ConnectionConfig;
+      const { mysqlConnector } = await import("../lib/data-connections/connectors/mysql");
+      const myTest = await mysqlConnector.testConnection(my);
+      assert.equal(myTest.ok, true, JSON.stringify(myTest));
+      assert.ok(myTest.ok && myTest.tables.some((t) => t.name === "menu"));
+      const mySample = await mysqlConnector.sample(my, "public", "menu", 3);
+      assert.equal(mySample.rows.length, 3);
+      assert.ok(mySample.columns.some((c) => c.name === "price" && c.type === "decimal"));
+      const myCount = await mysqlConnector.countRows(my, { schema: "public", table: "menu", columns: [], keyColumn: "id", filters: [{ column: "is_active", op: "eq", value: "1", kind: "number" }] });
+      assert.deepEqual(myCount, { total: 4, distinctKeys: 4 });
+      const myRows: Record<string, unknown>[] = [];
+      await mysqlConnector.readRows(my, { schema: "public", table: "menu", columns: ["name", "price"], keyColumn: "id", filters: [{ column: "is_active", op: "eq", value: "1", kind: "number" }] }, async (b) => { myRows.push(...b); }, 2);
+      assert.equal(myRows.length, 4, "2행씩 키셋");
+      assert.equal(myRows[0].price, "4500", "DECIMAL은 문자열로(정밀도 보존)");
+      const myWrong = await mysqlConnector.testConnection({ ...my, password: "wrong-" + suffix });
+      assert.equal(myWrong.ok, false);
+      assert.match(myWrong.ok ? "" : myWrong.error, /비밀번호가 틀렸어요/);
+      assert.ok(!(myWrong.ok ? "" : myWrong.error).includes(my.username));
+      // 저장된 MySQL 연결로 소스를 만들어 끝까지 가져오기(숫자 필드·문서)
+      const myConn = await createDataConnection(db, otherAdmin, other, { name: "MySQL 메뉴", kind: "mysql", host: my.host, port: my.port, database: my.database, username: my.username, password: my.password, ssl: false });
+      const myBot = "bot-my-" + suffix;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${myBot},${tenant},${other},'MySQL 봇','ai')`;
+      const mySrc = await createDbSource(db, { userId: otherAdmin, tenantId: tenant, customerId: other }, { id: myBot, customer_id: other }, {
+        connectionId: myConn.id, table: "menu", titleColumn: "name", keyColumn: "id",
+        bodyColumns: [{ column: "category", label: "분류", type: "varchar" }, { column: "price", label: "가격", unit: "원", type: "decimal" }],
+        filters: [{ column: "is_active", op: "eq", value: "1", kind: "number" }], schedule: "manual",
+      });
+      const mySource = await dbSource(db, myBot, mySrc.id);
+      let ms = await beginImport(mySource, tx as never);
+      while (!ms.done) ms = await importStep(mySource, null, tx as never);
+      assert.equal(ms.created, 4);
+      const [gift] = await tx`SELECT content, numeric_fields FROM documents WHERE bot_id=${myBot} AND title='원두 선물세트 소'`;
+      assert.match(gift.content, /가격: 15,000원/);
+      assert.equal(gift.numeric_fields.find((f: { column: string }) => f.column === "price").value, 15000);
+      pass("E-D3 MySQL: 연결 테스트·테이블·샘플·행 수·키셋 읽기(읽기 전용), 틀린 비밀번호 안내, 저장된 연결로 가져오기·숫자 필드");
+      const { dbKnowledgeStats } = await import("../lib/db-sources/stats");
+      const stats = (await dbKnowledgeStats(tx as never)).get(tenant)!;
+      assert.ok(stats.connections >= 2 && stats.sources >= 1 && stats.rows >= 4, JSON.stringify(stats));
+      assert.equal(stats.rowLimit, 50_000, "프로 요금제 한도");
+      assert.deepEqual(Object.keys(stats).sort(), ["connections", "failing", "rowLimit", "rows", "sources", "stopped"], "건수만, 접속 정보·본문 없음");
+      pass("E-D5 마스터 집계: 에이전시별 연결·소스·행·실패·멈춤·한도(건수만)");
 
       // ---------- 단계 C: 자동 동기화 ----------
       // 고객사 DB에 이 검사 전용 표(menu_sync)를 만들어 바꿔 가며 확인하고 끝나면 지운다.

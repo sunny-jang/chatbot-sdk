@@ -2,6 +2,8 @@ import sql from "@/lib/neon";
 import { customerPageAccess } from "@/lib/customer-portal/page";
 import Settings from "@/app/customers/[customerId]/Settings";
 import DataConnectionManager from "@/app/components/DataConnectionManager";
+import { tenantDbRowLimit } from "@/lib/data-connections/store";
+import type { AccessDatabase } from "@/lib/access/schema";
 import { hasPermission } from "@/lib/access/policy";
 export default async function CustomerSettings({
   params,
@@ -25,6 +27,7 @@ export default async function CustomerSettings({
         customerId={customerId}
         portal
         canManage={hasPermission(access.grant.role, "settings.manage")}
+        planBlocked={(await tenantDbRowLimit(sql as unknown as AccessDatabase, access.grant.tenant_id)) <= 0}
       />
     </>
   );

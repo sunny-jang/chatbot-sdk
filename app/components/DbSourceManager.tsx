@@ -10,7 +10,7 @@ type Role = "title" | "key" | "body" | "excluded";
 type ColumnDraft = { column: string; type: string; role: Role; label: string; unit: string; valueMap: Record<string, string>; personal: boolean };
 type FilterOp = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "not_in" | "is_null" | "not_null";
 type Filter = { column: string; op: FilterOp; value: string };
-type SyncResult = { created: number; updated: number; unchanged: number; archived: number; deleted: number; failed: number; truncated: number; total: number; finishedAt: number; error?: string };
+type SyncResult = { planLimited?: number; planLimit?: number; created: number; updated: number; unchanged: number; archived: number; deleted: number; failed: number; truncated: number; total: number; finishedAt: number; error?: string };
 type Source = {
   id: string;
   connectionId: string;
@@ -28,7 +28,7 @@ type Source = {
   consecutiveFailures: number;
   syncing: boolean;
 };
-type ImportState = { processed: number; total: number; truncated: number; created: number; updated: number; unchanged: number; failed: number; archived: number; deleted: number; done: boolean; cursor: unknown };
+type ImportState = { planLimited?: number; planLimit?: number; processed: number; total: number; truncated: number; created: number; updated: number; unchanged: number; failed: number; archived: number; deleted: number; done: boolean; cursor: unknown };
 type Preview = { documents: { title: string; content: string }[]; answers: { question: string; title: string | null; answer: string | null; note: string | null }[] };
 
 const ROLE_LABEL: Record<Role, string> = { title: "제목", key: "고유키", body: "본문", excluded: "제외" };
@@ -277,7 +277,7 @@ export default function DbSourceManager({
         s.total === 0
           ? "가져올 행이 없어요. 필터 조건을 확인해주세요."
           : `가져오기를 마쳤어요. 반영 ${n(s.created)} · 갱신 ${n(s.updated)}${s.unchanged ? ` · 변경 없음 ${n(s.unchanged)}` : ""}${s.archived ? ` · 원본에서 사라져 보관 ${n(s.archived)}` : ""}${s.deleted ? ` · 원본에서 사라져 삭제 ${n(s.deleted)}` : ""}${s.failed ? ` · 실패 ${n(s.failed)}` : ""}${
-              s.truncated ? ` — ${n(s.truncated)}행이 상한(${n(s.total)}행)을 넘어 제외됐어요. 필터를 좁히거나 상한을 올려주세요.` : ""
+              s.planLimited ? ` — 요금제 한도(에이전시 합계 ${n(s.planLimit ?? 0)}행)에 맞춰 ${n(s.planLimited)}행은 가져오지 않았어요. 요금제를 올리거나 다른 소스를 정리해주세요.` : s.truncated ? ` — ${n(s.truncated)}행이 상한(${n(s.total)}행)을 넘어 제외됐어요. 필터를 좁히거나 상한을 올려주세요.` : ""
             }`,
       );
       applied();
@@ -394,7 +394,16 @@ export default function DbSourceManager({
                     {s.lastSyncedAt ? ` · 마지막 ${when(s.lastSyncedAt)}` : ""}
                     {s.enabled && s.nextSyncAt && !s.connectionDeleted ? ` · 다음 예정 ${when(s.nextSyncAt)}` : ""}
                   </small>
-                  {s.lastResult && !s.lastError && <small>{summary(s.lastResult)}{s.lastResult.truncated ? ` · 상한 초과 ${n(s.lastResult.truncated)}행 제외` : ""}</small>}
+                  {s.lastResult && !s.lastError && (
+                    <small>
+                      {summary(s.lastResult)}
+                      {s.lastResult.planLimited
+                        ? ` · 요금제 한도(${n(s.lastResult.planLimit ?? 0)}행)로 ${n(s.lastResult.planLimited)}행 제외${s.lastResult.archived ? "(이전에 가져온 행은 보관)" : ""}`
+                        : s.lastResult.truncated
+                          ? ` · 상한 초과 ${n(s.lastResult.truncated)}행 제외`
+                          : ""}
+                    </small>
+                  )}
                   {s.lastError && <small className="cp-conn-error" role="alert">{s.lastError}</small>}
                   {p && (
                     <div className="dbs-progress" role="status" aria-live="polite">

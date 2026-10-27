@@ -13,6 +13,8 @@ type Tenant = {
   enterprise_bot_limit: number | null;
   enterprise_monthly_session_limit: number | null;
   monthly_session_count: number;
+  /** DB 지식 집계(건수만). 스키마가 없으면 null */
+  db_knowledge?: { connections: number; sources: number; rows: number; failing: number; stopped: number; rowLimit: number } | null;
 };
 
 function sessionLimit(tenant: Tenant) {
@@ -211,6 +213,17 @@ export default function AdminClient({ initialTenants }: { initialTenants: Tenant
                     <span className="text-xs px-2 py-0.5 rounded-full" style={usageBadgeStyle(t)}>
                       이번 달 세션 {t.monthly_session_count.toLocaleString("ko-KR")} / {sessionLimit(t)?.toLocaleString("ko-KR") ?? "한도 설정 필요"}
                     </span>
+                    {t.db_knowledge && (t.db_knowledge.connections > 0 || t.db_knowledge.sources > 0) && (
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full"
+                        style={t.db_knowledge.failing || t.db_knowledge.stopped ? { backgroundColor: "#fff4e0", color: "#b4720d" } : { backgroundColor: "#eef2fa", color: "#2446b1" }}
+                        title="DB 지식: 연결 · 소스 · 가져온 행 / 요금제 한도 · 실패·멈춤 소스"
+                      >
+                        DB 연결 {t.db_knowledge.connections} · 소스 {t.db_knowledge.sources} · 행 {t.db_knowledge.rows.toLocaleString("ko-KR")}/{t.db_knowledge.rowLimit.toLocaleString("ko-KR")}
+                        {t.db_knowledge.failing ? ` · 실패 ${t.db_knowledge.failing}` : ""}
+                        {t.db_knowledge.stopped ? ` · 멈춤 ${t.db_knowledge.stopped}` : ""}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs" style={{ color: "#9b8fc0" }}>

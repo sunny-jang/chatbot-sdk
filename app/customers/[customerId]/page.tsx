@@ -6,6 +6,8 @@ import { agencyOwner } from "@/lib/customer-portal/auth";
 import Members from "./Members";
 import Bots from "./Bots";
 import DataConnectionManager from "@/app/components/DataConnectionManager";
+import { tenantDbRowLimit } from "@/lib/data-connections/store";
+import type { AccessDatabase } from "@/lib/access/schema";
 import "@/app/customer/portal.css";
 export default async function CustomerManagement({
   params,
@@ -51,7 +53,7 @@ export default async function CustomerManagement({
         status={String(customer.status)}
         owner
       />
-      <DataConnectionManager customerId={customerId} canManage />
+      <DataConnectionManager customerId={customerId} canManage planBlocked={(await tenantDbRowLimit(sql as unknown as AccessDatabase, owner.tenantId)) <= 0} />
       <Bots customerId={customerId} bots={bots} />
       <Members customerId={customerId} owner />
     </div>

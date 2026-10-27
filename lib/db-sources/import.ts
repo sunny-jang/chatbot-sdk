@@ -4,7 +4,8 @@ import type { AccessDatabase } from "@/lib/access/schema";
 import { PortalError } from "@/lib/customer-portal/validation";
 import { getEmbeddings, fakeEmbeddingsEnabled } from "@/lib/embeddings";
 import { connectorFor } from "@/lib/data-connections/connectors";
-import { credentialsOf, type DataConnectionRow } from "@/lib/data-connections/store";
+import { credentialsOf, tenantDbRowLimit, type DataConnectionRow } from "@/lib/data-connections/store";
+import { DB_KNOWLEDGE_DISABLED } from "@/lib/plans";
 import type { RowQuery } from "@/lib/data-connections/types";
 import { numericFieldsOf, renderRowDocument, rowHash, rowKeyOf } from "./render";
 import { configOf, type DbSourceRow } from "./store";
@@ -24,6 +25,9 @@ export type ImportState = {
   deleted: number;
   /** 누가 시작했는지. 자동 동기화(cron)는 다음 호출에서 이어 받고, 화면(manual) 실행은 브라우저가 이어 간다. */
   runner?: "manual" | "cron";
+  /** 요금제 한도 때문에 줄인 행 수(상한 초과와 따로 안내). */
+  planLimited?: number;
+  planLimit?: number;
   /** 이번 실행 식별자. 이번 실행에서 본 행에 기록하고, 끝날 때 기록이 없는 행을 사라진 행으로 본다. */
   runId?: string;
 };
@@ -61,10 +65,33 @@ export async function beginImport(source: DbSourceRow, db: Db = sql, runner: "ma
       throw new PortalError(
         `고유키로 고른 ${config.keyColumn} 컬럼에 같은 값이나 빈 값이 있어요(${count.toLocaleString("ko-KR")}행 중 서로 다른 값 ${distinctKeys.toLocaleString("ko-KR")}개). 행마다 다른 값이 들어 있는 컬럼(예: id)을 골라주세요.`,
       );
-    const total = Math.min(count, config.rowLimit);
-    const state: ImportState = { cursor: null, processed: 0, total, truncated: Math.max(0, count - config.rowLimit), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0, runner, runId: randomUUID() };
-    await db`UPDATE db_sources SET sync_state=${db.json(state as never)} WHERE id=${source.id}`;
-    return state;
+    // 요금제 한도(에이전시 합계)에서 다른 소스가 이미 쓰는 행을 뺀 만큼만 이번 소스에 쓸 수 있다.
+    const [owner] = await db`SELECT b.tenant_id FROM bots b WHERE b.id=${source.bot_id}`;
+    const tenantId = String(owner?.tenant_id ?? "");
+    const planLimit = await tenantDbRowLimit(db as unknown as AccessDatabase, tenantId);
+    if (planLimit <= 0) throw new PortalError(DB_KNOWLEDGE_DISABLED, 403);
+    // 에이전시 단위로 한 번에 하나씩 계산하고, 진행 중인 다른 실행이 앞으로 더할 행(예약)까지 빼서
+    // 동시에 시작한 가져오기들이 합쳐서 한도를 넘지 않게 한다.
+    return await withTx(db, async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${"db-quota:" + tenantId}))`;
+      const now2 = Math.floor(Date.now() / 1000);
+      const [used] = await tx`
+        WITH mine AS (
+          SELECT s.id, s.sync_state, s.sync_locked_at FROM db_sources s JOIN bots b ON b.id=s.bot_id WHERE b.tenant_id=${tenantId} AND s.id<>${source.id}
+        ), active AS (
+          SELECT r.source_id, count(*)::int AS n FROM db_source_rows r JOIN mine m ON m.id=r.source_id WHERE r.status='active' GROUP BY r.source_id
+        )
+        SELECT COALESCE((SELECT sum(n) FROM active),0)::int AS rows,
+          COALESCE((SELECT sum(GREATEST(0, (m.sync_state->>'total')::int - COALESCE(a.n,0)))
+            FROM mine m LEFT JOIN active a ON a.source_id=m.id
+            WHERE m.sync_state IS NOT NULL AND m.sync_locked_at >= ${now2 - LOCK_TTL}),0)::int AS reserved`;
+      const room = Math.max(0, planLimit - Number(used?.rows ?? 0) - Number(used?.reserved ?? 0));
+      const total = Math.min(count, config.rowLimit, room);
+      const planLimited = Math.min(count, config.rowLimit) - total;
+      const state: ImportState = { planLimited, planLimit, cursor: null, processed: 0, total, truncated: Math.max(0, count - total), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0, runner, runId: randomUUID() };
+      await tx`UPDATE db_sources SET sync_state=${tx.json(state as never)} WHERE id=${source.id}`;
+      return state;
+    });
   } catch (e) {
     await failImport(source, e, db, runner === "cron");
     throw e;
@@ -131,6 +158,8 @@ export async function importStep(source: DbSourceRow, openaiKey: string | null, 
 
 function resultOf(state: ImportState, error?: string): SyncResult {
   return {
+    // 요금제 한도로 못 가져온 행이 있으면 "사라진 행" 보관 중 그만큼은 요금제 때문이다.
+    ...(state.planLimited ? { planLimited: state.planLimited, planLimit: state.planLimit } : {}),
     created: state.created,
     updated: state.updated,
     unchanged: state.unchanged,

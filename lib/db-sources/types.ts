@@ -47,6 +47,9 @@ export type SyncResult = {
   total: number;
   finishedAt: number;
   error?: string;
+  /** 요금제 한도 때문에 가져오지 못한(또는 보관된) 행 수와 그때의 한도 */
+  planLimited?: number;
+  planLimit?: number;
 };
 
 export type ColumnRole = "title" | "key" | "body" | "excluded";

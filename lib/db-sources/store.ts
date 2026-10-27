@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AccessDatabase } from "@/lib/access/schema";
 import { PortalError, text } from "@/lib/customer-portal/validation";
 import { quoteIdentifier } from "@/lib/data-connections/identifiers";
-import { credentialsOf, toView, type DataConnectionRow } from "@/lib/data-connections/store";
+import { assertDbKnowledgeAllowed, credentialsOf, toView, type DataConnectionRow } from "@/lib/data-connections/store";
 import type { RowFilter } from "@/lib/data-connections/types";
 import { DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT, SCHEDULES, SOURCE_LIMIT_PER_CUSTOMER, type BodyColumn, type Schedule, type SourceConfig, type SyncResult } from "./types";
 
@@ -174,6 +174,7 @@ export async function createDbSource(
   input: Record<string, unknown>,
 ) {
   const config = sourceConfig(input);
+  await assertDbKnowledgeAllowed(db, actor.tenantId);
   const connection = await connectionForBot(db, bot, config.connectionId);
   await assertFolder(db, bot.id, config.folderId);
   await db`SELECT id FROM customers WHERE id=${connection.customer_id} FOR UPDATE`;
