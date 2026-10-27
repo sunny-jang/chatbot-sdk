@@ -1680,3 +1680,27 @@ form.cp-row {
 .dbs-badge { margin-left: 8px; font-size: 11px; padding: 2px 6px; vertical-align: middle; }
 .dbs-schedule { margin-top: 0 !important; min-height: 40px; width: auto !important; min-width: 108px; padding: 8px 30px 8px 10px; font-size: 13px; }
 .dbs-hint { margin-top: 10px; font-size: 12.5px; }
+
+/* 실시간 조회 (LiveLookupManager). 레이아웃은 .dbs-* 를 그대로 쓰고 다른 부분만 둔다. */
+.lkp { margin-top: 16px; }
+.lkp-empty { margin-top: 14px; }
+.lkp .dbs-step > .lkp-help, .lkp .dbs-filters .lkp-help { margin: 8px 0 0; font-size: 12.5px; }
+.lkp-param { grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) minmax(150px, 1fr) auto; }
+.lkp-param-end { display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; }
+.lkp-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #43516a; }
+.lkp-outputs { min-width: 680px; }
+.lkp-outputs input[type="checkbox"], .lkp-check input { width: 16px; height: 16px; accent-color: var(--cp-primary); }
+.lkp-args { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: 720px; }
+.lkp-args .cp-input { margin-top: 0; flex: 1 1 160px; min-width: 0; min-height: 38px; }
+.lkp-args .cp-button { flex: none; }
+.lkp-quick { margin-top: 10px; display: grid; gap: 10px; max-width: 720px; }
+.lkp-result { margin-top: 12px; display: grid; gap: 8px; max-width: 720px; }
+.lkp-result p { margin: 0; }
+.lkp-result-head { font-size: 13.5px; font-weight: 600; color: #43516a; }
+.lkp-result-head.ok { color: var(--cp-primary-text); }
+.lkp-result-head.warn { color: #9a5b00; }
+.lkp-result td, .lkp-result th { font-size: 13px; white-space: nowrap; }
+@media (max-width: 720px) {
+  .lkp-param { grid-template-columns: 1fr 1fr; }
+  .lkp-param-end { grid-column: 1 / -1; }
+}
