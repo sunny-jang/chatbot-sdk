@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/operations",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/db-sync",
+      "schedule": "0 18 * * *"
     }
   ],
   "functions": {

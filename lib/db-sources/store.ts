@@ -203,9 +203,10 @@ export async function updateDbSource(
   const [row] = await db<DbSourceRow[]>`UPDATE db_sources SET connection_id=${config.connectionId}, schema_name=${config.schema}, table_name=${config.table},
     title_column=${config.titleColumn}, key_column=${config.keyColumn}, body_columns=${db.json(config.bodyColumns)}, excluded_columns=${db.json(config.excludedColumns)},
     filters=${db.json(config.filters)}, folder_id=${config.folderId}, schedule=${config.schedule}, row_limit=${config.rowLimit}, missing_rows=${config.missingRows},
-    next_sync_at=${existing.schedule === config.schedule && existing.next_sync_at ? existing.next_sync_at : nextSyncAt(config.schedule)},
+    next_sync_at=${existing.schedule === config.schedule && existing.next_sync_at && input.enabled !== true ? existing.next_sync_at : nextSyncAt(config.schedule)},
     enabled=${input.enabled === undefined ? existing.enabled : Boolean(input.enabled)},
     consecutive_failures=${input.enabled === true ? 0 : existing.consecutive_failures},
+    last_error=${input.enabled === true ? null : existing.last_error},
     updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id=${sourceId} RETURNING *`;
   // 폴더가 바뀌면 이미 가져온 문서도 옮긴다.
   if (config.folderId !== existing.folder_id)

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type Connection = { id: string; name: string; kind: "postgres" | "mysql"; status: "untested" | "ok" | "error"; table_count: number | null };
 type TableInfo = { name: string; kind: "table" | "view"; rowEstimate: number | null };
@@ -86,6 +87,12 @@ export default function DbSourceManager({
   onApplied?: () => void;
 }) {
   const endpoint = `${apiBase}/db-sources`;
+  const router = useRouter();
+  // 서버에서 그린 문서 목록(에이전시 문서 화면)도 새로 그리도록 한다.
+  const applied = useCallback(() => {
+    onApplied?.();
+    router.refresh();
+  }, [onApplied, router]);
   const [loaded, setLoaded] = useState(false),
     [assigned, setAssigned] = useState(true),
     [connections, setConnections] = useState<Connection[]>([]),
@@ -269,11 +276,11 @@ export default function DbSourceManager({
       setNotice(
         s.total === 0
           ? "가져올 행이 없어요. 필터 조건을 확인해주세요."
-          : `가져오기를 마쳤어요. 반영 ${n(s.created)} · 갱신 ${n(s.updated)}${s.unchanged ? ` · 변경 없음 ${n(s.unchanged)}` : ""}${s.failed ? ` · 실패 ${n(s.failed)}` : ""}${
+          : `가져오기를 마쳤어요. 반영 ${n(s.created)} · 갱신 ${n(s.updated)}${s.unchanged ? ` · 변경 없음 ${n(s.unchanged)}` : ""}${s.archived ? ` · 원본에서 사라져 보관 ${n(s.archived)}` : ""}${s.deleted ? ` · 원본에서 사라져 삭제 ${n(s.deleted)}` : ""}${s.failed ? ` · 실패 ${n(s.failed)}` : ""}${
               s.truncated ? ` — ${n(s.truncated)}행이 상한(${n(s.total)}행)을 넘어 제외됐어요. 필터를 좁히거나 상한을 올려주세요.` : ""
             }`,
       );
-      onApplied?.();
+      applied();
     } catch (e) {
       setError(e instanceof Error ? e.message : "가져오지 못했어요.");
     } finally {
@@ -296,6 +303,19 @@ export default function DbSourceManager({
       setBusy(null);
     }
   }
+  async function updateSource(sourceId: string, change: Record<string, unknown>) {
+    setBusy("update:" + sourceId);
+    setError("");
+    try {
+      await post({ action: "update", sourceId, ...change });
+      setNotice(change.enabled === true ? "자동 동기화를 다시 켰어요. 다음 예정 시각에 가져와요." : "다시 가져오는 주기를 바꿨어요.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "저장하지 못했어요.");
+    } finally {
+      setBusy(null);
+    }
+  }
   async function removeSource(sourceId: string, documents: "archive" | "delete") {
     setBusy("delete:" + sourceId);
     setError("");
@@ -304,7 +324,7 @@ export default function DbSourceManager({
       setConfirmDelete(null);
       setNotice(documents === "delete" ? "소스와 가져온 문서를 삭제했어요." : "소스를 삭제했어요. 가져온 문서는 보관돼 검색에서 빠졌어요.");
       await load();
-      onApplied?.();
+      applied();
     } catch (e) {
       setError(e instanceof Error ? e.message : "삭제하지 못했어요.");
     } finally {
@@ -372,6 +392,7 @@ export default function DbSourceManager({
                   <small>
                     {SCHEDULE_LABEL[s.schedule]} · 폴더 {s.folderName ?? "미분류"} · 상한 {n(s.rowLimit)}행
                     {s.lastSyncedAt ? ` · 마지막 ${when(s.lastSyncedAt)}` : ""}
+                    {s.enabled && s.nextSyncAt && !s.connectionDeleted ? ` · 다음 예정 ${when(s.nextSyncAt)}` : ""}
                   </small>
                   {s.lastResult && !s.lastError && <small>{summary(s.lastResult)}{s.lastResult.truncated ? ` · 상한 초과 ${n(s.lastResult.truncated)}행 제외` : ""}</small>}
                   {s.lastError && <small className="cp-conn-error" role="alert">{s.lastError}</small>}
@@ -386,6 +407,22 @@ export default function DbSourceManager({
                   )}
                 </div>
                 <div className="cp-row dbs-source-actions">
+                  {!s.connectionDeleted && (
+                    <select
+                      className="cp-input dbs-schedule"
+                      aria-label={`${s.tableLabel} 다시 가져오는 주기`}
+                      value={s.schedule}
+                      disabled={busy !== null || running}
+                      onChange={(e) => void updateSource(s.id, { schedule: e.target.value })}
+                    >
+                      {(Object.keys(SCHEDULE_LABEL) as Source["schedule"][]).map((k) => <option key={k} value={k}>{SCHEDULE_LABEL[k]}</option>)}
+                    </select>
+                  )}
+                  {!s.enabled && !s.connectionDeleted && (
+                    <button type="button" className="cp-button cp-button-secondary" disabled={busy !== null} onClick={() => void updateSource(s.id, { enabled: true })}>
+                      자동 동기화 다시 켜기
+                    </button>
+                  )}
                   <button type="button" className="cp-button cp-button-secondary" disabled={busy !== null || running || s.connectionDeleted} onClick={() => void runImport(s.id)}>
                     {running ? "가져오는 중…" : "지금 다시 가져오기"}
                   </button>
@@ -405,6 +442,11 @@ export default function DbSourceManager({
         </ul>
       )}
 
+      {sources.length > 0 && (
+        <p className="cp-note dbs-hint">
+          DB에서 가져온 문서를 직접 고치면 원본 행이 바뀔 때 다시 덮어써요. 내용은 원본 DB에서 고쳐주세요. 원본에서 사라진 행의 문서는 보관돼 답변에 쓰지 않아요.
+        </p>
+      )}
       {notice && <p className="cp-note dbs-notice" role="status">{notice}</p>}
       {error && <p className="cp-error" role="alert">{error}</p>}
 

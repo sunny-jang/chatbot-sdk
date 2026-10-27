@@ -232,6 +232,14 @@ export async function deleteDataConnection(
 ) {
   const { grant } = await dataConnection(db, userId, customerId, connectionId, "settings.manage", true);
   await db`UPDATE data_connections SET secret_enc=NULL, status='deleted', deleted_at=EXTRACT(EPOCH FROM NOW())::BIGINT, updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id=${connectionId}`;
+  // 이 연결로 가져온 소스는 멈추고, 가져온 문서는 지우지 않고 보관(검색 제외)한다. 연결을 다시 만들면 소스를 고쳐 이어 쓸 수 있다.
+  const ready = await db`SELECT to_regclass('db_sources') IS NOT NULL AS ok`;
+  if (ready[0]?.ok) {
+    await db`UPDATE documents SET archived_at=COALESCE(archived_at, EXTRACT(EPOCH FROM NOW())::BIGINT)
+      WHERE id IN (SELECT r.document_id FROM db_source_rows r JOIN db_sources s ON s.id=r.source_id WHERE s.connection_id=${connectionId} AND r.document_id IS NOT NULL)`;
+    await db`UPDATE db_source_rows SET status='archived' WHERE source_id IN (SELECT id FROM db_sources WHERE connection_id=${connectionId})`;
+    await db`UPDATE db_sources SET enabled=FALSE, sync_locked_at=NULL, sync_state=NULL, last_error='연결이 삭제돼 동기화를 멈췄어요. 가져온 문서는 보관(검색 제외)됐어요. 데이터 연결을 다시 만든 뒤 소스를 고쳐주세요.', updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE connection_id=${connectionId}`;
+  }
   await audit(db, userId, grant, "data_connection.delete", connectionId);
   return { ok: true };
 }

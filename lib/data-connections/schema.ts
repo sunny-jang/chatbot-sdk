@@ -68,6 +68,8 @@ export async function createDataKnowledgeSchema(db: AccessDatabase) {
     PRIMARY KEY(source_id, row_key)
   )`;
   await db`CREATE INDEX IF NOT EXISTS db_source_rows_document_idx ON db_source_rows(document_id)`;
+  // 이번 실행에서 본 행 표시. 같은 초 안에 실행이 이어져도 "못 본 행"을 정확히 고른다.
+  await db`ALTER TABLE db_source_rows ADD COLUMN IF NOT EXISTS run_id TEXT`;
   // 기존 문서는 NULL(수동). web_sources가 있는 문서는 web, DB에서 온 문서는 db.
   await db`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_kind TEXT CHECK (source_kind IS NULL OR source_kind IN ('web','file','db'))`;
   await db`ALTER TABLE documents ADD COLUMN IF NOT EXISTS archived_at BIGINT`;
