@@ -717,9 +717,10 @@
       summary.textContent = "출처 보기";
       box.appendChild(summary);
       const list = document.createElement("ul");
-      [...new Set(sources.map((s) => String(s && s.label || "")).filter(Boolean))].slice(0, 5).forEach((label) => {
+      // 실시간 조회는 "실시간 조회 · 재고 조회 · 14:03 기준", DB 지식은 "등록된 데이터 · 행 제목".
+      [...new Set(sources.map((s) => (s && s.label ? (s.kind === "live" ? "실시간 조회 · " : "등록된 데이터 · ") + String(s.label) : "")).filter(Boolean))].slice(0, 5).forEach((label) => {
         const li = document.createElement("li");
-        li.textContent = "등록된 데이터 · " + label;
+        li.textContent = label;
         list.appendChild(li);
       });
       box.appendChild(list);

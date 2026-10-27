@@ -53,6 +53,27 @@ const ident = (v: unknown, label: string) => {
   quoteIdentifier(s);
   return s;
 };
+/** 고정 조건(필터) 검사. DB 지식 소스와 실시간 조회가 같이 쓴다. */
+export function filtersOf(raw: unknown): RowFilter[] {
+  return (Array.isArray(raw) ? raw : []).slice(0, 20).map((f) => {
+    const o = (f ?? {}) as Record<string, unknown>;
+    const column = ident(o.column, "필터 컬럼");
+    const op = String(o.op ?? "");
+    if (!FILTER_OPS.has(op)) throw new PortalError("지원하지 않는 필터예요.");
+    const kind = o.kind === "number" ? "number" : o.kind === "text" ? "text" : undefined;
+    let value: RowFilter["value"];
+    if (op === "in" || op === "not_in") {
+      const list = Array.isArray(o.value) ? o.value : String(o.value ?? "").split(",");
+      value = list.map((v) => (typeof v === "number" ? v : String(v).trim())).filter((v) => v !== "").slice(0, 100);
+      if (!value.length) throw new PortalError("필터 값을 입력해주세요.");
+    } else if (op === "is_null" || op === "not_null") value = undefined;
+    else {
+      if (o.value === undefined || o.value === null || o.value === "") throw new PortalError("필터 값을 입력해주세요.");
+      value = typeof o.value === "number" || typeof o.value === "boolean" ? o.value : String(o.value).slice(0, 500);
+    }
+    return { column, op: op as RowFilter["op"], ...(value !== undefined ? { value } : {}), ...(kind ? { kind } : {}) };
+  });
+}
 /** 폼 입력 → 검증된 소스 설정. 컬럼 이름은 식별자 규칙만 확인하고, 실제 존재 여부는 가져오기 때 DB 오류로 드러난다. */
 export function sourceConfig(input: Record<string, unknown>): SourceConfig {
   const connectionId = text(input.connectionId, "데이터 연결", 200);
@@ -76,24 +97,7 @@ export function sourceConfig(input: Record<string, unknown>): SourceConfig {
   if (!bodyColumns.length) throw new PortalError("본문에 넣을 컬럼을 하나 이상 골라주세요.");
   if (bodyColumns.some((b) => b.column === keyColumn)) throw new PortalError("고유키 컬럼은 본문에 넣을 수 없어요.");
   const excludedColumns = (Array.isArray(input.excludedColumns) ? input.excludedColumns : []).slice(0, 200).map((c) => ident(c, "제외 컬럼"));
-  const filters: RowFilter[] = (Array.isArray(input.filters) ? input.filters : []).slice(0, 20).map((f) => {
-    const o = (f ?? {}) as Record<string, unknown>;
-    const column = ident(o.column, "필터 컬럼");
-    const op = String(o.op ?? "");
-    if (!FILTER_OPS.has(op)) throw new PortalError("지원하지 않는 필터예요.");
-    const kind = o.kind === "number" ? "number" : o.kind === "text" ? "text" : undefined;
-    let value: RowFilter["value"];
-    if (op === "in" || op === "not_in") {
-      const list = Array.isArray(o.value) ? o.value : String(o.value ?? "").split(",");
-      value = list.map((v) => (typeof v === "number" ? v : String(v).trim())).filter((v) => v !== "").slice(0, 100);
-      if (!value.length) throw new PortalError("필터 값을 입력해주세요.");
-    } else if (op === "is_null" || op === "not_null") value = undefined;
-    else {
-      if (o.value === undefined || o.value === null || o.value === "") throw new PortalError("필터 값을 입력해주세요.");
-      value = typeof o.value === "number" || typeof o.value === "boolean" ? o.value : String(o.value).slice(0, 500);
-    }
-    return { column, op: op as RowFilter["op"], ...(value !== undefined ? { value } : {}), ...(kind ? { kind } : {}) };
-  });
+  const filters = filtersOf(input.filters);
   const folderId = input.folderId ? text(input.folderId, "폴더", 200) : null;
   const schedule = (input.schedule ?? "daily") as Schedule;
   if (!SCHEDULES.includes(schedule)) throw new PortalError("동기화 주기를 확인해주세요.");

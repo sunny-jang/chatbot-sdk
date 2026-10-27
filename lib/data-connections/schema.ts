@@ -87,4 +87,38 @@ export async function createDataKnowledgeSchema(db: AccessDatabase) {
   // 숫자 조건 질문용 필드(DB 행에서만 채운다). [{column,label,unit,value}]
   await addColumn(db, "documents", "numeric_fields", "JSONB");
   await db`CREATE INDEX IF NOT EXISTS documents_bot_active_idx ON documents(bot_id) WHERE archived_at IS NULL`;
+  // 실시간 조회: 고객사가 등록한 조회만 대화 중에 실행한다(PRD-db-live-lookup).
+  await db`CREATE TABLE IF NOT EXISTS db_lookups (
+    id TEXT PRIMARY KEY,
+    bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+    connection_id TEXT NOT NULL REFERENCES data_connections(id),
+    name TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 40),
+    description TEXT NOT NULL DEFAULT '',
+    schema_name TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    params JSONB NOT NULL DEFAULT '[]',
+    outputs JSONB NOT NULL DEFAULT '[]',
+    filters JSONB NOT NULL DEFAULT '[]',
+    max_rows INTEGER NOT NULL DEFAULT 5 CHECK (max_rows BETWEEN 1 AND 10),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by TEXT REFERENCES users(id),
+    created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+    updated_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+  )`;
+  await db`CREATE INDEX IF NOT EXISTS db_lookups_bot_idx ON db_lookups(bot_id)`;
+  // 실행 기록. 방문자가 입력한 값은 저장하지 않는다(상태·행 수·시간만).
+  await db`CREATE TABLE IF NOT EXISTS db_lookup_calls (
+    id TEXT PRIMARY KEY,
+    lookup_id TEXT REFERENCES db_lookups(id) ON DELETE CASCADE,
+    bot_id TEXT NOT NULL,
+    session_id TEXT,
+    status TEXT NOT NULL CHECK (status IN ('ok','empty','need_input','too_broad','too_many_calls','rate_limited','timeout','error')),
+    row_count INTEGER NOT NULL DEFAULT 0,
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    cached BOOLEAN NOT NULL DEFAULT FALSE,
+    test BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+  )`;
+  await db`CREATE INDEX IF NOT EXISTS db_lookup_calls_bot_idx ON db_lookup_calls(bot_id, created_at)`;
+  await db`CREATE INDEX IF NOT EXISTS db_lookup_calls_session_idx ON db_lookup_calls(session_id, created_at) WHERE session_id IS NOT NULL`;
 }
