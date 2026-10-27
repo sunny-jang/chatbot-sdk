@@ -116,7 +116,7 @@ QA 서버에는 OpenAI 키가 없다. 가져오기·답변 미리보기를 끝�
 
 자동 매핑(B): 단위 `tests/db-sources.test.ts`(`draftColumnRoles` 규칙, `isPersonalDataColumn`, `renderRowDocument`, `buildRowQuery`, `rowHash` 결정성, `numericFieldsOf`), DB B-D1~B-D3(가져오기 트랜잭션·source_kind·row 테이블·상한), HTTP B-01~B-12.
 
-수동(B): B-M1 빈 상태·연결 없음 안내 `b-source-empty.jpg` · B-M2 초안 화면(체크·라벨·단위) `b-draft.jpg` · B-M3 개인정보 경고 `b-pii-warning.jpg` · B-M4 답변 미리보기 `b-answer-preview.jpg` · B-M5 진행률·결과·상한 안내 `b-import-progress.jpg`, `b-import-over-limit.jpg` · B-M6 에이전시 docs 화면 `b-agency-docs.jpg` · B-M7 문서 목록 DB 배지 `b-doc-list.jpg` · B-M8 모바일 390px `b-source-mobile.jpg`.
+수동(B): B-M1 빈 상태·연결 없음 안내 `b-source-empty.jpg` · B-M2·B-M3 초안 화면(역할·라벨·단위·값 매핑)과 개인정보 경고 `b-pii-warning.jpg` · B-M4 답변 미리보기 `b-answer-preview.jpg` · B-M5 가져오기 결과(진행률 막대는 15행이 1~2초에 끝나 결과 화면으로 대체, 상한 초과 안내는 HTTP B-08로 확인) `b-import-result.jpg` · B-M6 에이전시 docs 화면 `b-agency-docs.jpg` · B-M7 문서 목록 DB 배지 `b-doc-list.jpg` · B-M8 모바일 390px `b-source-mobile.jpg`.
 
 ## 4. 단계 C — 동기화(cron)·변경분·보관/삭제·실패 중지·소스 상태
 
@@ -197,3 +197,22 @@ QA 서버에는 OpenAI 키가 없다. 가져오기·답변 미리보기를 끝�
 | A-13 요청서 양쪽 호스트 공개 | 통과 | HTTP A-13 |
 
 리뷰(/code-review high) 지적 9건 반영: 필터 비교를 컬럼 타입(kind) 기준으로, 키셋 페이징을 네이티브 키 타입으로, 접속 정보 변경 시 last_tested_at·table_count 초기화, 실패 테스트는 `data_connection.test_failed`로 감사, 단건 GET은 `dataConnection()` 사용, 3개 한도에서 추가 버튼 비활성, HTTP 스위트 정리 범위를 `QA-HTTP ` 접두사로 한정, TLS servername은 ASCII 호스트명에만.
+
+### 2026-10-27 — 단계 B 실행 (`feat/db-knowledge-b-sources`)
+
+자동: 단위 169/169(`tests/db-sources.test.ts` 10건 포함) · DB `db-knowledge.integration.ts` 16건(B-D0~B-D5, B-09 포함, 전부 롤백) · HTTP `db-knowledge-http.integration.ts` 24/24(B-01~B-08, B-10~B-12) · `tsc`·`eslint` 통과 · 프로덕션 빌드 통과.
+
+| 항목 | 결과 | 근거 |
+| --- | --- | --- |
+| C4 테이블 선택 → 역할 초안 → 미리보기 3문서 "라벨: 값" | 통과 | 단위 `draftColumnRoles`·`renderRowDocument`, HTTP B-03·B-05, 수동 `b-pii-warning.jpg`, `b-answer-preview.jpg` |
+| C5 상한 초과 | 통과(QA는 row_limit 50으로 축소: 50행 반영·5,150행 초과 기록) | DB B-D3, HTTP B-08 |
+| B-04 개인정보 추정 컬럼 기본 제외·제목 후보에서도 제외 | 통과 | 단위·HTTP B-04, 수동 `b-pii-warning.jpg`(포함으로 바꾸면 경고) |
+| B-06 저장하고 가져오기·source_kind·감사 | 통과 | DB B-D1, HTTP B-06, 수동 `b-import-result.jpg` |
+| B-07 같은 테이블 중복 409 · B-09 소스 10개 한도 · B-10 고유키 필수 | 통과 | HTTP B-07·B-10, DB B-09 |
+| B-11 다른 고객사·담당자 404 · B-12 에이전시 경로 | 통과 | HTTP B-11·B-12 |
+| 재가져오기 변경 없음·하트비트와 무관한 보관 기준 | 통과 | DB B-D2 (실행 시작 시각 `sync_started_at` 기준) |
+| B-M1/B-M6/B-M7/B-M8 화면 | 통과 | `b-source-empty.jpg`, `b-agency-docs.jpg`, `b-doc-list.jpg`, `b-source-mobile.jpg` |
+| 답변 미리보기의 AI 답 | 미검증(환경) — QA에 OpenAI 키 없음. 근거 문서 선택과 "키가 없어 근거 문서만 표시" 안내까지 확인 |
+
+화면 점검 중 고친 것: 고객사 경로에서 봇의 고객사 배정을 못 읽어 "배정되지 않았어요"가 뜨던 문제, 제목·고유키·제외 컬럼에 비활성 입력칸이 보이던 것(역할 설명 문구로 대체), 미리보기 문서가 고정폭 글꼴로 보이던 것, 추천 질문의 "분류이(가)" 같은 어색한 조사와 영문 라벨, 개인정보 컬럼(이름)이 제목으로 잡히던 것.
+

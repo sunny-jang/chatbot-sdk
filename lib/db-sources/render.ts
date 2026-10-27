@@ -21,7 +21,8 @@ const LABELS: Record<string, string> = {
   phone: "전화", email: "이메일", url: "링크", link: "링크", image: "이미지", image_url: "이미지",
   start_date: "시작일", end_date: "종료일", date: "날짜", time: "시간", hours: "운영 시간", open_time: "오픈 시간", close_time: "마감 시간",
   rating: "평점", grade: "등급", level: "등급", unit: "단위", origin: "원산지", material: "소재", model: "모델", spec: "사양", version: "버전",
-  created_at: "등록일", updated_at: "수정일",
+  created_at: "등록일", updated_at: "수정일", joined_at: "가입일", published_at: "게시일", opened_at: "오픈일", due_at: "마감일",
+  released_at: "출시일", starts_at: "시작", ends_at: "종료", expires_at: "만료일", birth_date: "생년월일",
 };
 const UNITS: Record<string, string> = {
   price: "원", sale_price: "원", list_price: "원", cost: "원", amount: "원", total: "원", fee: "원", discount: "원",
@@ -64,9 +65,12 @@ export function draftColumnRoles(columns: ColumnInfo[], rows: Record<string, unk
     names.find((n) => unique(n) && isNumber(columns[names.indexOf(n)].type)) ??
     names.find((n) => unique(n)) ??
     names[0];
-  const textCols = columns.filter((c) => isText(c.type) && c.name !== key);
+  // 개인정보로 보이는 컬럼은 제목 후보에서 뒤로 미룬다(다른 텍스트 컬럼이 없을 때만 쓴다).
+  const textCols = columns
+    .filter((c) => isText(c.type) && c.name !== key)
+    .sort((a, b) => Number(isPersonalDataColumn(a.name, names)) - Number(isPersonalDataColumn(b.name, names)));
   const title =
-    textCols.find((c) => TITLE_HINT.test(c.name))?.name ??
+    textCols.find((c) => TITLE_HINT.test(c.name) && !isPersonalDataColumn(c.name, names))?.name ??
     textCols.find((c) => unique(c.name) && rows.every((r) => String(r[c.name] ?? "").length <= 80))?.name ??
     textCols[0]?.name ??
     key;
@@ -86,13 +90,22 @@ export function draftColumnRoles(columns: ColumnInfo[], rows: Record<string, unk
     if (d.role === "body" && isNumber(d.type) && values.size && [...values].every((v) => v === "0" || v === "1"))
       d.valueMap = /active|enabled|available|visible|sale/i.test(d.column) ? { "1": "판매중", "0": "품절" } : { "1": "예", "0": "아니오" };
   }
-  const titleLabel = drafts.find((d) => d.role === "title")?.label ?? "항목";
   const bodyLabels = drafts.filter((d) => d.role === "body").map((d) => d.label);
-  const sampleTitle = rows[0] ? String(rows[0][title] ?? "").slice(0, 30) : "";
+  const titles = rows.map((r) => String(r[title] ?? "").trim().slice(0, 30)).filter(Boolean);
+  const first = titles[0] ?? "",
+    second = titles[1] ?? first;
+  const hasPrice = bodyLabels.some((l) => /가격|금액|요금|할인가|정가/.test(l));
+  // 받침에 맞춰 조사를 고른다(가격이/설명이, 사이즈가).
+  const josa = (word: string, withFinal: string, without: string) => {
+    const code = word.charCodeAt(word.length - 1) - 0xac00;
+    return code >= 0 && code <= 11171 && code % 28 ? withFinal : without;
+  };
+  // 질문에 넣을 라벨은 한글 라벨만(영문 컬럼명 그대로면 어색한 문장이 된다).
+  const firstBody = bodyLabels.find((l) => /[가-힣]/.test(l) && !/상태|여부/.test(l));
   const questions = [
-    sampleTitle ? `${sampleTitle} ${bodyLabels[0] ? bodyLabels[0] + "이(가)" : ""} 어떻게 되나요?` : `${titleLabel} 목록을 알려주세요.`,
-    bodyLabels.includes("가격") ? "가장 저렴한 건 뭐예요?" : `${bodyLabels[1] ?? titleLabel}에 대해 알려주세요.`,
-    sampleTitle ? `${sampleTitle} 있어요?` : "어떤 항목이 있나요?",
+    first && hasPrice ? `${first} 가격이 얼마예요?` : first && firstBody ? `${first} ${firstBody}${josa(firstBody, "이", "가")} 뭐예요?` : "어떤 항목이 있나요?",
+    hasPrice ? "가장 저렴한 건 뭐예요?" : first ? `${first}에 대해 자세히 알려주세요.` : "자주 찾는 항목을 알려주세요.",
+    second ? `${second} 있어요?` : "목록을 보여주세요.",
   ];
   return { columns: drafts, questions, draftedBy: "rules" };
 }

@@ -151,6 +151,13 @@ export function buildRowQuery(query: RowQuery, kind: "postgres" = "postgres", ba
   return { sql, params, cursorIndex };
 }
 
+/** 필터만 적용한 행 수 질의. WHERE는 행 질의와 같은 방식(식별자 인용·값 바인딩)으로 만든다. */
+export function buildCountQuery(query: RowQuery, kind: "postgres" = "postgres") {
+  const built = buildRowQuery({ ...query, columns: [] }, kind, 1, false);
+  const from = built.sql.slice(built.sql.indexOf(" FROM "), built.sql.indexOf(" ORDER BY "));
+  return { sql: `SELECT count(*)::bigint AS n${from}`, params: built.params };
+}
+
 export const postgresConnector: Connector = {
   async testConnection(config): Promise<TestResult> {
     try {
@@ -175,9 +182,8 @@ export const postgresConnector: Connector = {
   },
   countRows(config, query) {
     return withReadOnly(config, async (tx) => {
-      const built = buildRowQuery({ ...query, columns: [] }, "postgres", 1, false);
-      const from = built.sql.slice(built.sql.indexOf(" FROM "), built.sql.indexOf(" ORDER BY "));
-      const [row] = (await tx.unsafe(`SELECT count(*)::bigint AS n${from}`, built.params as never[])) as unknown as { n: unknown }[];
+      const built = buildCountQuery(query);
+      const [row] = (await tx.unsafe(built.sql, built.params as never[])) as unknown as { n: unknown }[];
       return Number(row?.n ?? 0);
     });
   },

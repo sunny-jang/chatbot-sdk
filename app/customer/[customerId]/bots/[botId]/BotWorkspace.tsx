@@ -1,5 +1,6 @@
 "use client";
 import WebSourceManager from "@/app/components/WebSourceManager";
+import DbSourceManager from "@/app/components/DbSourceManager";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -30,6 +31,8 @@ type RecordRow = {
   question?: string;
   answer?: string;
   folder_id?: string | null;
+  source_kind?: string | null;
+  archived_at?: number | null;
   user_message?: string;
   bot_reply?: string;
   created_at?: number;
@@ -456,12 +459,20 @@ export default function BotWorkspace({
         </section>
       )}
       {tab === "docs" && (
-        <WebSourceManager
-          botId={bot.id}
-          apiBase={base}
-          onApplied={() => setRevision((v) => v + 1)}
-          folders={folders.map((f) => ({ id: f.id, name: f.name || "" }))}
-        />
+        <>
+          <WebSourceManager
+            botId={bot.id}
+            apiBase={base}
+            onApplied={() => setRevision((v) => v + 1)}
+            folders={folders.map((f) => ({ id: f.id, name: f.name || "" }))}
+          />
+          <DbSourceManager
+            apiBase={base}
+            onApplied={() => setRevision((v) => v + 1)}
+            folders={folders.map((f) => ({ id: f.id, name: f.name || "" }))}
+            settingsHref={`/customer/${customerId}/settings`}
+          />
+        </>
       )}
       {["docs", "qa"].includes(tab) && (
         <>
@@ -664,7 +675,11 @@ export default function BotWorkspace({
             </h2>
             {rows.map((r) => (
               <article className="cp-knowledge-row" key={r.id}>
-                <strong>{r.title || r.question}</strong>
+                <strong>
+                  {r.title || r.question}
+                  {r.source_kind === "db" && <span className="cp-chip dbs-badge">DB</span>}
+                  {r.archived_at && <span className="cp-chip muted dbs-badge">보관됨 · 검색 제외</span>}
+                </strong>
                 <p>{r.content || r.answer}</p>
                 <div className="cp-row">
                   <button

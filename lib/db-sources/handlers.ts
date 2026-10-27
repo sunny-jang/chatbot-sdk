@@ -25,6 +25,13 @@ function wrap<T>(p: Promise<T>): Promise<T> {
     throw e;
   });
 }
+/** adminBot이 고객사 경로에서 돌려주는 bot에는 customer_id가 없으므로 따로 읽는다. 권한 확인은 adminBot이 이미 했다. */
+async function botRef(id: string, allowCustomer: boolean) {
+  const { tenantId } = await adminBot(id, db, false, allowCustomer);
+  const [row] = await db`SELECT id, customer_id FROM bots WHERE id=${id} AND tenant_id=${tenantId}`;
+  if (!row) throw new OperationError("챗봇을 찾을 수 없습니다.", 404);
+  return { tenantId, b: { id: String(row.id), customer_id: row.customer_id ? String(row.customer_id) : null } };
+}
 async function actorOf(tenantId: string) {
   try {
     const user = await portalUser();
@@ -37,8 +44,7 @@ async function actorOf(tenantId: string) {
 export async function readDbSources(_: Request, { params }: Context, allowCustomer = false) {
   try {
     const { id } = await params;
-    const { bot } = await adminBot(id, db, false, allowCustomer);
-    const b = { id: String(bot.id), customer_id: bot.customer_id ? String(bot.customer_id) : null };
+    const { b } = await botRef(id, allowCustomer);
     const [connections, sources] = await Promise.all([listConnectionsForBot(db, b), listDbSources(db, id)]);
     return Response.json({ assigned: Boolean(b.customer_id), connections, sources });
   } catch (e) {
@@ -49,8 +55,7 @@ export async function readDbSources(_: Request, { params }: Context, allowCustom
 export async function manageDbSources(req: Request, { params }: Context, allowCustomer = false) {
   try {
     const { id } = await params;
-    const { bot, tenantId } = await adminBot(id, db, false, allowCustomer);
-    const b = { id: String(bot.id), customer_id: bot.customer_id ? String(bot.customer_id) : null };
+    const { b, tenantId } = await botRef(id, allowCustomer);
     const body = await jsonBody(req);
     const action = String(body.action ?? "");
     if (action === "tables") {

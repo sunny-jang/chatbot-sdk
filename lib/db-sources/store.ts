@@ -28,6 +28,7 @@ export type DbSourceRow = {
   last_error: string | null;
   consecutive_failures: number;
   sync_locked_at: number | null;
+  sync_started_at?: number | null;
   created_at: number;
   updated_at: number;
 };
