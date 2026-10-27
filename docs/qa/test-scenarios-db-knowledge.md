@@ -256,3 +256,22 @@ QA 서버에는 OpenAI 키가 없다. 가져오기·답변 미리보기를 끝�
 
 리뷰(/code-review high) 7건 반영: 질문마다 모든 임베딩을 다시 파싱하지 않도록 봇별 60초 캐시(문서 수·최신 생성·보관 수가 바뀌면 즉시 무효화 — 근본 해결인 pgvector 전환은 후속), 방문자에게 보이는 출처를 행 제목만으로(연결·테이블 이름 비공개), 단위 표기 정리(₩·KRW·"원(부가세 포함)" → 원, EA → 개), 타입을 모를 때 앞자리 0 없는 숫자 문자열도 숫자 필드로, "1만5천원대" 같은 복합 금액은 끝자리 기준 좁은 범위, 날짜 컬럼은 unit "date"로 저장(D-01), 출처 목록 헬퍼 `sourcesOf` 단위 검사.
 
+### 2026-10-27 — 단계 E 실행 (`feat/db-knowledge-e-mysql`)
+
+QA "고객사 DB"에 MySQL을 추가했다: Docker `chatbot-qa-mysql`(mysql:8.4, 127.0.0.1:55437), 시드 `scripts/seed-db-knowledge-mysql-qa.ts`(customer_sample·읽기 전용 sample_reader·menu 5행, DECIMAL 가격), 접속 정보는 `/tmp/chatbot-qa-runtime/mysql-fixture.json`.
+
+자동: 단위 177/177 · DB 30건(E-D1·E-D2·E-D3·E-D5 추가, 전부 롤백) · HTTP 32/32(E-01~E-03 추가) · `tsc`·빌드 통과(eslint 오류 2건은 이번 변경 전부터 있던 `app/admin/AdminClient.tsx` 170행 따옴표).
+
+| 항목 | 결과 | 근거 |
+| --- | --- | --- |
+| E-01 MySQL 연결·테스트·테이블·초안·소스·가져오기 | 통과 | HTTP E-01, DB E-D3(읽기 전용 세션·20초 실행 제한·2행씩 키셋·DECIMAL 문자열 보존·숫자 필드), 수동 `e-mysql-connection.jpg`(MySQL 선택 시 포트 3306) |
+| E-02 MySQL 틀린 비밀번호·닫힌 포트 | 통과 | HTTP E-02, DB E-D3 |
+| E-03 무료 요금제 DB 연동 불가 | 통과 | HTTP E-03, DB E-D1(연결·소스 만들기·가져오기 모두 403) |
+| E-04 요금제 행 한도(에이전시 합계) | 통과(축소 검증: 엔터프라이즈 한도 70, 기존 65행 → 새 소스 5행만, 95행은 요금제 때문에 제외로 안내) | DB E-D2, 단위 `getDbRowLimit` |
+| E-05 마스터 집계 | 통과(집계 함수·API 응답 필드) — 화면은 마스터 로그인 정보가 QA에 없어 미캡처 | DB E-D5 (건수만, 접속 정보·본문 없음) |
+| E-06 요금제 표 "DB 지식 연동" | 반영 | `app/plan/page.tsx` 그로스 10,000행·프로 50,000행·엔터프라이즈 협의 |
+
+화면 점검 중 고친 것: 연결 폼의 "MySQL · MariaDB (준비 중)" 비활성 선택지를 활성화하고 DB 종류를 바꾸면 기본 포트(5432↔3306)가 따라 바뀌도록.
+
+검사 중 고친 것: DB 지식 스키마의 컬럼 추가를 "없을 때만 ALTER"로 바꿨다(ADD COLUMN IF NOT EXISTS도 표 잠금을 잡아 요청 경로와 다른 트랜잭션을 막을 수 있음). DB 검사는 스키마를 트랜잭션 밖에서 먼저 반영한다.
+

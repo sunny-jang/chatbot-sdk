@@ -28,7 +28,7 @@ type Source = {
   consecutiveFailures: number;
   syncing: boolean;
 };
-type ImportState = { processed: number; total: number; truncated: number; created: number; updated: number; unchanged: number; failed: number; archived: number; deleted: number; done: boolean; cursor: unknown };
+type ImportState = { planLimited?: number; planLimit?: number; processed: number; total: number; truncated: number; created: number; updated: number; unchanged: number; failed: number; archived: number; deleted: number; done: boolean; cursor: unknown };
 type Preview = { documents: { title: string; content: string }[]; answers: { question: string; title: string | null; answer: string | null; note: string | null }[] };
 
 const ROLE_LABEL: Record<Role, string> = { title: "제목", key: "고유키", body: "본문", excluded: "제외" };
@@ -277,7 +277,7 @@ export default function DbSourceManager({
         s.total === 0
           ? "가져올 행이 없어요. 필터 조건을 확인해주세요."
           : `가져오기를 마쳤어요. 반영 ${n(s.created)} · 갱신 ${n(s.updated)}${s.unchanged ? ` · 변경 없음 ${n(s.unchanged)}` : ""}${s.archived ? ` · 원본에서 사라져 보관 ${n(s.archived)}` : ""}${s.deleted ? ` · 원본에서 사라져 삭제 ${n(s.deleted)}` : ""}${s.failed ? ` · 실패 ${n(s.failed)}` : ""}${
-              s.truncated ? ` — ${n(s.truncated)}행이 상한(${n(s.total)}행)을 넘어 제외됐어요. 필터를 좁히거나 상한을 올려주세요.` : ""
+              s.planLimited ? ` — 요금제 한도(에이전시 합계 ${n(s.planLimit ?? 0)}행)에 맞춰 ${n(s.planLimited)}행은 가져오지 않았어요. 요금제를 올리거나 다른 소스를 정리해주세요.` : s.truncated ? ` — ${n(s.truncated)}행이 상한(${n(s.total)}행)을 넘어 제외됐어요. 필터를 좁히거나 상한을 올려주세요.` : ""
             }`,
       );
       applied();

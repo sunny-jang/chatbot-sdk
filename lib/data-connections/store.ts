@@ -5,6 +5,7 @@ import type { Permission } from "@/lib/access/policy";
 import { PortalError, text } from "@/lib/customer-portal/validation";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { connectorFor } from "./connectors";
+import { DB_KNOWLEDGE_DISABLED, getDbRowLimit, normalizePlan } from "@/lib/plans";
 import { connectionHostname, connectionPort } from "./host";
 import {
   CONNECTION_KINDS,
@@ -76,6 +77,15 @@ export function toView(row: DataConnectionRow): DataConnectionView {
 }
 
 export const NOT_FOUND = "데이터 연결을 찾을 수 없습니다.";
+
+/** 요금제의 DB 지식 한도(에이전시 합계). 0이면 DB 연동을 쓸 수 없다. */
+export async function tenantDbRowLimit(db: AccessDatabase, tenantId: string) {
+  const [t] = await db`SELECT plan, enterprise_db_row_limit FROM tenants WHERE id=${tenantId}`;
+  return getDbRowLimit(normalizePlan(t?.plan), t?.enterprise_db_row_limit === null || t?.enterprise_db_row_limit === undefined ? null : Number(t.enterprise_db_row_limit));
+}
+export async function assertDbKnowledgeAllowed(db: AccessDatabase, tenantId: string) {
+  if ((await tenantDbRowLimit(db, tenantId)) <= 0) throw new PortalError(DB_KNOWLEDGE_DISABLED, 403);
+}
 
 /** 고객사 범위 밖이면 404로만 답한다(존재 여부를 알려주지 않는다). */
 export async function connectionAccess(
@@ -181,8 +191,8 @@ export async function createDataConnection(
   input: Record<string, unknown>,
 ) {
   const grant = await connectionAccess(db, userId, customerId, "settings.manage");
+  await assertDbKnowledgeAllowed(db, grant.tenant_id);
   const values = connectionInput(input);
-  connectorFor(values.kind); // 아직 지원하지 않는 종류면 여기서 거부
   await db`SELECT id FROM customers WHERE id=${customerId} FOR UPDATE`;
   const [{ count }] = await db`SELECT count(*)::int AS count FROM data_connections WHERE customer_id=${customerId} AND status<>'deleted'`;
   if (Number(count) >= CONNECTION_LIMIT_PER_CUSTOMER)
@@ -203,7 +213,6 @@ export async function updateDataConnection(
 ) {
   const { row, grant } = await dataConnection(db, userId, customerId, connectionId, "settings.manage", true);
   const values = connectionInput(input, row);
-  connectorFor(values.kind);
   const credentialsChanged =
     values.host !== row.host ||
     values.port !== Number(row.port) ||

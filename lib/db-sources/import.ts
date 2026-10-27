@@ -4,7 +4,8 @@ import type { AccessDatabase } from "@/lib/access/schema";
 import { PortalError } from "@/lib/customer-portal/validation";
 import { getEmbeddings, fakeEmbeddingsEnabled } from "@/lib/embeddings";
 import { connectorFor } from "@/lib/data-connections/connectors";
-import { credentialsOf, type DataConnectionRow } from "@/lib/data-connections/store";
+import { credentialsOf, tenantDbRowLimit, type DataConnectionRow } from "@/lib/data-connections/store";
+import { DB_KNOWLEDGE_DISABLED } from "@/lib/plans";
 import type { RowQuery } from "@/lib/data-connections/types";
 import { numericFieldsOf, renderRowDocument, rowHash, rowKeyOf } from "./render";
 import { configOf, type DbSourceRow } from "./store";
@@ -24,6 +25,9 @@ export type ImportState = {
   deleted: number;
   /** 누가 시작했는지. 자동 동기화(cron)는 다음 호출에서 이어 받고, 화면(manual) 실행은 브라우저가 이어 간다. */
   runner?: "manual" | "cron";
+  /** 요금제 한도 때문에 줄인 행 수(상한 초과와 따로 안내). */
+  planLimited?: number;
+  planLimit?: number;
   /** 이번 실행 식별자. 이번 실행에서 본 행에 기록하고, 끝날 때 기록이 없는 행을 사라진 행으로 본다. */
   runId?: string;
 };
@@ -61,8 +65,16 @@ export async function beginImport(source: DbSourceRow, db: Db = sql, runner: "ma
       throw new PortalError(
         `고유키로 고른 ${config.keyColumn} 컬럼에 같은 값이나 빈 값이 있어요(${count.toLocaleString("ko-KR")}행 중 서로 다른 값 ${distinctKeys.toLocaleString("ko-KR")}개). 행마다 다른 값이 들어 있는 컬럼(예: id)을 골라주세요.`,
       );
-    const total = Math.min(count, config.rowLimit);
-    const state: ImportState = { cursor: null, processed: 0, total, truncated: Math.max(0, count - config.rowLimit), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0, runner, runId: randomUUID() };
+    // 요금제 한도(에이전시 합계)에서 다른 소스가 이미 쓰는 행을 뺀 만큼만 이번 소스에 쓸 수 있다.
+    const [owner] = await db`SELECT b.tenant_id FROM bots b WHERE b.id=${source.bot_id}`;
+    const planLimit = await tenantDbRowLimit(db as unknown as AccessDatabase, String(owner?.tenant_id ?? ""));
+    if (planLimit <= 0) throw new PortalError(DB_KNOWLEDGE_DISABLED, 403);
+    const [used] = await db`SELECT count(*)::int AS n FROM db_source_rows r JOIN db_sources s ON s.id=r.source_id JOIN bots b ON b.id=s.bot_id
+      WHERE b.tenant_id=${owner?.tenant_id} AND r.status='active' AND r.source_id<>${source.id}`;
+    const room = Math.max(0, planLimit - Number(used?.n ?? 0));
+    const total = Math.min(count, config.rowLimit, room);
+    const planLimited = Math.min(count, config.rowLimit) - total;
+    const state: ImportState = { planLimited, planLimit, cursor: null, processed: 0, total, truncated: Math.max(0, count - total), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0, runner, runId: randomUUID() };
     await db`UPDATE db_sources SET sync_state=${db.json(state as never)} WHERE id=${source.id}`;
     return state;
   } catch (e) {

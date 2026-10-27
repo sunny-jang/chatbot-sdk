@@ -149,3 +149,36 @@ test("nextSyncAt: manual none, hourly +1h, daily next 03:00 KST, weekly +6 days 
   assert.equal(new Date(daily * 1000).toISOString(), "2026-10-26T18:00:00.000Z"); // 10/27 03:00 KST
   assert.equal(nextSyncAt("weekly", from), daily + 6 * 86400);
 });
+
+test("단계 E: 요금제별 DB 지식 행 한도", async () => {
+  const { getDbRowLimit } = await import("../lib/plans");
+  assert.equal(getDbRowLimit("starter"), 0);
+  assert.equal(getDbRowLimit("growth"), 10_000);
+  assert.equal(getDbRowLimit("pro"), 50_000);
+  assert.equal(getDbRowLimit("enterprise"), 100_000);
+  assert.equal(getDbRowLimit("enterprise", 250_000), 250_000);
+  assert.equal(getDbRowLimit("growth", 250_000), 10_000, "엔터프라이즈 값은 엔터프라이즈에만");
+});
+
+test("단계 E: MySQL 행 질의 — 백틱 인용·? 바인딩·기본 스키마는 접속 DB", async () => {
+  const { buildMysqlRowQuery } = await import("../lib/data-connections/connectors/mysql");
+  const config = { kind: "mysql" as const, host: "db.example.com", port: 3306, database: "shop", username: "r", password: "x", ssl: false };
+  const q = buildMysqlRowQuery(
+    {
+      schema: "public",
+      table: "me`nu",
+      columns: ["name", "price"],
+      keyColumn: "id",
+      filters: [
+        { column: "name", op: "eq", value: "'; DROP TABLE menu; --", kind: "text" },
+        { column: "price", op: "lte", value: "20,000", kind: "number" },
+      ],
+    },
+    config,
+    100,
+    true,
+  );
+  assert.equal(q.sql, "SELECT `id`, `name`, `price` FROM `shop`.`me``nu` WHERE CAST(`name` AS CHAR) = ? AND `price` <= ? AND `id` > ? ORDER BY `id` ASC LIMIT 100");
+  assert.deepEqual(q.params, ["'; DROP TABLE menu; --", 20000]);
+  assert.equal(q.count, "SELECT COUNT(*) AS n, COUNT(DISTINCT `id`) AS k FROM `shop`.`me``nu` WHERE CAST(`name` AS CHAR) = ? AND `price` <= ?");
+});

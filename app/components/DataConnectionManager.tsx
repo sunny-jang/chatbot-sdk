@@ -333,11 +333,17 @@ export default function DataConnectionManager({
             </label>
             <label>
               DB 종류
-              <select className="cp-input" value={form.kind} onChange={(e) => field("kind", e.target.value)}>
+              <select
+                className="cp-input"
+                value={form.kind}
+                onChange={(e) => {
+                  const kind = e.target.value as Form["kind"];
+                  // 기본 포트만 바꿔 준다(직접 바꾼 포트는 그대로).
+                  setForm((f) => (f ? { ...f, kind, port: f.port === "5432" || f.port === "3306" || !f.port ? (kind === "mysql" ? "3306" : "5432") : f.port } : f));
+                }}
+              >
                 <option value="postgres">PostgreSQL</option>
-                <option value="mysql" disabled>
-                  MySQL · MariaDB (준비 중)
-                </option>
+                <option value="mysql">MySQL · MariaDB</option>
               </select>
             </label>
             <label className="cp-conn-host">

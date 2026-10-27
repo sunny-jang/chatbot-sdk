@@ -1,3 +1,4 @@
+import { dbKnowledgeStats } from "@/lib/db-sources/stats";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import AdminClient from "./AdminClient";
@@ -38,11 +39,12 @@ export default async function AdminPage() {
     ORDER BY t.created_at DESC
   `) as unknown as Omit<TenantRow, "monthly_session_count">[];
 
+  const stats = await dbKnowledgeStats();
   const tenants = await Promise.all(tenantRows.map(async (tenant) => {
     const plan = normalizePlan(tenant.plan);
     const limit = getMonthlySessionLimit(plan, tenant.enterprise_monthly_session_limit);
     const usage = limit === null ? null : await getMonthlySessionUsage(tenant.id, limit);
-    return { ...tenant, monthly_session_count: usage?.used ?? 0 };
+    return { ...tenant, monthly_session_count: usage?.used ?? 0, db_knowledge: stats.get(tenant.id) ?? null };
   }));
 
   const ready = await platformReady(sql);
