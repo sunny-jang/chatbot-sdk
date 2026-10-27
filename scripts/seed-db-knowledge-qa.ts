@@ -60,6 +60,21 @@ async function main() {
     )`;
     await sample`TRUNCATE members`;
     await sample`INSERT INTO members VALUES (1,'홍길동','010-0000-0001','hong@example.test','서울시 어딘가','VIP','2026-01-05'),(2,'김영희','010-0000-0002','kim@example.test','부산시 어딘가','일반','2026-03-10')`;
+    // 실시간 조회(PRD-db-live-lookup)용 재고 표. 메뉴 표는 DB 지식 검사가 쓰므로 건드리지 않는다.
+    await sample`CREATE TABLE IF NOT EXISTS menu_stock (
+      id INTEGER PRIMARY KEY, name TEXT NOT NULL, size TEXT NOT NULL, category TEXT NOT NULL, stock INTEGER NOT NULL, is_active INTEGER NOT NULL DEFAULT 1
+    )`;
+    await sample`TRUNCATE menu_stock`;
+    await sample`INSERT INTO menu_stock(id,name,size,category,stock,is_active) VALUES
+      (1,'아메리카노','R','커피',12,1),(2,'아메리카노','L','커피',7,1),
+      (3,'카페라떼','R','커피',5,1),(4,'카페라떼','L','커피',0,1),
+      (5,'바닐라라떼','R','커피',3,1),(6,'콜드브루','R','커피',9,1),
+      (7,'자몽에이드','R','에이드',4,1),(8,'치즈케이크','R','디저트',2,1),
+      (9,'초코 브라우니','R','디저트',0,0)`;
+    // 실행 제한(G7) 검사용: 행마다 1초 쉬는 뷰.
+    await sample.unsafe(`CREATE OR REPLACE FUNCTION slow_text(t text) RETURNS text LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(1); RETURN t; END $$`);
+    await sample.unsafe(`CREATE OR REPLACE VIEW slow_stock AS SELECT id, slow_text(name) AS name, size, stock FROM menu_stock`);
+    await sample`ANALYZE menu_stock`;
     await sample`ANALYZE menu`;
     await sample`ANALYZE menu_big`;
     await sample`ANALYZE members`;

@@ -15,6 +15,9 @@ import { enforceRateLimit, ensureChatSession, fanOutToSupportChannels, saveChatM
 import { getSupportStatus } from "@/lib/supportHours";
 import { readTenantId } from "@/lib/auth";
 import { bindProactiveContext } from "@/lib/proactive-context";
+import type { AccessDatabase } from "@/lib/access/schema";
+import { liveLookupsFor, runToolCalls, toolsOf, type ToolRun } from "@/lib/db-lookups/run";
+import { BROAD_REQUEST_INSTRUCTIONS, LIVE_LOOKUP_INSTRUCTIONS, isBroadRequest, liveSourceLabel } from "@/lib/db-lookups/config";
 
 type AnalyticsLog = {
   intent: string;
@@ -281,9 +284,14 @@ async function POSTHandler(
     relevantDocs = await searchDocuments(botId, queryEmbedding, message);
   }
   // 위젯 "출처 보기"용. DB에서 온 문서의 행 제목만 담는다.
-  const sources = sourcesOf(relevantDocs);
+  const sources: { kind: "db" | "live"; label: string }[] = sourcesOf(relevantDocs);
 
-  if (ragAiMode && relevantDocs.length === 0 && !proactive?.knowledge.length) {
+  // 실시간 조회(PRD-db-live-lookup). OpenAI 모델에서만 도구로 붙인다. 범위가 넓은 요청이면 이번 메시지에는 도구를 주지 않는다(G8).
+  const liveLookups = selectedModel.startsWith("gemini-") ? [] : await liveLookupsFor(sql as unknown as AccessDatabase, botId, bot.tenant_id);
+  const broadRequest = liveLookups.length > 0 && isBroadRequest(String(message));
+  const liveTools = broadRequest ? [] : toolsOf(liveLookups);
+
+  if (ragAiMode && relevantDocs.length === 0 && !proactive?.knowledge.length && !liveLookups.length) {
     const reply = "등록된 문서에서 해당 질문에 대한 내용을 찾을 수 없습니다. 다른 표현으로 질문하거나 Q&A 목록을 이용해주세요.";
     await saveLog(botId, sessionId, message, reply, {
       intent: classifyIntent(message), refused: true, refusalReason: "RAG 문서 근거 없음",
@@ -304,6 +312,11 @@ async function POSTHandler(
   }
   if (ragAiMode) {
     systemContent = `${systemContent ? systemContent + "\n\n" : ""}등록된 참고 문서만 근거로 답변하세요. 문서에 근거가 없으면 추측하거나 일반 지식으로 답하지 말고, 등록된 문서에서 해당 내용을 찾을 수 없다고 안내하세요.`;
+  }
+  if (liveTools.length) {
+    systemContent = `${systemContent ? systemContent + "\n\n" : ""}${LIVE_LOOKUP_INSTRUCTIONS}${ragAiMode ? "\n실시간 조회 결과도 답의 근거로 쓸 수 있다." : ""}`;
+  } else if (broadRequest) {
+    systemContent = `${systemContent ? systemContent + "\n\n" : ""}${BROAD_REQUEST_INSTRUCTIONS}`;
   }
   if (relevantDocs.length > 0) {
     const context = buildDocumentContext(relevantDocs);
@@ -359,11 +372,37 @@ async function POSTHandler(
 
   const openai = new OpenAI({ apiKey: tenantApiKeys.openai as string });
   let completion;
+  let toolRuns: ToolRun[] = [];
+  let toolTokens = { input: 0, output: 0 };
   try {
-    completion = await openai.chat.completions.create({
-      model: bot.model || "gpt-4o-mini",
-      messages,
-    });
+    if (liveTools.length) {
+      // 1차: 도구를 붙여 호출. 도구 호출이 있으면 최대 2개 실행(G5) 후 도구 없이 2차 호출로 답을 만든다(라운드 1회).
+      const first = await openai.chat.completions.create({
+        model: bot.model || "gpt-4o-mini",
+        messages,
+        tools: liveTools,
+        tool_choice: "auto",
+      });
+      const calls = (first.choices[0].message.tool_calls ?? []).flatMap((c) =>
+        c.type === "function" ? [{ id: c.id, name: c.function.name, arguments: c.function.arguments }] : [],
+      );
+      if (calls.length) {
+        toolTokens = { input: first.usage?.prompt_tokens ?? 0, output: first.usage?.completion_tokens ?? 0 };
+        toolRuns = await runToolCalls(sql as unknown as AccessDatabase, liveLookups, calls, { botId, sessionId });
+        messages.push({
+          role: "assistant",
+          content: first.choices[0].message.content ?? null,
+          tool_calls: calls.map((c) => ({ id: c.id, type: "function" as const, function: { name: c.name, arguments: c.arguments } })),
+        });
+        for (const run of toolRuns) messages.push({ role: "tool", tool_call_id: run.id, content: JSON.stringify(run.result) });
+        completion = await openai.chat.completions.create({ model: bot.model || "gpt-4o-mini", messages });
+      } else completion = first;
+    } else {
+      completion = await openai.chat.completions.create({
+        model: bot.model || "gpt-4o-mini",
+        messages,
+      });
+    }
   } catch {
     await saveLog(botId, sessionId, message, "요청 처리 중 오류가 발생했습니다.", {
       intent: classifyIntent(message), refused: false, refusalReason: null,
@@ -377,8 +416,14 @@ async function POSTHandler(
   const reply = completion.choices[0].message.content ?? "";
   const explicitRefusal = completion.choices[0].message.refusal;
   const refusal = detectRefusal(reply, explicitRefusal);
-  const inputTokens = completion.usage?.prompt_tokens ?? 0;
-  const outputTokens = completion.usage?.completion_tokens ?? 0;
+  const inputTokens = (completion.usage?.prompt_tokens ?? 0) + toolTokens.input;
+  const outputTokens = (completion.usage?.completion_tokens ?? 0) + toolTokens.output;
+  // 실시간 조회 출처: 값을 돌려준 조회만, "재고 조회 · 14:03 기준".
+  for (const run of toolRuns)
+    if (run.lookup && (run.result.status === "ok" || run.result.status === "empty"))
+      sources.push({ kind: "live", label: liveSourceLabel(run.lookup.name, run.result.at) });
+  const liveToolName = toolRuns.length ? `실시간 조회(${[...new Set(toolRuns.map((r) => r.lookup?.name ?? "알 수 없음"))].join(", ")})` : null;
+  const liveToolSuccess = toolRuns.length ? toolRuns.some((r) => r.result.status === "ok" || r.result.status === "empty") : null;
   const model = completion.model || bot.model || "gpt-4o-mini";
   await saveLog(botId, sessionId, message, reply, {
     intent: classifyIntent(message),
@@ -390,13 +435,13 @@ async function POSTHandler(
     latencyMs: Date.now() - startedAt,
     apiSuccess: true,
     estimatedCostUsd: estimateOpenAICost(model, inputTokens, outputTokens),
-    toolName: relevantDocs.length > 0 ? "문서 검색(RAG)" : null,
-    toolSuccess: relevantDocs.length > 0 ? true : null,
+    toolName: liveToolName ?? (relevantDocs.length > 0 ? "문서 검색(RAG)" : null),
+    toolSuccess: liveToolSuccess ?? (relevantDocs.length > 0 ? true : null),
   });
   await saveChatMessage(sessionId, "bot", reply, "bot");
 
   const usedDocs = relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) }));
-  return NextResponse.json({ reply, usedDocs, sources, usage: reservation.usage, handoffAvailable: supportLive && (refusal.refused || relevantDocs.length === 0) });
+  return NextResponse.json({ reply, usedDocs, sources, usage: reservation.usage, handoffAvailable: supportLive && (refusal.refused || (relevantDocs.length === 0 && !liveToolSuccess)) });
 }
 
 export const POST = withWidgetCors(POSTHandler);

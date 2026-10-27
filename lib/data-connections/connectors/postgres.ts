@@ -6,6 +6,10 @@ import { resolveConnectionHost } from "../host";
 import { qualifiedName, quoteIdentifier, displayTableName } from "../identifiers";
 import {
   CONNECT_TIMEOUT_S,
+  LOOKUP_CONNECT_TIMEOUT_S,
+  LOOKUP_TIMEOUT_MS,
+  LookupTimeoutError,
+  escapeLike,
   POOL_MAX,
   READ_BATCH,
   SAMPLE_LIMIT,
@@ -13,6 +17,8 @@ import {
   type ColumnInfo,
   type ConnectionConfig,
   type Connector,
+  type LookupQuery,
+  type RowFilter,
   type RowQuery,
   type SampleResult,
   type TableInfo,
@@ -23,7 +29,8 @@ type Sql = ReturnType<typeof postgres>;
 type Tx = Parameters<Parameters<Sql["begin"]>[1]>[0];
 
 /** 호스트를 공개 주소로 확인한 뒤 읽기 전용 트랜잭션 하나를 열어 fn을 실행한다. 끝나면 풀을 닫는다. */
-async function withReadOnly<T>(config: ConnectionConfig, fn: (tx: Tx) => Promise<T>): Promise<T> {
+type SessionOptions = { timeoutMs?: number; connectTimeoutS?: number };
+async function withReadOnly<T>(config: ConnectionConfig, fn: (tx: Tx) => Promise<T>, opts: SessionOptions = {}): Promise<T> {
   const resolved = await resolveConnectionHost(config.host);
   const sql = postgres({
     host: resolved.address,
@@ -34,12 +41,12 @@ async function withReadOnly<T>(config: ConnectionConfig, fn: (tx: Tx) => Promise
     // 호스트 이름으로 SNI를 보내되, IP 주소에는 servername을 줄 수 없다(Node TLS 제약).
     ssl: config.ssl ? { rejectUnauthorized: false, ...(/^[a-z0-9.-]+$/.test(config.host) && !isIP(config.host) ? { servername: config.host } : {}) } : false,
     max: POOL_MAX,
-    connect_timeout: CONNECT_TIMEOUT_S,
+    connect_timeout: opts.connectTimeoutS ?? CONNECT_TIMEOUT_S,
     idle_timeout: 5,
     max_lifetime: 120,
     prepare: false,
     connection: {
-      statement_timeout: STATEMENT_TIMEOUT_MS,
+      statement_timeout: opts.timeoutMs ?? STATEMENT_TIMEOUT_MS,
       application_name: "idealai-db-knowledge",
     },
     onnotice: () => {},
@@ -47,7 +54,9 @@ async function withReadOnly<T>(config: ConnectionConfig, fn: (tx: Tx) => Promise
   try {
     return (await sql.begin("read only", (tx) => fn(tx as Tx))) as T;
   } catch (e) {
-    if (e instanceof PortalError) throw e;
+    if (e instanceof PortalError || e instanceof LookupTimeoutError) throw e;
+    // 실시간 조회는 실행 제한 초과를 사유 문장이 아니라 상태로 돌려준다.
+    if (opts.timeoutMs && String((e as { code?: unknown })?.code) === "57014") throw new LookupTimeoutError();
     throw new PortalError(humanizeConnectionError(e, "postgres"), 400);
   } finally {
     await sql.end({ timeout: 2 }).catch(() => {});
@@ -110,15 +119,11 @@ function numeric(value: unknown): number {
   if (!Number.isFinite(n) || String(value).trim() === "") throw new PortalError("숫자 필터 값을 확인해주세요.");
   return n;
 }
-/**
- * 필터는 컬럼 인용 + 값 바인딩으로만 만든다. 연산자는 목록 밖이면 거부.
- * 비교 방식은 필터의 kind(컬럼 타입에서 정함)로 정한다: number면 숫자 비교, 아니면 텍스트 비교.
- * 고유키는 네이티브 타입으로 정렬·비교해 기본키 인덱스를 쓴다(withCursor일 때 마지막 파라미터가 커서).
- */
-export function buildRowQuery(query: RowQuery, kind: "postgres" = "postgres", batch = READ_BATCH, withCursor = false) {
-  const params: unknown[] = [];
+/** 고정 필터 → WHERE 조각. 값은 params에 바인딩하고 자리표시자 번호를 이어서 쓴다. */
+export function filterClauses(filters: RowFilter[], params: unknown[]): string[] {
+  const kind = "postgres" as const;
   const where: string[] = [];
-  for (const f of query.filters) {
+  for (const f of filters) {
     const col = quoteIdentifier(f.column, kind);
     const asNumber = f.kind === "number" || (f.kind === undefined && typeof f.value === "number");
     if (f.op === "is_null") where.push(`${col} IS NULL`);
@@ -137,6 +142,17 @@ export function buildRowQuery(query: RowQuery, kind: "postgres" = "postgres", ba
       where.push(asNumber ? `${col} ${OPS[f.op]} $${params.length}` : `${col}::text ${OPS[f.op]} $${params.length}`);
     } else throw new PortalError("지원하지 않는 필터예요.");
   }
+  return where;
+}
+
+/**
+ * 필터는 컬럼 인용 + 값 바인딩으로만 만든다. 연산자는 목록 밖이면 거부.
+ * 비교 방식은 필터의 kind(컬럼 타입에서 정함)로 정한다: number면 숫자 비교, 아니면 텍스트 비교.
+ * 고유키는 네이티브 타입으로 정렬·비교해 기본키 인덱스를 쓴다(withCursor일 때 마지막 파라미터가 커서).
+ */
+export function buildRowQuery(query: RowQuery, kind: "postgres" = "postgres", batch = READ_BATCH, withCursor = false) {
+  const params: unknown[] = [];
+  const where = filterClauses(query.filters, params);
   const key = quoteIdentifier(query.keyColumn, kind);
   const cols = [...new Set([query.keyColumn, ...query.columns])].map((c) => quoteIdentifier(c, kind)).join(", ");
   let cursorIndex: number | null = null;
@@ -157,6 +173,35 @@ export function buildCountQuery(query: RowQuery, kind: "postgres" = "postgres") 
   const from = built.sql.slice(built.sql.indexOf(" FROM "), built.sql.indexOf(" ORDER BY "));
   const key = quoteIdentifier(query.keyColumn, kind);
   return { sql: `SELECT count(*)::bigint AS n, count(DISTINCT ${key})::bigint AS k${from}`, params: built.params };
+}
+
+/** 행 질의 최대 크기. 실시간 조회는 최대 결과 수(≤10)+1만 읽는다. */
+export const LOOKUP_READ_MAX = 11;
+/**
+ * 실시간 조회 질의. 고정 필터 + 방문자 조건(같음: 대소문자 무시 텍스트 비교 / 포함: ILIKE, 와일드카드 이스케이프 / 숫자: 숫자 비교).
+ * 조건이 없으면 만들지 않는다(전체 조회 금지).
+ */
+export function buildLookupQuery(query: LookupQuery) {
+  if (!query.conditions.length) throw new PortalError("조건이 없는 조회는 실행할 수 없어요.");
+  if (!query.columns.length) throw new PortalError("보여줄 컬럼을 하나 이상 골라주세요.");
+  const params: unknown[] = [];
+  const where = filterClauses(query.filters, params);
+  for (const c of query.conditions) {
+    const col = quoteIdentifier(c.column);
+    if (c.kind === "number") {
+      params.push(numeric(c.value));
+      where.push(`${col} = $${params.length}`);
+    } else if (c.match === "contains") {
+      params.push(escapeLike(String(c.value)));
+      where.push(`${col}::text ILIKE '%' || $${params.length} || '%' ESCAPE '\\'`);
+    } else {
+      params.push(String(c.value));
+      where.push(`lower(${col}::text) = lower($${params.length})`);
+    }
+  }
+  const cols = [...new Set(query.columns)].map((c) => quoteIdentifier(c)).join(", ");
+  const limit = Math.max(1, Math.min(Math.floor(query.limit), LOOKUP_READ_MAX));
+  return { sql: `SELECT ${cols} FROM ${qualifiedName(query.schema, query.table)} WHERE ${where.join(" AND ")} LIMIT ${limit}`, params };
 }
 
 export const postgresConnector: Connector = {
@@ -207,5 +252,16 @@ export const postgresConnector: Connector = {
         if (cursor === null || cursor === undefined) return;
       }
     });
+  },
+  lookup(config, query, timeoutMs = LOOKUP_TIMEOUT_MS) {
+    return withReadOnly(
+      config,
+      async (tx) => {
+        const built = buildLookupQuery(query);
+        const rows = (await tx.unsafe(built.sql, built.params as never[])) as unknown as Record<string, unknown>[];
+        return rows.map(plainRow);
+      },
+      { timeoutMs, connectTimeoutS: LOOKUP_CONNECT_TIMEOUT_S },
+    );
   },
 };
