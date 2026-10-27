@@ -155,7 +155,8 @@ export function buildRowQuery(query: RowQuery, kind: "postgres" = "postgres", ba
 export function buildCountQuery(query: RowQuery, kind: "postgres" = "postgres") {
   const built = buildRowQuery({ ...query, columns: [] }, kind, 1, false);
   const from = built.sql.slice(built.sql.indexOf(" FROM "), built.sql.indexOf(" ORDER BY "));
-  return { sql: `SELECT count(*)::bigint AS n${from}`, params: built.params };
+  const key = quoteIdentifier(query.keyColumn, kind);
+  return { sql: `SELECT count(*)::bigint AS n, count(DISTINCT ${key})::bigint AS k${from}`, params: built.params };
 }
 
 export const postgresConnector: Connector = {
@@ -183,8 +184,8 @@ export const postgresConnector: Connector = {
   countRows(config, query) {
     return withReadOnly(config, async (tx) => {
       const built = buildCountQuery(query);
-      const [row] = (await tx.unsafe(built.sql, built.params as never[])) as unknown as { n: unknown }[];
-      return Number(row?.n ?? 0);
+      const [row] = (await tx.unsafe(built.sql, built.params as never[])) as unknown as { n: unknown; k: unknown }[];
+      return { total: Number(row?.n ?? 0), distinctKeys: Number(row?.k ?? 0) };
     });
   },
   readRows(config, query, onBatch, batch = READ_BATCH, startAfter = undefined) {

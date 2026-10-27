@@ -136,7 +136,9 @@ export function formatValue(value: unknown, col: BodyColumn): string | null {
   if (raw === "") return null;
   if (col.valueMap && col.valueMap[raw] !== undefined) return col.valueMap[raw];
   if (typeof value === "boolean") return col.valueMap?.[String(value)] ?? (value ? "예" : "아니오");
-  if (typeof value === "number" || /^-?\d+(\.\d+)?$/.test(raw)) {
+  // 숫자 타입 컬럼(또는 타입을 모를 때 JS 숫자)만 숫자로 다룬다. 문자열 "06236"(우편번호·코드)은 그대로 둔다.
+  const numericColumn = col.type ? isNumber(col.type) : typeof value === "number" || typeof value === "bigint";
+  if (numericColumn && /^-?\d+(\.\d+)?$/.test(raw)) {
     const n = Number(raw);
     const text = Number.isInteger(n) ? n.toLocaleString("ko-KR") : n.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
     return col.unit ? `${text}${col.unit}` : text;

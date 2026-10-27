@@ -226,7 +226,7 @@ async function main() {
       assert.equal(state.truncated, 0);
       let steps = 0;
       while (!state.done && steps < 20) {
-        state = await importStep(source, state, null, tx as never);
+        state = await importStep(source, null, tx as never);
         steps++;
       }
       assert.ok(state.done);
@@ -251,7 +251,7 @@ async function main() {
       // 단계마다 하트비트가 sync_locked_at을 앞으로 옮겨도 이번 실행에서 본 행은 보관하지 않아야 한다.
       await tx`UPDATE db_sources SET sync_locked_at=sync_locked_at+300 WHERE id=${menuSource.id}`;
       await tx`UPDATE db_source_rows SET synced_at=synced_at-600 WHERE source_id=${menuSource.id}`;
-      while (!state.done) state = await importStep(source, state, null, tx as never);
+      while (!state.done) state = await importStep(source, null, tx as never);
       assert.equal(state.archived, 0, "하트비트와 무관하게 실행 시작 시각 기준");
       assert.equal(state.created, 0);
       assert.equal(state.unchanged, 15);
@@ -267,10 +267,34 @@ async function main() {
       state = await beginImport(bigSource, tx as never);
       assert.equal(state.total, 50);
       assert.equal(state.truncated, 5150);
-      while (!state.done) state = await importStep(bigSource, state, null, tx as never);
+      while (!state.done) state = await importStep(bigSource, null, tx as never);
       assert.equal(state.created, 50);
       assert.equal((await tx`SELECT count(*)::int AS n FROM db_source_rows WHERE source_id=${big.id}`)[0].n, 50);
       pass("B-D3 행 상한: 50행만 반영하고 초과 5,150행을 결과에 기록");
+
+      // 리뷰 반영: 진행 상태는 서버가 들고, 시작 없이 단계 호출은 거부, 고유키 중복 거부, 화면 실패는 연속 실패에 안 셈
+      await assert.rejects(() => importStep(source, null, tx as never), { status: 409 });
+      const dupKey = await createDbSource(db, actor, { id: bot, customer_id: customer }, {
+        connectionId: live.id, table: "members", titleColumn: "grade", keyColumn: "grade",
+        bodyColumns: [{ column: "joined_at", label: "가입일", type: "date" }], schedule: "manual",
+      });
+      // members.grade는 2행 모두 달라 고유하므로 정상 → 지우고 menu.category(중복 있음)로 확인
+      await deleteDbSource(db, actor, { id: bot, customer_id: customer }, dupKey.id, "delete");
+      const bot2 = "bot2-" + suffix;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${bot2},${tenant},${customer},'카페 봇 2','ai')`;
+      const catKey = await createDbSource(db, actor, { id: bot2, customer_id: customer }, {
+        connectionId: live.id, table: "menu", schema: "public", titleColumn: "name", keyColumn: "category",
+        bodyColumns: [{ column: "price", label: "가격", unit: "원", type: "integer" }], schedule: "manual",
+      });
+      const catSource = await dbSource(db, bot2, catKey.id);
+      await assert.rejects(() => beginImport(catSource, tx as never), (e: unknown) => /같은 값이나 빈 값/.test((e as Error).message));
+      const [afterFail] = await tx`SELECT consecutive_failures, last_error, sync_locked_at, sync_state FROM db_sources WHERE id=${catKey.id}`;
+      assert.equal(Number(afterFail.consecutive_failures), 0, "화면에서 누른 실패는 연속 실패로 세지 않음");
+      assert.match(String(afterFail.last_error), /같은 값이나 빈 값/);
+      assert.equal(afterFail.sync_locked_at, null);
+      assert.equal(afterFail.sync_state, null);
+      await deleteDbSource(db, actor, { id: bot2, customer_id: customer }, catKey.id, "delete");
+      pass("B-D6 시작 없는 단계 409·고유키 중복 거부·화면 실패는 연속 실패 미집계·잠금 해제");
 
       // B-09 고객사당 소스 10개 한도
       for (let i = 0; i < 8; i++)

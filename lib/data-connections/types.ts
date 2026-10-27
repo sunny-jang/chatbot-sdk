@@ -65,6 +65,6 @@ export type Connector = {
     batch?: number,
     startAfter?: unknown,
   ): Promise<void>;
-  /** 필터를 적용한 행 수. */
-  countRows(config: ConnectionConfig, query: RowQuery): Promise<number>;
+  /** 필터를 적용한 행 수와 그중 고유키 값이 서로 다른(NULL 제외) 행 수. 둘이 다르면 고유키로 쓸 수 없다. */
+  countRows(config: ConnectionConfig, query: RowQuery): Promise<{ total: number; distinctKeys: number }>;
 };

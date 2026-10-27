@@ -10,7 +10,7 @@ import { splitTableName } from "@/lib/data-connections/identifiers";
 import { credentialsOf } from "@/lib/data-connections/store";
 import { draftWithAi } from "./draft";
 import { renderRowDocument } from "./render";
-import { beginImport, importStep, rowQueryOf, type ImportState } from "./import";
+import { beginImport, importStep, rowQueryOf } from "./import";
 import { connectionForBot, createDbSource, dbSource, deleteDbSource, listConnectionsForBot, listDbSources, sourceConfig, updateDbSource } from "./store";
 import { PREVIEW_DOCS } from "./types";
 import OpenAI from "openai";
@@ -90,16 +90,17 @@ export async function manageDbSources(req: Request, { params }: Context, allowCu
     if (action === "delete")
       return Response.json(await wrap(sql.begin((tx) => deleteDbSource(tx as unknown as AccessDatabase, actor, b, text(body.sourceId, "소스", 200), body.documents === "delete" ? "delete" : "archive"))));
     if (action === "import") {
-      // 가져오기는 단계별로 호출한다: state 없이 시작 → 돌려받은 state를 다시 보내 다음 100행 → done이 true면 끝.
+      // 가져오기는 단계별로 호출한다: begin:true로 시작 → 같은 요청을 반복해 다음 100행 → done이 true면 끝.
+      // 커서·건수는 서버(db_sources.sync_state)가 들고 있고, 클라이언트는 진행률만 받는다.
       const source = await wrap(dbSource(db, id, text(body.sourceId, "소스", 200)));
       const key = await getTenantApiKeyByTenantId(tenantId);
-      let state: ImportState;
-      if (!body.state) {
-        state = await wrap(beginImport(source));
+      if (body.begin === true) {
+        await wrap(beginImport(source));
         await wrap(Promise.resolve(auditSync(actor, b.customer_id, source.id)));
-      } else state = importState(body.state);
-      state = await wrap(importStep(source, state, key));
-      return Response.json({ state, source: (await listDbSources(db, id)).find((s) => s.id === source.id) ?? null });
+      }
+      const state = await wrap(importStep(source, key));
+      const [view] = await listDbSources(db, id, source.id);
+      return Response.json({ state, source: view ?? null });
     }
     throw new OperationError("요청을 확인해주세요.");
   } catch (e) {
@@ -107,23 +108,6 @@ export async function manageDbSources(req: Request, { params }: Context, allowCu
   }
 }
 
-function importState(value: unknown): ImportState {
-  const v = (value ?? {}) as Record<string, unknown>;
-  const n = (k: string) => (Number.isFinite(Number(v[k])) ? Number(v[k]) : 0);
-  return {
-    cursor: v.cursor ?? null,
-    processed: n("processed"),
-    total: n("total"),
-    truncated: n("truncated"),
-    created: n("created"),
-    updated: n("updated"),
-    unchanged: n("unchanged"),
-    failed: n("failed"),
-    archived: n("archived"),
-    deleted: n("deleted"),
-    done: v.done === true,
-  };
-}
 async function auditSync(actor: { userId: string | null; tenantId: string }, customerId: string | null, sourceId: string) {
   const { audit } = await import("./store");
   await audit(db, actor, customerId, "db_source.sync", sourceId);

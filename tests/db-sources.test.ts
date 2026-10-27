@@ -81,6 +81,12 @@ test("formatValue: nulls dropped, ISO dates shortened, booleans readable", () =>
   assert.equal(formatValue("2026-10-01T09:00:00.000Z", { column: "d", label: "날짜" }), "2026-10-01");
   assert.equal(formatValue(true, { column: "b", label: "b" }), "예");
   assert.equal(formatValue(12.345, { column: "w", label: "무게", unit: "g" }), "12.35g");
+  // 숫자처럼 보이는 문자 컬럼(우편번호·코드)은 그대로
+  assert.equal(formatValue("06236", { column: "zip", label: "우편번호", type: "text" }), "06236");
+  assert.equal(formatValue("12345", { column: "code", label: "코드", type: "character varying" }), "12345");
+  assert.equal(formatValue("06236", { column: "zip", label: "우편번호" }), "06236");
+  // numeric·bigint는 문자열로 와도 숫자 타입이면 구분 기호
+  assert.equal(formatValue("25000", { column: "price", label: "가격", unit: "원", type: "numeric" }), "25,000원");
 });
 
 test("rowHash: deterministic and sensitive to content", () => {
@@ -116,7 +122,7 @@ test("buildRowQuery: identifiers quoted, values bound, injection stays a paramet
 
 test("buildCountQuery: same WHERE as the row query, no ORDER BY/LIMIT", () => {
   const c = buildCountQuery({ schema: "public", table: "menu", columns: ["name"], keyColumn: "id", filters: [{ column: "is_active", op: "eq", value: 1, kind: "number" }] });
-  assert.equal(c.sql, 'SELECT count(*)::bigint AS n FROM "public"."menu" WHERE "is_active" = $1');
+  assert.equal(c.sql, 'SELECT count(*)::bigint AS n, count(DISTINCT "id")::bigint AS k FROM "public"."menu" WHERE "is_active" = $1');
   assert.deepEqual(c.params, [1]);
 });
 

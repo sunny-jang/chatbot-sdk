@@ -56,6 +56,8 @@ export async function createDataKnowledgeSchema(db: AccessDatabase) {
   await db`CREATE INDEX IF NOT EXISTS db_sources_due_idx ON db_sources(next_sync_at) WHERE enabled`;
   // 실행 시작 시각. sync_locked_at은 단계마다 갱신되는 하트비트라 "이번 실행에서 못 본 행"의 기준으로 쓸 수 없다.
   await db`ALTER TABLE db_sources ADD COLUMN IF NOT EXISTS sync_started_at BIGINT`;
+  // 진행 중인 가져오기의 커서·건수. 클라이언트가 보낸 값은 믿지 않고 서버가 들고 있는다.
+  await db`ALTER TABLE db_sources ADD COLUMN IF NOT EXISTS sync_state JSONB`;
   await db`CREATE TABLE IF NOT EXISTS db_source_rows (
     source_id TEXT NOT NULL REFERENCES db_sources(id) ON DELETE CASCADE,
     row_key TEXT NOT NULL,

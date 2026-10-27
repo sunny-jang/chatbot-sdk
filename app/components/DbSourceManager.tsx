@@ -216,7 +216,7 @@ export default function DbSourceManager({
       keyColumn: key?.column ?? "",
       bodyColumns: draft
         .filter((c) => c.role === "body")
-        .map((c) => ({ column: c.column, label: c.label.trim() || c.column, unit: c.unit.trim(), valueMap: parseMap(mapTexts[c.column] ?? "") })),
+        .map((c) => ({ column: c.column, type: c.type, label: c.label.trim() || c.column, unit: c.unit.trim(), valueMap: parseMap(mapTexts[c.column] ?? "") })),
       excludedColumns: draft.filter((c) => c.role === "excluded").map((c) => c.column),
       filters: filters
         .filter((f) => f.column)
@@ -261,7 +261,7 @@ export default function DbSourceManager({
     let state: ImportState | null = null;
     try {
       do {
-        const d = await post({ action: "import", sourceId, ...(state ? { state } : {}) });
+        const d = await post({ action: "import", sourceId, ...(state ? {} : { begin: true }) });
         state = d.state as ImportState;
         setProgress({ sourceId, state });
       } while (state && !state.done);

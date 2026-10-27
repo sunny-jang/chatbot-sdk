@@ -8,7 +8,7 @@ import { credentialsOf, type DataConnectionRow } from "@/lib/data-connections/st
 import type { RowQuery } from "@/lib/data-connections/types";
 import { renderRowDocument, rowHash, rowKeyOf } from "./render";
 import { configOf, type DbSourceRow } from "./store";
-import { IMPORT_STEP, type SourceConfig, type SyncResult } from "./types";
+import { EMBED_REQUEST_CHARS, IMPORT_STEP, type SourceConfig, type SyncResult } from "./types";
 
 export type ImportState = {
   cursor: unknown;
@@ -43,31 +43,48 @@ export async function liveConnection(db: AccessDatabase, source: DbSourceRow) {
   return conn;
 }
 
-/** 첫 단계: 행 수를 세고 잠금(sync_locked_at = 실행 시작 시각)을 건다. 이미 진행 중이면 409. */
+/** 첫 단계: 잠금을 걸고 행 수·고유키 중복을 확인한 뒤 진행 상태를 서버에 저장한다. 이미 진행 중이면 409. */
 export async function beginImport(source: DbSourceRow, db: Db = sql): Promise<ImportState> {
   const now = Math.floor(Date.now() / 1000);
-  const [locked] = await db`UPDATE db_sources SET sync_locked_at=${now}, sync_started_at=${now} WHERE id=${source.id} AND (sync_locked_at IS NULL OR sync_locked_at < ${now - LOCK_TTL}) RETURNING id`;
+  const [locked] = await db`UPDATE db_sources SET sync_locked_at=${now}, sync_started_at=${now}, sync_state=NULL WHERE id=${source.id} AND (sync_locked_at IS NULL OR sync_locked_at < ${now - LOCK_TTL}) RETURNING id`;
   if (!locked) throw new PortalError("이미 동기화 중이에요. 잠시 후 다시 시도해주세요.", 409);
   try {
     const conn = await liveConnection(db as unknown as AccessDatabase, source);
     const config = configOf(source);
-    const count = await connectorFor(conn.kind).countRows(credentialsOf(conn), rowQueryOf(config));
+    const { total: count, distinctKeys } = await connectorFor(conn.kind).countRows(credentialsOf(conn), rowQueryOf(config));
+    // 고유키에 같은 값·빈 값이 있으면 키 순서로 이어 읽을 때 행이 빠지고 문서가 중복된다.
+    if (distinctKeys !== count)
+      throw new PortalError(
+        `고유키로 고른 ${config.keyColumn} 컬럼에 같은 값이나 빈 값이 있어요(${count.toLocaleString("ko-KR")}행 중 서로 다른 값 ${distinctKeys.toLocaleString("ko-KR")}개). 행마다 다른 값이 들어 있는 컬럼(예: id)을 골라주세요.`,
+      );
     const total = Math.min(count, config.rowLimit);
-    return { cursor: null, processed: 0, total, truncated: Math.max(0, count - config.rowLimit), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0 };
+    const state: ImportState = { cursor: null, processed: 0, total, truncated: Math.max(0, count - config.rowLimit), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0 };
+    await db`UPDATE db_sources SET sync_state=${db.json(state as never)} WHERE id=${source.id}`;
+    return state;
   } catch (e) {
     await failImport(source, e, db);
     throw e;
   }
 }
 
-/** 한 단계: 커서 다음 행을 IMPORT_STEP개 읽어 문서로 반영한다. 끝나면 finalize까지 수행한다. */
-export async function importStep(source: DbSourceRow, state: ImportState, openaiKey: string | null, db: Db = sql): Promise<ImportState> {
-  const next = { ...state };
+/** 진행 중인 실행의 상태를 서버에서 읽는다. 잠금이 없거나 만료됐으면 처음부터 다시 시작해야 한다. */
+export async function currentImport(source: DbSourceRow, db: Db = sql): Promise<ImportState> {
+  const now = Math.floor(Date.now() / 1000);
+  const [row] = await db`SELECT sync_state, sync_locked_at FROM db_sources WHERE id=${source.id}`;
+  if (!row?.sync_state || !row.sync_locked_at || Number(row.sync_locked_at) < now - LOCK_TTL)
+    throw new PortalError("진행 중인 가져오기가 없어요. 처음부터 다시 시작해주세요.", 409);
+  return row.sync_state as ImportState;
+}
+
+/** 한 단계: 서버에 저장된 커서 다음 행을 IMPORT_STEP개 읽어 문서로 반영한다. 끝나면 finalize까지 수행한다. */
+export async function importStep(source: DbSourceRow, openaiKey: string | null, db: Db = sql, countFailure = false): Promise<ImportState> {
   try {
+    const state = await currentImport(source, db);
+    const next = { ...state };
     if (!state.done) {
       const conn = await liveConnection(db as unknown as AccessDatabase, source);
       const config = configOf(source);
-      const remaining = Math.max(0, config.rowLimit - state.processed);
+      const remaining = Math.max(0, Math.min(config.rowLimit, state.total) - state.processed);
       const batch = Math.max(1, Math.min(IMPORT_STEP, remaining));
       let rows: Record<string, unknown>[] = [];
       let lastKey: unknown = undefined;
@@ -90,20 +107,20 @@ export async function importStep(source: DbSourceRow, state: ImportState, openai
         next.unchanged += applied.unchanged;
         next.failed += applied.failed;
         next.processed += rows.length;
-        next.cursor = lastKey;
+        next.cursor = typeof lastKey === "bigint" ? String(lastKey) : lastKey instanceof Date ? lastKey.toISOString() : lastKey;
       }
-      next.done = !rows.length || rows.length < batch || next.processed >= config.rowLimit;
+      next.done = remaining === 0 || !rows.length || rows.length < batch || next.processed >= Math.min(config.rowLimit, state.total);
     }
     if (next.done) {
       const final = await finalizeImport(source, next, db);
       next.archived = final.archived;
       next.deleted = final.deleted;
     } else {
-      await db`UPDATE db_sources SET sync_locked_at=${Math.floor(Date.now() / 1000)}, last_result=${db.json(resultOf(next))} WHERE id=${source.id}`;
+      await db`UPDATE db_sources SET sync_locked_at=${Math.floor(Date.now() / 1000)}, sync_state=${db.json(next as never)}, last_result=${db.json(resultOf(next))} WHERE id=${source.id}`;
     }
     return next;
   } catch (e) {
-    await failImport(source, e, db);
+    await failImport(source, e, db, countFailure);
     throw e;
   }
 }
@@ -147,7 +164,21 @@ export async function applyRows(
     return !e || e.row_hash !== d.hash || !e.document_id;
   });
   if (toEmbed.length && !openaiKey && !fakeEmbeddingsEnabled()) throw new PortalError("OpenAI API 키를 등록해주세요.");
-  const vectors = toEmbed.length ? await getEmbeddings(toEmbed.map((d) => d.content.slice(0, 8000)), openaiKey) : [];
+  // 요청당 토큰 한도를 넘지 않게 본문 길이 합으로 나눠 보낸다.
+  const vectors: number[][] = [];
+  let chunk: string[] = [],
+    chars = 0;
+  for (const d of toEmbed) {
+    const text = d.content.slice(0, 8000);
+    if (chunk.length && chars + text.length > EMBED_REQUEST_CHARS) {
+      vectors.push(...(await getEmbeddings(chunk, openaiKey)));
+      chunk = [];
+      chars = 0;
+    }
+    chunk.push(text);
+    chars += text.length;
+  }
+  if (chunk.length) vectors.push(...(await getEmbeddings(chunk, openaiKey)));
   const vectorOf = new Map(toEmbed.map((d, i) => [d.key, vectors[i]]));
   const now = Math.floor(Date.now() / 1000);
   await withTx(db, async (tx) => {
@@ -199,15 +230,16 @@ export async function finalizeImport(source: DbSourceRow, state: ImportState, db
       archived = missing.length;
     }
     const { nextSyncAt } = await import("./store");
-    await tx`UPDATE db_sources SET sync_locked_at=NULL, last_synced_at=${Math.floor(Date.now() / 1000)}, next_sync_at=${nextSyncAt(String(current?.schedule) as DbSourceRow["schedule"])},
+    await tx`UPDATE db_sources SET sync_locked_at=NULL, sync_state=NULL, last_synced_at=${Math.floor(Date.now() / 1000)}, next_sync_at=${nextSyncAt(String(current?.schedule) as DbSourceRow["schedule"])},
       last_result=${tx.json(resultOf({ ...state, archived, deleted }))}, last_error=NULL, consecutive_failures=0, updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id=${source.id}`;
   });
   return { archived, deleted };
 }
 
-export async function failImport(source: DbSourceRow, error: unknown, db: Db = sql) {
+/** 실패 기록. 자동 동기화(cron)만 연속 실패 횟수를 올린다 — 화면에서 누른 가져오기 실패로 예약 동기화가 멈추지 않게. */
+export async function failImport(source: DbSourceRow, error: unknown, db: Db = sql, countFailure = false) {
   const message = error instanceof PortalError ? error.message : "동기화 중 오류가 났어요. 잠시 후 다시 시도해주세요.";
-  await db`UPDATE db_sources SET sync_locked_at=NULL, last_error=${message}, consecutive_failures=consecutive_failures+1,
+  await db`UPDATE db_sources SET sync_locked_at=NULL, sync_state=NULL, last_error=${message}, consecutive_failures=consecutive_failures+${countFailure ? 1 : 0},
     last_result=${db.json({ created: 0, updated: 0, unchanged: 0, archived: 0, deleted: 0, failed: 0, truncated: 0, total: 0, finishedAt: Math.floor(Date.now() / 1000), error: message })},
     updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id=${source.id}`.catch(() => null);
 }

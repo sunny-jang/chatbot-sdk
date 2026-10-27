@@ -29,6 +29,7 @@ export type DbSourceRow = {
   consecutive_failures: number;
   sync_locked_at: number | null;
   sync_started_at?: number | null;
+  sync_state?: unknown;
   created_at: number;
   updated_at: number;
 };
@@ -66,10 +67,11 @@ export function sourceConfig(input: Record<string, unknown>): SourceConfig {
     const column = ident(o.column, "본문 컬럼");
     const label = typeof o.label === "string" && o.label.trim() ? o.label.trim().slice(0, 40) : column;
     const unit = typeof o.unit === "string" ? o.unit.trim().slice(0, 10) : "";
+    const type = typeof o.type === "string" ? o.type.trim().slice(0, 60) : "";
     const valueMap: Record<string, string> = {};
     if (o.valueMap && typeof o.valueMap === "object")
       for (const [k, v] of Object.entries(o.valueMap as Record<string, unknown>).slice(0, 50)) valueMap[String(k).slice(0, 50)] = String(v).slice(0, 50);
-    return { column, label, ...(unit ? { unit } : {}), ...(Object.keys(valueMap).length ? { valueMap } : {}) };
+    return { column, label, ...(type ? { type } : {}), ...(unit ? { unit } : {}), ...(Object.keys(valueMap).length ? { valueMap } : {}) };
   });
   if (!bodyColumns.length) throw new PortalError("본문에 넣을 컬럼을 하나 이상 골라주세요.");
   if (bodyColumns.some((b) => b.column === keyColumn)) throw new PortalError("고유키 컬럼은 본문에 넣을 수 없어요.");
@@ -113,11 +115,11 @@ export function nextSyncAt(schedule: Schedule, from = Math.floor(Date.now() / 10
   return ts;
 }
 
-export async function listDbSources(db: AccessDatabase, botId: string) {
+export async function listDbSources(db: AccessDatabase, botId: string, sourceId?: string) {
   const rows = await db<(DbSourceRow & { connection_name: string; connection_status: string; folder_name: string | null })[]>`
     SELECT s.*, c.name AS connection_name, c.status AS connection_status, f.name AS folder_name
     FROM db_sources s JOIN data_connections c ON c.id=s.connection_id LEFT JOIN doc_folders f ON f.id=s.folder_id
-    WHERE s.bot_id=${botId} ORDER BY s.created_at, s.id`;
+    WHERE s.bot_id=${botId} ${sourceId ? db`AND s.id=${sourceId}` : db``} ORDER BY s.created_at, s.id`;
   return rows.map(sourceView);
 }
 export function sourceView(row: DbSourceRow & { connection_name?: string; connection_status?: string; folder_name?: string | null }) {

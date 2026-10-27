@@ -184,7 +184,8 @@ async function main() {
   const importAll = async (path: string, host: string, cookie: string, sourceId: string) => {
     let state: Record<string, unknown> | null = null;
     for (let i = 0; i < 80; i++) {
-      const r = await api(path, host, cookie, "POST", { action: "import", sourceId, ...(state ? { state } : {}) });
+      // 진행 상태는 서버가 들고 있다. 클라이언트가 보낸 state는 무시된다.
+      const r = await api(path, host, cookie, "POST", { action: "import", sourceId, ...(state ? { state: { processed: -100000 } } : { begin: true }) });
       assert.equal(r.status, 200, JSON.stringify(r.data));
       state = r.data.state;
       if (state!.done) return state!;
@@ -261,6 +262,11 @@ async function main() {
       const [a] = await sql`SELECT 1 FROM access_audit_logs WHERE action=${action} AND target_id=${menuSourceId}`;
       assert.ok(a, action);
     }
+  });
+  await check("B-13 시작 없이 단계만 호출하면 409, 클라이언트 state로 상한을 넘길 수 없음", async () => {
+    const r = await api(deskSrc, desk, admin, "POST", { action: "import", sourceId: menuSourceId, state: { processed: -100000, cursor: null, done: false } });
+    assert.equal(r.status, 409, JSON.stringify(r.data));
+    assert.match(r.data.error, /처음부터 다시 시작/);
   });
   await check("B-07 같은 테이블 소스 중복은 409", async () => {
     const r = await api(deskSrc, desk, admin, "POST", { action: "create", ...menuConfig });
