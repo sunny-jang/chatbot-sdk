@@ -21,7 +21,7 @@ import { postgresConnector } from "../lib/data-connections/connectors/postgres";
 import type { ConnectionConfig } from "../lib/data-connections/types";
 import { createDbSource, dbSource, deleteDbSource, listDbSources } from "../lib/db-sources/store";
 import { beginImport, importStep } from "../lib/db-sources/import";
-import { dueSources, syncSource, STOPPED_MESSAGE } from "../lib/db-sources/sync";
+import { claimContinuation, dueSources, syncSource, STOPPED_MESSAGE } from "../lib/db-sources/sync";
 import { updateDbSource } from "../lib/db-sources/store";
 import { fakeEmbeddingsEnabled } from "../lib/embeddings";
 
@@ -335,7 +335,7 @@ async function main() {
           bodyColumns: [{ column: "price", label: "가격", unit: "원", type: "integer" }], schedule: "daily",
         });
         const now = Math.floor(Date.now() / 1000);
-        const due = async () => (await dueSources(tx as never, now, 50)).map((x) => x.id);
+        const due = async () => (await dueSources(tx as never, now)).flat().map((x) => x.id);
         assert.ok(!(await due()).includes(created3.id), "예정 시각 전에는 고르지 않음");
         await tx`UPDATE db_sources SET next_sync_at=${now - 10} WHERE id=${created3.id}`;
         assert.ok((await due()).includes(created3.id), "예정 시각이 지나면 고름");
@@ -396,7 +396,7 @@ async function main() {
         assert.equal(stopped.enabled, false);
         assert.equal(Number(stopped.consecutive_failures), 3);
         assert.ok(String(stopped.last_error).includes(STOPPED_MESSAGE));
-        assert.ok(!(await dueSources(tx as never, Math.floor(Date.now() / 1000), 50)).some((x) => x.id === created3.id), "멈춘 소스는 고르지 않음");
+        assert.ok(!(await dueSources(tx as never, Math.floor(Date.now() / 1000))).flat().some((x) => x.id === created3.id), "멈춘 소스는 고르지 않음");
         await updateDataConnection(db, admin, customer, live.id, { password: fixture.password });
         await updateDbSource(db, actor, { id: syncBot, customer_id: customer }, created3.id, { enabled: true });
         const [resumed] = await tx`SELECT enabled, consecutive_failures, last_error FROM db_sources WHERE id=${created3.id}`;
@@ -405,6 +405,30 @@ async function main() {
         assert.equal(resumed.last_error, null);
         assert.equal((await runDue()).status, "done");
         pass("C-D6 연속 3회 실패 시 자동 동기화 중지·안내, 다시 켜면 실패 횟수·사유 초기화");
+
+        // C-D9 시간 안에 못 끝낸 cron 실행은 다음 호출(하루 뒤여도)이 처음부터가 아니라 이어서 진행, 겹친 호출은 건너뜀
+        const bigSync = await createDbSource(db, actor, { id: syncBot, customer_id: customer }, {
+          connectionId: live.id, table: "menu_big", titleColumn: "name", keyColumn: "id",
+          bodyColumns: [{ column: "price", label: "가격", unit: "원", type: "integer" }], rowLimit: 250, schedule: "daily",
+        });
+        await tx`UPDATE db_sources SET next_sync_at=${Math.floor(Date.now() / 1000) - 5} WHERE id=${bigSync.id}`;
+        const pick = async () => (await tx`SELECT s.*, b.customer_id, b.tenant_id FROM db_sources s JOIN bots b ON b.id=s.bot_id WHERE s.id=${bigSync.id}`)[0];
+        const first = await syncSource((await pick()) as never, Date.now() - 1, tx as never);
+        assert.equal(first.status, "continued");
+        assert.equal(first.state?.processed, 100);
+        await tx`UPDATE db_sources SET sync_locked_at=sync_locked_at-86400 WHERE id=${bigSync.id}`; // 다음 날 호출
+        const queued = (await dueSources(tx as never)).flat().map((x) => x.id);
+        assert.ok(queued.includes(bigSync.id), "만료된 잠금이어도 cron 실행은 이어 받을 대상");
+        const stale = await pick();
+        assert.equal(await claimContinuation(stale as never, tx as never), true);
+        assert.equal(await claimContinuation(stale as never, tx as never), false, "같은 실행을 두 번 가져가지 않음");
+        await tx`UPDATE db_sources SET sync_locked_at=sync_locked_at-86400 WHERE id=${bigSync.id}`;
+        const second = await syncSource((await pick()) as never, Date.now() + 30_000, tx as never);
+        assert.equal(second.status, "done");
+        assert.equal(second.state?.processed, 250);
+        assert.equal(second.state?.created, 250, "처음부터 다시가 아니라 이어서(중복 없음)");
+        assert.equal((await tx`SELECT count(*)::int AS n FROM db_source_rows WHERE source_id=${bigSync.id}`)[0].n, 250);
+        pass("C-D9 못 끝낸 cron 실행은 다음 호출이 이어서 진행, 겹친 호출은 이어 받기 실패(건너뜀)");
 
         // C-D7 연결 삭제 → 소스 중지, 문서 보관
         await deleteDataConnection(db, admin, customer, live.id);
