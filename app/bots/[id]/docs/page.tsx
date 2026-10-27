@@ -3,6 +3,7 @@ import sql from "@/lib/neon";
 import { Bot, Document, DocFolder } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
 import DbSourceManager from "@/app/components/DbSourceManager";
+import LiveLookupManager from "@/app/components/LiveLookupManager";
 import "@/app/customer/portal.css";
 import WebSourceManager from "@/app/components/WebSourceManager";
 import DocsManager from "./DocsManager";
@@ -66,6 +67,10 @@ export default async function DocsPage({
       <DbSourceManager
         apiBase={`/api/bots/${id}`}
         folders={folders.map((f) => ({ id: f.id, name: f.name }))}
+        settingsHref={(bot as Bot & { customer_id?: string | null }).customer_id ? `/customers/${(bot as Bot & { customer_id?: string | null }).customer_id}` : null}
+      />
+      <LiveLookupManager
+        apiBase={`/api/bots/${id}`}
         settingsHref={(bot as Bot & { customer_id?: string | null }).customer_id ? `/customers/${(bot as Bot & { customer_id?: string | null }).customer_id}` : null}
       />
       <DocsManager key={JSON.stringify(docs.map(d=>[d.id,d.title,d.content]))} botId={id} initialDocs={docs} initialFolders={folders} />

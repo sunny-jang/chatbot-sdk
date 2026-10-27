@@ -77,7 +77,7 @@ AI의 판단에만 맡기지 않고 서버가 단계마다 막는다.
 
 ### 5.1 테이블
 
-- `db_lookups`: id, bot_id, connection_id, name, description, schema_name, table_name, params(JSONB `[{column,label,match:"eq"|"contains",required,kind}]`), outputs(JSONB `[{column,label,unit,valueMap,type}]`), filters(JSONB, DB 지식 필터와 같은 모양), max_rows(1~10), enabled, created_by, created_at, updated_at, deleted_at.
+- `db_lookups`: id, bot_id, connection_id, name, description, schema_name, table_name, params(JSONB `[{column,label,match:"eq"|"contains",required,kind}]`), outputs(JSONB `[{column,label,unit,valueMap,type}]`), filters(JSONB, DB 지식 필터와 같은 모양), max_rows(1~10), enabled, created_by, created_at, updated_at. 삭제하면 행과 실행 기록을 함께 지운다.
 - `db_lookup_calls`: id, lookup_id, bot_id, session_id, status(`ok`·`empty`·`need_input`·`too_broad`·`too_many_calls`·`rate_limited`·`timeout`·`error`), row_count, latency_ms, cached, created_at. 방문자가 입력한 값은 저장하지 않는다. 인덱스 (bot_id, created_at), (session_id, created_at).
 
 ### 5.2 커넥터

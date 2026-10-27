@@ -7,6 +7,7 @@ import { connectorFor } from "@/lib/data-connections/connectors";
 import { splitTableName } from "@/lib/data-connections/identifiers";
 import { assertDbKnowledgeAllowed, credentialsOf, tenantDbRowLimit } from "@/lib/data-connections/store";
 import { connectionForBot, listConnectionsForBot } from "@/lib/db-sources/store";
+import { isPersonalDataColumn, labelFor, unitFor } from "@/lib/db-sources/render";
 import { lookupConfig } from "./config";
 import { runLookup } from "./run";
 import { assertColumnsExist, createLookup, dbLookup, deleteLookup, listLookups, setLookupEnabled, updateLookup, type DbLookupRow } from "./store";
@@ -22,9 +23,9 @@ function wrap<T>(p: Promise<T>): Promise<T> {
 }
 async function botRef(id: string, allowCustomer: boolean) {
   const { tenantId } = await adminBot(id, db, false, allowCustomer);
-  const [row] = await db`SELECT id, customer_id, model FROM bots WHERE id=${id} AND tenant_id=${tenantId}`;
+  const [row] = await db`SELECT id, customer_id, model, type FROM bots WHERE id=${id} AND tenant_id=${tenantId}`;
   if (!row) throw new OperationError("챗봇을 찾을 수 없습니다.", 404);
-  return { tenantId, model: String(row.model ?? ""), b: { id: String(row.id), customer_id: row.customer_id ? String(row.customer_id) : null } };
+  return { tenantId, model: String(row.model ?? ""), type: String(row.type ?? ""), b: { id: String(row.id), customer_id: row.customer_id ? String(row.customer_id) : null } };
 }
 async function actorOf(tenantId: string) {
   try {
@@ -38,13 +39,15 @@ async function actorOf(tenantId: string) {
 export async function readLookups(_: Request, { params }: Context, allowCustomer = false) {
   try {
     const { id } = await params;
-    const { b, tenantId, model } = await botRef(id, allowCustomer);
+    const { b, tenantId, model, type } = await botRef(id, allowCustomer);
     const [connections, lookups, limit] = await Promise.all([listConnectionsForBot(db, b), listLookups(db, id), tenantDbRowLimit(db, tenantId)]);
     return Response.json({
       assigned: Boolean(b.customer_id),
       planAllowed: limit > 0,
       // 도구 호출은 OpenAI 모델에서만 쓴다.
       modelSupported: !model.startsWith("gemini-"),
+      // Q&A 챗봇은 방문자가 "AI에게 질문하기"를 고른 대화에서만 조회를 쓴다.
+      qaBot: type === "qa",
       connections,
       lookups,
     });
@@ -68,12 +71,20 @@ export async function manageLookups(req: Request, { params }: Context, allowCust
     const action = String(body.action ?? "");
     const actor = await actorOf(tenantId);
 
+    if (action === "tables") {
+      await wrap(assertDbKnowledgeAllowed(db, tenantId));
+      const conn = await wrap(connectionForBot(db, b, text(body.connectionId, "데이터 연결", 200)));
+      return Response.json({ tables: await wrap(connectorFor(conn.kind).listTables(credentialsOf(conn))) });
+    }
     if (action === "sample") {
       await wrap(assertDbKnowledgeAllowed(db, tenantId));
       const conn = await wrap(connectionForBot(db, b, text(body.connectionId, "데이터 연결", 200)));
       const { schema, table } = splitTableName(body.table);
       const sample = await wrap(connectorFor(conn.kind).sample(credentialsOf(conn), schema, table, 5));
-      return Response.json({ schema, table, ...sample });
+      const names = sample.columns.map((c) => c.name);
+      // 화면에서 개인정보 추정 컬럼을 막고 라벨·단위 기본값을 채우도록 서버 규칙으로 계산해 보낸다.
+      const columns = sample.columns.map((c) => ({ ...c, personal: isPersonalDataColumn(c.name, names), label: labelFor(c.name), unit: unitFor(c.name, c.type) }));
+      return Response.json({ schema, table, columns, rows: sample.rows });
     }
     if (action === "create" || action === "update") {
       const existing = action === "update" ? await wrap(dbLookup(db, id, text(body.lookupId, "조회", 200))) : null;

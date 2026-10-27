@@ -1,6 +1,7 @@
 "use client";
 import WebSourceManager from "@/app/components/WebSourceManager";
 import DbSourceManager from "@/app/components/DbSourceManager";
+import LiveLookupManager from "@/app/components/LiveLookupManager";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -472,6 +473,7 @@ export default function BotWorkspace({
             folders={folders.map((f) => ({ id: f.id, name: f.name || "" }))}
             settingsHref={`/customer/${customerId}/settings`}
           />
+          <LiveLookupManager apiBase={base} settingsHref={`/customer/${customerId}/settings`} />
         </>
       )}
       {["docs", "qa"].includes(tab) && (
