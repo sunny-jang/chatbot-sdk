@@ -23,7 +23,8 @@ import { createDbSource, dbSource, deleteDbSource, listDbSources } from "../lib/
 import { beginImport, importStep } from "../lib/db-sources/import";
 import { claimContinuation, dueSources, syncSource, STOPPED_MESSAGE } from "../lib/db-sources/sync";
 import { updateDbSource } from "../lib/db-sources/store";
-import { fakeEmbeddingsEnabled } from "../lib/embeddings";
+import { fakeEmbeddingsEnabled, fakeEmbedding } from "../lib/embeddings";
+import { searchDocuments } from "../lib/db-sources/search";
 
 async function main() {
   if (process.env.PORTAL_DB_CHECK !== "1") {
@@ -259,6 +260,29 @@ async function main() {
       assert.equal(state.unchanged, 15);
       assert.equal((await tx`SELECT count(*)::int AS n FROM documents WHERE bot_id=${bot}`)[0].n, 15);
       pass("B-D2 재가져오기는 해시가 같으면 변경 없음(임베딩·문서 재생성 없음)");
+
+      // ---------- 단계 D: 숫자 필드·하이브리드 검색·출처 ----------
+      const [priced] = await tx`SELECT numeric_fields FROM documents WHERE bot_id=${bot} AND title='원두 선물세트 중'`;
+      assert.deepEqual(priced.numeric_fields.find((f: { column: string }) => f.column === "price"), { column: "price", label: "가격", unit: "원", value: 25000 });
+      pass("D-D1 가져온 행의 숫자 컬럼은 numeric_fields로 저장");
+      const q = "2만원 이하 선물세트 추천해주세요";
+      const found = await searchDocuments(bot, fakeEmbedding(q), q, tx as never);
+      assert.ok(found.length > 0);
+      for (const d of found) {
+        const [nf] = await tx`SELECT numeric_fields FROM documents WHERE id=${d.id}`;
+        const price = (nf.numeric_fields ?? []).find((f: { unit: string }) => f.unit === "원")?.value;
+        assert.ok(price === undefined || price <= 20000, `${d.title} ${price}`);
+      }
+      assert.ok(!found.some((d) => d.title === "원두 선물세트 중" || d.title === "프리미엄 선물세트"), "2만원 넘는 세트는 후보 제외");
+      assert.ok(found.every((d) => d.source && d.source.table === "menu" && d.source.label.endsWith(d.title)));
+      assert.ok(found.every((d) => !JSON.stringify(d.source).includes(fixture.password) && !JSON.stringify(d.source).includes(fixture.host)));
+      const plain = await searchDocuments(bot, fakeEmbedding("프리미엄 선물세트"), "프리미엄 선물세트", tx as never);
+      assert.ok(plain.some((d) => d.title === "프리미엄 선물세트"), "숫자 조건이 없으면 거르지 않음");
+      await tx`UPDATE documents SET archived_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE bot_id=${bot} AND title='프리미엄 선물세트'`;
+      const afterArchive = await searchDocuments(bot, fakeEmbedding("프리미엄 선물세트"), "프리미엄 선물세트", tx as never);
+      assert.ok(!afterArchive.some((d) => d.title === "프리미엄 선물세트"), "보관 문서는 후보 제외");
+      await tx`UPDATE documents SET archived_at=NULL WHERE bot_id=${bot} AND title='프리미엄 선물세트'`;
+      pass("D-D2 숫자 조건은 필드로 먼저 거르고(2만원 넘는 세트 제외), 출처는 연결·테이블·행 제목만, 보관 문서 제외");
 
       // B-D3 상한: menu_big 5,200행을 row_limit 50으로 → 50행 반영 + 5,150행 초과
       const big = await createDbSource(db, actor, { id: bot, customer_id: customer }, {

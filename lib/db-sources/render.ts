@@ -170,3 +170,18 @@ export function renderRowDocument(
 
 export const rowHash = (title: string, content: string) => createHash("sha256").update(title + "\u0000" + content).digest("hex");
 export const rowKeyOf = (value: unknown) => (value === null || value === undefined ? "" : String(value));
+
+/** 숫자 타입 본문 컬럼 → 하이브리드 검색용 숫자 필드. 단위가 같은 질문 조건("2만원 이하")과 비교한다. */
+export function numericFieldsOf(row: Record<string, unknown>, bodyColumns: BodyColumn[]): { column: string; label: string; unit: string; value: number }[] {
+  const out: { column: string; label: string; unit: string; value: number }[] = [];
+  for (const col of bodyColumns) {
+    const raw = row[col.column];
+    if (raw === null || raw === undefined || raw === "") continue;
+    const numericType = col.type ? isNumber(col.type) : typeof raw === "number";
+    if (!numericType) continue;
+    const value = Number(String(raw).replace(/,/g, ""));
+    if (!Number.isFinite(value)) continue;
+    out.push({ column: col.column, label: col.label || col.column, unit: col.unit ?? "", value });
+  }
+  return out;
+}

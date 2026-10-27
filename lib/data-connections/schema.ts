@@ -73,5 +73,7 @@ export async function createDataKnowledgeSchema(db: AccessDatabase) {
   // 기존 문서는 NULL(수동). web_sources가 있는 문서는 web, DB에서 온 문서는 db.
   await db`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_kind TEXT CHECK (source_kind IS NULL OR source_kind IN ('web','file','db'))`;
   await db`ALTER TABLE documents ADD COLUMN IF NOT EXISTS archived_at BIGINT`;
+  // 숫자 조건 질문용 필드(DB 행에서만 채운다). [{column,label,unit,value}]
+  await db`ALTER TABLE documents ADD COLUMN IF NOT EXISTS numeric_fields JSONB`;
   await db`CREATE INDEX IF NOT EXISTS documents_bot_active_idx ON documents(bot_id) WHERE archived_at IS NULL`;
 }

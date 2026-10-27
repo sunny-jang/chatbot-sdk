@@ -1,8 +1,9 @@
 import { withWidgetCors } from "@/lib/widget-origin";
 import { NextResponse } from "next/server";
+import { searchDocuments, type FoundDoc } from "@/lib/db-sources/search";
 import sql from "@/lib/neon";
 import { Bot, QaPair, initSchema } from "@/lib/db";
-import { findBestMatch, getEmbedding, cosineSimilarity } from "@/lib/embeddings";
+import { findBestMatch, getEmbedding } from "@/lib/embeddings";
 import { getTenantApiKeys } from "@/lib/tenantKey";
 import OpenAI from "openai";
 import { generateGeminiContent } from "@/lib/gemini";
@@ -61,8 +62,6 @@ async function saveLog(
   }
 }
 
-const DOC_THRESHOLD = 0.25;
-const DOC_TOP_K = 5;
 const DOC_CONTEXT_MAX_CHARS = 24_000;
 const IDEAL_AI_BOT_ID = "8f3656de-94a4-4175-9b7f-2912baeb25c4";
 const IDEAL_AI_CONTACT_REPLY =
@@ -84,36 +83,6 @@ function buildDocumentContext(docs: { title: string; content: string }[]) {
     remaining -= header.length + content.length;
   }
   return sections.join("\n\n---\n\n");
-}
-
-async function findRelevantDocs(
-  botId: string,
-  queryEmbedding: number[]
-): Promise<{ title: string; content: string; score: number }[]> {
-  // Step 1: fetch only id + embedding (skip heavy content field)
-  const rows = await sql`
-    SELECT id, title, embedding FROM documents WHERE bot_id = ${botId} AND embedding IS NOT NULL AND archived_at IS NULL
-  `;
-  const scored = rows
-    .map((r) => ({
-      id: r.id as string,
-      title: r.title as string,
-      score: cosineSimilarity(queryEmbedding, JSON.parse(r.embedding as string)),
-    }))
-    .filter((r) => r.score >= DOC_THRESHOLD)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, DOC_TOP_K);
-
-  if (scored.length === 0) return [];
-
-  // Step 2: fetch content only for matched docs
-  const ids = scored.map((r) => r.id);
-  const contentRows = await sql`
-    SELECT id, content FROM documents WHERE id = ANY(${ids}::text[])
-  `;
-  const contentMap = new Map(contentRows.map((r) => [r.id as string, r.content as string]));
-
-  return scored.map((r) => ({ title: r.title, content: contentMap.get(r.id) ?? "", score: r.score }));
 }
 
 async function POSTHandler(
@@ -305,11 +274,14 @@ async function POSTHandler(
   }
 
   // AI bot, or a Q&A bot explicitly switched to RAG AI mode.
-  let relevantDocs: { title: string; content: string; score: number }[] = [];
+  let relevantDocs: FoundDoc[] = [];
   if (tenantApiKeys.openai) {
     const queryEmbedding = await getEmbedding(message, tenantApiKeys.openai);
-    relevantDocs = await findRelevantDocs(botId, queryEmbedding);
+    // 숫자 조건 필터 → 임베딩 순위, 보관 문서 제외, DB 문서는 출처 포함
+    relevantDocs = await searchDocuments(botId, queryEmbedding, message);
   }
+  // 위젯 "출처 보기"용. DB에서 온 문서만, 연결 이름·테이블·행 제목만 담는다.
+  const sources = relevantDocs.flatMap((d) => (d.source ? [{ kind: d.source.kind, label: d.source.label }] : []));
 
   if (ragAiMode && relevantDocs.length === 0 && !proactive?.knowledge.length) {
     const reply = "등록된 문서에서 해당 질문에 대한 내용을 찾을 수 없습니다. 다른 표현으로 질문하거나 Q&A 목록을 이용해주세요.";
@@ -372,7 +344,7 @@ async function POSTHandler(
         toolName: relevantDocs.length > 0 ? "문서 검색(RAG)" : null,
         toolSuccess: relevantDocs.length > 0 ? true : null,
       });
-      return NextResponse.json({ reply, usedDocs: relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) })), usage: reservation.usage });
+      return NextResponse.json({ reply, usedDocs: relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) })), sources, usage: reservation.usage });
     } catch {
       await saveLog(botId, sessionId, message, "요청 처리 중 오류가 발생했습니다.", {
         intent: classifyIntent(message), refused: false, refusalReason: null,
@@ -424,7 +396,7 @@ async function POSTHandler(
   await saveChatMessage(sessionId, "bot", reply, "bot");
 
   const usedDocs = relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) }));
-  return NextResponse.json({ reply, usedDocs, usage: reservation.usage, handoffAvailable: supportLive && (refusal.refused || relevantDocs.length === 0) });
+  return NextResponse.json({ reply, usedDocs, sources, usage: reservation.usage, handoffAvailable: supportLive && (refusal.refused || relevantDocs.length === 0) });
 }
 
 export const POST = withWidgetCors(POSTHandler);

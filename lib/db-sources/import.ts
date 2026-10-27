@@ -6,7 +6,7 @@ import { getEmbeddings, fakeEmbeddingsEnabled } from "@/lib/embeddings";
 import { connectorFor } from "@/lib/data-connections/connectors";
 import { credentialsOf, type DataConnectionRow } from "@/lib/data-connections/store";
 import type { RowQuery } from "@/lib/data-connections/types";
-import { renderRowDocument, rowHash, rowKeyOf } from "./render";
+import { numericFieldsOf, renderRowDocument, rowHash, rowKeyOf } from "./render";
 import { configOf, type DbSourceRow } from "./store";
 import { EMBED_REQUEST_CHARS, IMPORT_STEP, type SourceConfig, type SyncResult } from "./types";
 
@@ -157,7 +157,7 @@ export async function applyRows(
   const docs = rows.map((row) => {
     const key = rowKeyOf(row[config.keyColumn]);
     const rendered = renderRowDocument(row, { titleColumn: config.titleColumn, bodyColumns: config.bodyColumns, tableLabel });
-    return { key, ...rendered, hash: rowHash(rendered.title, rendered.content) };
+    return { key, ...rendered, hash: rowHash(rendered.title, rendered.content), numeric: numericFieldsOf(row, config.bodyColumns) };
   });
   const valid = docs.filter((d) => d.key !== "");
   counters.failed += docs.length - valid.length;
@@ -192,7 +192,8 @@ export async function applyRows(
       const vector = vectorOf.get(d.key);
       if (e && e.document_id && !vector) {
         await tx`UPDATE db_source_rows SET status='active', synced_at=${now}, run_id=${runId} WHERE source_id=${source.id} AND row_key=${d.key}`;
-        if (e.status === "archived") await tx`UPDATE documents SET archived_at=NULL WHERE id=${e.document_id}`;
+        // 숫자 필드는 본문이 같아도 채워 둔다(이전 버전에서 가져온 문서 보강).
+        await tx`UPDATE documents SET numeric_fields=${tx.json(d.numeric as never)}${e.status === "archived" ? tx`, archived_at=NULL` : tx``} WHERE id=${e.document_id}`;
         counters.unchanged++;
         continue;
       }
@@ -201,12 +202,12 @@ export async function applyRows(
         continue;
       }
       if (e && e.document_id) {
-        await tx`UPDATE documents SET title=${d.title}, content=${d.content}, embedding=${JSON.stringify(vector)}, folder_id=${config.folderId}, archived_at=NULL, source_kind='db' WHERE id=${e.document_id} AND bot_id=${source.bot_id}`;
+        await tx`UPDATE documents SET title=${d.title}, content=${d.content}, embedding=${JSON.stringify(vector)}, folder_id=${config.folderId}, archived_at=NULL, source_kind='db', numeric_fields=${tx.json(d.numeric as never)} WHERE id=${e.document_id} AND bot_id=${source.bot_id}`;
         await tx`UPDATE db_source_rows SET row_hash=${d.hash}, status='active', synced_at=${now}, run_id=${runId} WHERE source_id=${source.id} AND row_key=${d.key}`;
         counters.updated++;
       } else {
         const docId = randomUUID();
-        await tx`INSERT INTO documents(id,bot_id,folder_id,title,content,embedding,source_kind) VALUES(${docId},${source.bot_id},${config.folderId},${d.title},${d.content},${JSON.stringify(vector)},'db')`;
+        await tx`INSERT INTO documents(id,bot_id,folder_id,title,content,embedding,source_kind,numeric_fields) VALUES(${docId},${source.bot_id},${config.folderId},${d.title},${d.content},${JSON.stringify(vector)},'db',${tx.json(d.numeric as never)})`;
         await tx`INSERT INTO db_source_rows(source_id,row_key,row_hash,document_id,status,synced_at,run_id) VALUES(${source.id},${d.key},${d.hash},${docId},'active',${now},${runId})
           ON CONFLICT(source_id,row_key) DO UPDATE SET row_hash=EXCLUDED.row_hash, document_id=EXCLUDED.document_id, status='active', synced_at=EXCLUDED.synced_at, run_id=EXCLUDED.run_id`;
         counters.created++;
