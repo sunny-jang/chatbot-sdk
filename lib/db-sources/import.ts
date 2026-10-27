@@ -67,16 +67,31 @@ export async function beginImport(source: DbSourceRow, db: Db = sql, runner: "ma
       );
     // 요금제 한도(에이전시 합계)에서 다른 소스가 이미 쓰는 행을 뺀 만큼만 이번 소스에 쓸 수 있다.
     const [owner] = await db`SELECT b.tenant_id FROM bots b WHERE b.id=${source.bot_id}`;
-    const planLimit = await tenantDbRowLimit(db as unknown as AccessDatabase, String(owner?.tenant_id ?? ""));
+    const tenantId = String(owner?.tenant_id ?? "");
+    const planLimit = await tenantDbRowLimit(db as unknown as AccessDatabase, tenantId);
     if (planLimit <= 0) throw new PortalError(DB_KNOWLEDGE_DISABLED, 403);
-    const [used] = await db`SELECT count(*)::int AS n FROM db_source_rows r JOIN db_sources s ON s.id=r.source_id JOIN bots b ON b.id=s.bot_id
-      WHERE b.tenant_id=${owner?.tenant_id} AND r.status='active' AND r.source_id<>${source.id}`;
-    const room = Math.max(0, planLimit - Number(used?.n ?? 0));
-    const total = Math.min(count, config.rowLimit, room);
-    const planLimited = Math.min(count, config.rowLimit) - total;
-    const state: ImportState = { planLimited, planLimit, cursor: null, processed: 0, total, truncated: Math.max(0, count - total), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0, runner, runId: randomUUID() };
-    await db`UPDATE db_sources SET sync_state=${db.json(state as never)} WHERE id=${source.id}`;
-    return state;
+    // 에이전시 단위로 한 번에 하나씩 계산하고, 진행 중인 다른 실행이 앞으로 더할 행(예약)까지 빼서
+    // 동시에 시작한 가져오기들이 합쳐서 한도를 넘지 않게 한다.
+    return await withTx(db, async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${"db-quota:" + tenantId}))`;
+      const now2 = Math.floor(Date.now() / 1000);
+      const [used] = await tx`
+        WITH mine AS (
+          SELECT s.id, s.sync_state, s.sync_locked_at FROM db_sources s JOIN bots b ON b.id=s.bot_id WHERE b.tenant_id=${tenantId} AND s.id<>${source.id}
+        ), active AS (
+          SELECT r.source_id, count(*)::int AS n FROM db_source_rows r JOIN mine m ON m.id=r.source_id WHERE r.status='active' GROUP BY r.source_id
+        )
+        SELECT COALESCE((SELECT sum(n) FROM active),0)::int AS rows,
+          COALESCE((SELECT sum(GREATEST(0, (m.sync_state->>'total')::int - COALESCE(a.n,0)))
+            FROM mine m LEFT JOIN active a ON a.source_id=m.id
+            WHERE m.sync_state IS NOT NULL AND m.sync_locked_at >= ${now2 - LOCK_TTL}),0)::int AS reserved`;
+      const room = Math.max(0, planLimit - Number(used?.rows ?? 0) - Number(used?.reserved ?? 0));
+      const total = Math.min(count, config.rowLimit, room);
+      const planLimited = Math.min(count, config.rowLimit) - total;
+      const state: ImportState = { planLimited, planLimit, cursor: null, processed: 0, total, truncated: Math.max(0, count - total), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0, runner, runId: randomUUID() };
+      await tx`UPDATE db_sources SET sync_state=${tx.json(state as never)} WHERE id=${source.id}`;
+      return state;
+    });
   } catch (e) {
     await failImport(source, e, db, runner === "cron");
     throw e;
@@ -143,6 +158,8 @@ export async function importStep(source: DbSourceRow, openaiKey: string | null, 
 
 function resultOf(state: ImportState, error?: string): SyncResult {
   return {
+    // 요금제 한도로 못 가져온 행이 있으면 "사라진 행" 보관 중 그만큼은 요금제 때문이다.
+    ...(state.planLimited ? { planLimited: state.planLimited, planLimit: state.planLimit } : {}),
     created: state.created,
     updated: state.updated,
     unchanged: state.unchanged,

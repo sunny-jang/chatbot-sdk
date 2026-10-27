@@ -260,7 +260,7 @@ QA 서버에는 OpenAI 키가 없다. 가져오기·답변 미리보기를 끝�
 
 QA "고객사 DB"에 MySQL을 추가했다: Docker `chatbot-qa-mysql`(mysql:8.4, 127.0.0.1:55437), 시드 `scripts/seed-db-knowledge-mysql-qa.ts`(customer_sample·읽기 전용 sample_reader·menu 5행, DECIMAL 가격), 접속 정보는 `/tmp/chatbot-qa-runtime/mysql-fixture.json`.
 
-자동: 단위 177/177 · DB 30건(E-D1·E-D2·E-D3·E-D5 추가, 전부 롤백) · HTTP 32/32(E-01~E-03 추가) · `tsc`·빌드 통과(eslint 오류 2건은 이번 변경 전부터 있던 `app/admin/AdminClient.tsx` 170행 따옴표).
+자동(리뷰 반영 후): 단위 177/177 · DB 31건(E-D1~E-D5 추가, 전부 롤백) · HTTP 32/32(E-01~E-03 추가) · `tsc`·빌드 통과(eslint 오류 2건은 이번 변경 전부터 있던 `app/admin/AdminClient.tsx` 170행 따옴표).
 
 | 항목 | 결과 | 근거 |
 | --- | --- | --- |
@@ -274,4 +274,6 @@ QA "고객사 DB"에 MySQL을 추가했다: Docker `chatbot-qa-mysql`(mysql:8.4,
 화면 점검 중 고친 것: 연결 폼의 "MySQL · MariaDB (준비 중)" 비활성 선택지를 활성화하고 DB 종류를 바꾸면 기본 포트(5432↔3306)가 따라 바뀌도록.
 
 검사 중 고친 것: DB 지식 스키마의 컬럼 추가를 "없을 때만 ALTER"로 바꿨다(ADD COLUMN IF NOT EXISTS도 표 잠금을 잡아 요청 경로와 다른 트랜잭션을 막을 수 있음). DB 검사는 스키마를 트랜잭션 밖에서 먼저 반영한다.
+
+리뷰(/code-review high) 반영: MariaDB는 `MAX_EXECUTION_TIME`이 없어 연결이 전부 실패하던 것을 `max_statement_time`으로 대체(임시 MariaDB 10.11 컨테이너로 테스트·키셋 읽기 확인 후 삭제), MySQL 날짜를 서버 시간대 변환 없이 원문 문자열로, 요금제 한도 계산을 에이전시 단위 잠금 + 진행 중인 다른 실행의 예약분 차감으로(E-D4 동시 시작 검사), 요금제로 줄어든 행은 결과에 "요금제 한도로 N행 제외(이전 행은 보관)"로 따로 표시, 무료 요금제는 연결 테스트도 막고 데이터 연결 섹션에서 처음부터 안내(추가 버튼 숨김), 마스터 집계를 표마다 한 번 모으는 질의로. 공유 QA 에이전시의 요금제를 잠깐 바꾸는 HTTP E-03은 그대로 둠(QA는 단일 사용자, try/finally로 즉시 복구).
 

@@ -261,6 +261,7 @@ export async function testConnectionInput(
   input: Record<string, unknown>,
 ): Promise<TestResult> {
   const grant = await connectionAccess(db, userId, customerId, "settings.manage");
+  await assertDbKnowledgeAllowed(db, grant.tenant_id);
   let existing: DataConnectionRow | undefined;
   if (typeof input.id === "string" && input.id) {
     // 수정 중 테스트: 비밀번호를 비우면 저장된 비밀번호로 테스트한다.

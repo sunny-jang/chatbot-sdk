@@ -10,7 +10,7 @@ type Role = "title" | "key" | "body" | "excluded";
 type ColumnDraft = { column: string; type: string; role: Role; label: string; unit: string; valueMap: Record<string, string>; personal: boolean };
 type FilterOp = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "not_in" | "is_null" | "not_null";
 type Filter = { column: string; op: FilterOp; value: string };
-type SyncResult = { created: number; updated: number; unchanged: number; archived: number; deleted: number; failed: number; truncated: number; total: number; finishedAt: number; error?: string };
+type SyncResult = { planLimited?: number; planLimit?: number; created: number; updated: number; unchanged: number; archived: number; deleted: number; failed: number; truncated: number; total: number; finishedAt: number; error?: string };
 type Source = {
   id: string;
   connectionId: string;
@@ -394,7 +394,16 @@ export default function DbSourceManager({
                     {s.lastSyncedAt ? ` · 마지막 ${when(s.lastSyncedAt)}` : ""}
                     {s.enabled && s.nextSyncAt && !s.connectionDeleted ? ` · 다음 예정 ${when(s.nextSyncAt)}` : ""}
                   </small>
-                  {s.lastResult && !s.lastError && <small>{summary(s.lastResult)}{s.lastResult.truncated ? ` · 상한 초과 ${n(s.lastResult.truncated)}행 제외` : ""}</small>}
+                  {s.lastResult && !s.lastError && (
+                    <small>
+                      {summary(s.lastResult)}
+                      {s.lastResult.planLimited
+                        ? ` · 요금제 한도(${n(s.lastResult.planLimit ?? 0)}행)로 ${n(s.lastResult.planLimited)}행 제외${s.lastResult.archived ? "(이전에 가져온 행은 보관)" : ""}`
+                        : s.lastResult.truncated
+                          ? ` · 상한 초과 ${n(s.lastResult.truncated)}행 제외`
+                          : ""}
+                    </small>
+                  )}
                   {s.lastError && <small className="cp-conn-error" role="alert">{s.lastError}</small>}
                   {p && (
                     <div className="dbs-progress" role="status" aria-live="polite">

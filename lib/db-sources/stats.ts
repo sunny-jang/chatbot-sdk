@@ -8,14 +8,15 @@ export async function dbKnowledgeStats(db = sql): Promise<Map<string, DbKnowledg
   const out = new Map<string, DbKnowledgeStats>();
   const ready = await db`SELECT to_regclass('db_sources') IS NOT NULL AS ok`;
   if (!ready[0]?.ok) return out;
+  // 표마다 한 번씩만 모아 에이전시별로 합친다(에이전시 수만큼 하위 질의를 돌리지 않음).
   const rows = await db`
-    SELECT t.id, t.plan, t.enterprise_db_row_limit,
-      (SELECT count(*)::int FROM data_connections c WHERE c.tenant_id=t.id AND c.status<>'deleted') AS connections,
-      (SELECT count(*)::int FROM db_sources s JOIN bots b ON b.id=s.bot_id WHERE b.tenant_id=t.id) AS sources,
-      (SELECT count(*)::int FROM db_source_rows r JOIN db_sources s ON s.id=r.source_id JOIN bots b ON b.id=s.bot_id WHERE b.tenant_id=t.id AND r.status='active') AS rows,
-      (SELECT count(*)::int FROM db_sources s JOIN bots b ON b.id=s.bot_id WHERE b.tenant_id=t.id AND s.last_error IS NOT NULL) AS failing,
-      (SELECT count(*)::int FROM db_sources s JOIN bots b ON b.id=s.bot_id WHERE b.tenant_id=t.id AND NOT s.enabled) AS stopped
-    FROM tenants t`;
+    WITH conn AS (SELECT tenant_id, count(*)::int AS n FROM data_connections WHERE status<>'deleted' GROUP BY tenant_id),
+      src AS (SELECT b.tenant_id, count(*)::int AS n, count(*) FILTER (WHERE s.last_error IS NOT NULL)::int AS failing, count(*) FILTER (WHERE NOT s.enabled)::int AS stopped
+        FROM db_sources s JOIN bots b ON b.id=s.bot_id GROUP BY b.tenant_id),
+      rws AS (SELECT b.tenant_id, count(*)::int AS n FROM db_source_rows r JOIN db_sources s ON s.id=r.source_id JOIN bots b ON b.id=s.bot_id WHERE r.status='active' GROUP BY b.tenant_id)
+    SELECT t.id, t.plan, t.enterprise_db_row_limit, COALESCE(conn.n,0) AS connections, COALESCE(src.n,0) AS sources,
+      COALESCE(rws.n,0) AS rows, COALESCE(src.failing,0) AS failing, COALESCE(src.stopped,0) AS stopped
+    FROM tenants t LEFT JOIN conn ON conn.tenant_id=t.id LEFT JOIN src ON src.tenant_id=t.id LEFT JOIN rws ON rws.tenant_id=t.id`;
   for (const r of rows)
     out.set(String(r.id), {
       connections: Number(r.connections),

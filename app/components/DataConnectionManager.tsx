@@ -61,11 +61,14 @@ export default function DataConnectionManager({
   portal = false,
   canManage,
   requestSheetHref = "/db-connection-request",
+  planBlocked = false,
 }: {
   customerId: string;
   portal?: boolean;
   canManage: boolean;
   requestSheetHref?: string;
+  /** 무료 요금제 등 DB 연동을 쓸 수 없는 에이전시. 폼을 열지 않고 처음부터 안내한다. */
+  planBlocked?: boolean;
 }) {
   const base = `/api/${portal ? "customer" : "customers"}/${customerId}/data-connections`;
   const [items, setItems] = useState<Connection[] | null>(null),
@@ -206,12 +209,21 @@ export default function DataConnectionManager({
           연결 요청서 보기
         </Link>
       </p>
-      {items === null && !error && (
+      {planBlocked && (
+        <div className="cp-callout" role="note">
+          <strong>요금제를 올리면 쓸 수 있어요</strong>
+          <span className="cp-note">
+            무료 요금제에서는 DB 연동을 쓸 수 없어요. 그로스(1만 행)·프로(5만 행) 요금제부터 고객사 DB를 연결해 챗봇 지식으로
+            가져올 수 있어요.
+          </span>
+        </div>
+      )}
+      {!planBlocked && items === null && !error && (
         <p role="status" className="cp-note">
           불러오는 중입니다.
         </p>
       )}
-      {items && items.length === 0 && !form && (
+      {!planBlocked && items && items.length === 0 && !form && (
         <div className="cp-callout">
           <strong>아직 데이터 연결이 없어요.</strong>
           <span className="cp-note">
@@ -296,7 +308,7 @@ export default function DataConnectionManager({
           ))}
         </ul>
       )}
-      {items && items.length > 0 && !form && canManage && (
+      {items && items.length > 0 && !form && canManage && !planBlocked && (
         <div className="cp-row" style={{ marginTop: 12 }}>
           <button type="button" className="cp-button" onClick={() => open()} disabled={busy !== null || items.length >= LIMIT}>
             연결 추가

@@ -48,11 +48,18 @@ async function withReadOnly<T>(config: ConnectionConfig, fn: (conn: Conn) => Pro
       supportBigNumbers: true,
       bigNumberStrings: true,
       decimalNumbers: false,
+      // 날짜·시각은 원본 문자열 그대로(서버 시간대로 Date 변환하면 자정 근처 날짜가 밀린다).
+      dateStrings: true,
       multipleStatements: false,
       charset: "utf8mb4",
     });
     await conn.query("SET SESSION TRANSACTION READ ONLY");
-    await conn.query(`SET SESSION MAX_EXECUTION_TIME=${STATEMENT_TIMEOUT_MS}`);
+    // MySQL은 MAX_EXECUTION_TIME(ms), MariaDB는 max_statement_time(초)를 쓴다.
+    try {
+      await conn.query(`SET SESSION MAX_EXECUTION_TIME=${STATEMENT_TIMEOUT_MS}`);
+    } catch {
+      await conn.query(`SET SESSION max_statement_time=${Math.ceil(STATEMENT_TIMEOUT_MS / 1000)}`);
+    }
     await conn.query("START TRANSACTION READ ONLY");
     const out = await fn(conn);
     await conn.query("COMMIT");

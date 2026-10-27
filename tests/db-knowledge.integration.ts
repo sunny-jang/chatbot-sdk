@@ -323,8 +323,24 @@ async function main() {
       await assert.rejects(() => createDataConnection(db, admin, customer, { ...input, name: "무료" }), (e: unknown) => (e as { status?: number }).status === 403 && /무료 요금제/.test((e as Error).message));
       await assert.rejects(() => createDbSource(db, actor, { id: bot3, customer_id: customer }, { ...menuConfig }), { status: 403 });
       await assert.rejects(() => beginImport(source, tx as never), { status: 403 });
+      const { testConnectionInput } = await import("../lib/data-connections/store");
+      await assert.rejects(() => testConnectionInput(db, admin, customer, { ...input }), { status: 403 });
       await tx`UPDATE tenants SET plan='pro' WHERE id=${tenant}`;
       pass("E-D1/E-D2 무료 요금제는 DB 연동 불가(403), 엔터프라이즈 한도는 에이전시 합계에서 남은 만큼만 가져옴");
+
+      // E-D4 동시에 시작한 두 가져오기는 서로의 예약분을 빼고 계산해 합쳐서 한도를 넘지 않음
+      await tx`UPDATE tenants SET plan='enterprise', enterprise_db_row_limit=75 WHERE id=${tenant}`;
+      const bot4 = "bot4-" + suffix, bot5 = "bot5-" + suffix;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${bot4},${tenant},${customer},'동시 1','ai'),(${bot5},${tenant},${customer},'동시 2','ai')`;
+      const big4 = await createDbSource(db, actor, { id: bot4, customer_id: customer }, { connectionId: live.id, table: "menu_big", titleColumn: "name", keyColumn: "id", bodyColumns: [{ column: "price", label: "가격", type: "integer" }], rowLimit: 100, schedule: "manual" });
+      const big5 = await createDbSource(db, actor, { id: bot5, customer_id: customer }, { connectionId: live.id, table: "menu_big", titleColumn: "name", keyColumn: "id", bodyColumns: [{ column: "price", label: "가격", type: "integer" }], rowLimit: 100, schedule: "manual" });
+      const s4 = await beginImport(await dbSource(db, bot4, big4.id), tx as never);
+      const s5 = await beginImport(await dbSource(db, bot5, big5.id), tx as never);
+      assert.equal(s4.total + s5.total, 10, "65행 사용 중 한도 75 → 두 실행 합계 10행");
+      await deleteDbSource(db, actor, { id: bot4, customer_id: customer }, big4.id, "delete");
+      await deleteDbSource(db, actor, { id: bot5, customer_id: customer }, big5.id, "delete");
+      await tx`UPDATE tenants SET plan='pro', enterprise_db_row_limit=NULL WHERE id=${tenant}`;
+      pass("E-D4 동시에 시작한 가져오기도 예약분을 빼서 에이전시 한도를 넘지 않음");
 
       // 리뷰 반영: 진행 상태는 서버가 들고, 시작 없이 단계 호출은 거부, 고유키 중복 거부, 화면 실패는 연속 실패에 안 셈
       await assert.rejects(() => importStep(source, null, tx as never), { status: 409 });
