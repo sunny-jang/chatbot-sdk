@@ -63,11 +63,19 @@ async function tableColumns(b: { id: string; customer_id: string | null }, conne
   return sample.columns.map((c) => c.name);
 }
 
+/** 화면은 표를 "schema.table"로 보낸다. 저장·검사 전에 schema와 table로 나눈다. */
+function withSplitTable(input: Record<string, unknown>): Record<string, unknown> {
+  if (typeof input.table !== "string" || !input.table.includes(".") || input.schema) return input;
+  const { schema, table } = splitTableName(input.table);
+  return { ...input, schema, table };
+}
+
 export async function manageLookups(req: Request, { params }: Context, allowCustomer = false) {
   try {
     const { id } = await params;
     const { b, tenantId } = await botRef(id, allowCustomer);
-    const body = await jsonBody(req);
+    const raw = await jsonBody(req);
+    const body = withSplitTable({ ...raw, ...(raw.config && typeof raw.config === "object" ? { config: withSplitTable(raw.config as Record<string, unknown>) } : {}) });
     const action = String(body.action ?? "");
     const actor = await actorOf(tenantId);
 
@@ -79,12 +87,13 @@ export async function manageLookups(req: Request, { params }: Context, allowCust
     if (action === "sample") {
       await wrap(assertDbKnowledgeAllowed(db, tenantId));
       const conn = await wrap(connectionForBot(db, b, text(body.connectionId, "데이터 연결", 200)));
-      const { schema, table } = splitTableName(body.table);
+      const { schema, table } = typeof body.schema === "string" && body.schema ? { schema: body.schema, table: String(body.table ?? "") } : splitTableName(body.table);
       const sample = await wrap(connectorFor(conn.kind).sample(credentialsOf(conn), schema, table, 5));
       const names = sample.columns.map((c) => c.name);
       // 화면에서 개인정보 추정 컬럼을 막고 라벨·단위 기본값을 채우도록 서버 규칙으로 계산해 보낸다.
       const columns = sample.columns.map((c) => ({ ...c, personal: isPersonalDataColumn(c.name, names), label: labelFor(c.name), unit: unitFor(c.name, c.type) }));
-      return Response.json({ schema, table, columns, rows: sample.rows });
+      // 원본 행은 화면에서 쓰지 않으므로 보내지 않는다(개인정보 노출 최소화).
+      return Response.json({ schema, table, columns });
     }
     if (action === "create" || action === "update") {
       const existing = action === "update" ? await wrap(dbLookup(db, id, text(body.lookupId, "조회", 200))) : null;
