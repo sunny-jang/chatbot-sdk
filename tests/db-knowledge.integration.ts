@@ -274,7 +274,7 @@ async function main() {
         assert.ok(price === undefined || price <= 20000, `${d.title} ${price}`);
       }
       assert.ok(!found.some((d) => d.title === "원두 선물세트 중" || d.title === "프리미엄 선물세트"), "2만원 넘는 세트는 후보 제외");
-      assert.ok(found.every((d) => d.source && d.source.table === "menu" && d.source.label.endsWith(d.title)));
+      assert.ok(found.every((d) => d.source && d.source.kind === "db" && d.source.label === d.title), "출처는 행 제목만");
       assert.ok(found.every((d) => !JSON.stringify(d.source).includes(fixture.password) && !JSON.stringify(d.source).includes(fixture.host)));
       const plain = await searchDocuments(bot, fakeEmbedding("프리미엄 선물세트"), "프리미엄 선물세트", tx as never);
       assert.ok(plain.some((d) => d.title === "프리미엄 선물세트"), "숫자 조건이 없으면 거르지 않음");
@@ -282,7 +282,7 @@ async function main() {
       const afterArchive = await searchDocuments(bot, fakeEmbedding("프리미엄 선물세트"), "프리미엄 선물세트", tx as never);
       assert.ok(!afterArchive.some((d) => d.title === "프리미엄 선물세트"), "보관 문서는 후보 제외");
       await tx`UPDATE documents SET archived_at=NULL WHERE bot_id=${bot} AND title='프리미엄 선물세트'`;
-      pass("D-D2 숫자 조건은 필드로 먼저 거르고(2만원 넘는 세트 제외), 출처는 연결·테이블·행 제목만, 보관 문서 제외");
+      pass("D-D2 숫자 조건은 필드로 먼저 거르고(2만원 넘는 세트 제외), 출처는 행 제목만(내부 이름 비공개), 보관 문서 제외");
 
       // B-D3 상한: menu_big 5,200행을 row_limit 50으로 → 50행 반영 + 5,150행 초과
       const big = await createDbSource(db, actor, { id: bot, customer_id: customer }, {

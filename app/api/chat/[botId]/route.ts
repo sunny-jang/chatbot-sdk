@@ -1,6 +1,6 @@
 import { withWidgetCors } from "@/lib/widget-origin";
 import { NextResponse } from "next/server";
-import { searchDocuments, type FoundDoc } from "@/lib/db-sources/search";
+import { searchDocuments, sourcesOf, type FoundDoc } from "@/lib/db-sources/search";
 import sql from "@/lib/neon";
 import { Bot, QaPair, initSchema } from "@/lib/db";
 import { findBestMatch, getEmbedding } from "@/lib/embeddings";
@@ -280,8 +280,8 @@ async function POSTHandler(
     // 숫자 조건 필터 → 임베딩 순위, 보관 문서 제외, DB 문서는 출처 포함
     relevantDocs = await searchDocuments(botId, queryEmbedding, message);
   }
-  // 위젯 "출처 보기"용. DB에서 온 문서만, 연결 이름·테이블·행 제목만 담는다.
-  const sources = relevantDocs.flatMap((d) => (d.source ? [{ kind: d.source.kind, label: d.source.label }] : []));
+  // 위젯 "출처 보기"용. DB에서 온 문서의 행 제목만 담는다.
+  const sources = sourcesOf(relevantDocs);
 
   if (ragAiMode && relevantDocs.length === 0 && !proactive?.knowledge.length) {
     const reply = "등록된 문서에서 해당 질문에 대한 내용을 찾을 수 없습니다. 다른 표현으로 질문하거나 Q&A 목록을 이용해주세요.";

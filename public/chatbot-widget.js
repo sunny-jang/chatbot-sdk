@@ -708,7 +708,7 @@
       return el;
     }
 
-    /** 답변 근거가 된 DB 행(연결 이름 · 테이블 · 행 제목). 원본 값은 담지 않는다. */
+    /** 답변 근거가 된 등록 데이터(행 제목). 원본 값·내부 이름은 담지 않는다. */
     function addSources(sources) {
       if (!Array.isArray(sources) || !sources.length) return;
       const box = document.createElement("details");
@@ -719,7 +719,7 @@
       const list = document.createElement("ul");
       [...new Set(sources.map((s) => String(s && s.label || "")).filter(Boolean))].slice(0, 5).forEach((label) => {
         const li = document.createElement("li");
-        li.textContent = label;
+        li.textContent = "등록된 데이터 · " + label;
         list.appendChild(li);
       });
       box.appendChild(list);

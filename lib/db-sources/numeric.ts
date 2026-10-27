@@ -5,6 +5,16 @@
 export type NumericField = { column: string; label: string; unit: string; value: number };
 export type NumericIntent = { op: "lte" | "gte" | "lt" | "gt"; value: number; unit: string };
 
+/** 단위 표기 정리: ₩·KRW·"원(부가세 포함)" → 원, EA·pcs → 개. 저장할 때와 질문을 읽을 때 같은 규칙을 쓴다. */
+export function normalizeUnit(unit: string | null | undefined): string {
+  const u = String(unit ?? "").trim().toLowerCase();
+  if (!u) return "";
+  if (/원|₩|krw|won/.test(u)) return "원";
+  if (/^(개|ea|pcs|pc|piece|pieces)$/.test(u)) return "개";
+  if (/^(명|인)$/.test(u)) return "명";
+  return u;
+}
+
 const UNIT_ALIASES: Record<string, string> = { 원: "원", 개: "개", 명: "명", 인: "명", 분: "분", 시간: "시간", 일: "일", g: "g", kg: "kg", ml: "ml" };
 const UNIT_RE = "(원|개|명|인|분|시간|일|kg|g|ml)";
 
@@ -46,7 +56,9 @@ export function parseNumericIntent(text: string): NumericIntent[] {
     const word = (m[4] ?? "").replace(/\s/g, "");
     if (m[3] === "대") {
       // "2만원대" → 2만 이상 3만 미만(자릿수 기준)
-      const step = Math.pow(10, Math.max(0, Math.floor(Math.log10(value || 1))));
+      // 끝자리 0의 개수로 범위를 정한다: 2만원대 → 2만~3만, 1만5천원대 → 1만5천~1만6천
+      let step = 1;
+      while (value > 0 && value % (step * 10) === 0) step *= 10;
       out.push({ op: "gte", value, unit }, { op: "lt", value: value + step, unit });
     } else if (/^(이하|까지|안넘는|넘지않는|아래)$/.test(word)) out.push({ op: "lte", value, unit });
     else if (/^(이상|부터)$/.test(word)) out.push({ op: "gte", value, unit });
@@ -60,7 +72,7 @@ export function parseNumericIntent(text: string): NumericIntent[] {
 export function passesNumericIntent(fields: NumericField[] | null | undefined, intents: NumericIntent[]): boolean {
   if (!intents.length || !fields?.length) return true;
   for (const intent of intents) {
-    const candidates = fields.filter((f) => f.unit === intent.unit);
+    const candidates = fields.filter((f) => normalizeUnit(f.unit) === intent.unit);
     if (!candidates.length) continue;
     const ok = candidates.some((f) =>
       intent.op === "lte" ? f.value <= intent.value : intent.op === "gte" ? f.value >= intent.value : intent.op === "lt" ? f.value < intent.value : f.value > intent.value,

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseKoreanNumber, parseNumericIntent, passesNumericIntent } from "../lib/db-sources/numeric";
+import { normalizeUnit, parseKoreanNumber, parseNumericIntent, passesNumericIntent } from "../lib/db-sources/numeric";
+import { sourcesOf } from "../lib/db-sources/search";
 import { numericFieldsOf } from "../lib/db-sources/render";
 
 test("parseKoreanNumber: 만·천·쉼표·소수", () => {
@@ -52,4 +53,27 @@ test("numericFieldsOf: 숫자 타입 본문 컬럼만, 문자열 숫자도 값�
     { column: "price", label: "가격", unit: "원", value: 25000 },
     { column: "stock", label: "재고", unit: "개", value: 3 },
   ]);
+});
+
+test("리뷰 반영: 단위 정리·복합 금액 '대'·날짜 필드·타입 없는 숫자 문자열·출처 중복 제거", () => {
+  assert.equal(normalizeUnit("KRW"), "원");
+  assert.equal(normalizeUnit("₩"), "원");
+  assert.equal(normalizeUnit("원(부가세 포함)"), "원");
+  assert.equal(normalizeUnit("EA"), "개");
+  assert.equal(passesNumericIntent([{ column: "price", label: "가격", unit: "KRW", value: 35000 }], parseNumericIntent("2만원 이하")), false, "KRW 표기도 원으로 비교");
+  assert.deepEqual(parseNumericIntent("1만5천원대 선물"), [{ op: "gte", value: 15000, unit: "원" }, { op: "lt", value: 16000, unit: "원" }]);
+  const fields = numericFieldsOf(
+    { opened: "2026-10-01", price: "25000", code: "0012" },
+    [
+      { column: "opened", label: "오픈일", type: "date" },
+      { column: "price", label: "가격", unit: "₩" },
+      { column: "code", label: "코드" },
+    ],
+  );
+  assert.deepEqual(fields, [
+    { column: "opened", label: "오픈일", unit: "date", value: Date.UTC(2026, 9, 1) / 1000 },
+    { column: "price", label: "가격", unit: "원", value: 25000 },
+  ]);
+  const doc = (title: string, db: boolean) => ({ id: title, title, content: "", score: 1, source: db ? { kind: "db" as const, label: title } : null });
+  assert.deepEqual(sourcesOf([doc("아메리카노", true), doc("FAQ", false), doc("아메리카노", true)]), [{ kind: "db", label: "아메리카노" }]);
 });

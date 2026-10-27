@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ColumnInfo } from "@/lib/data-connections/types";
 import type { BodyColumn, ColumnDraft, ColumnRole, Draft } from "./types";
+import { normalizeUnit } from "./numeric";
 
 /** 이름·전화·이메일·주소·주민번호·카드 등. 이름(name)은 사람 표로 보일 때만 개인정보로 본다. */
 const PERSONAL = /(phone|tel|mobile|cell|email|e_mail|mail|address|addr|zip|postal|ssn|resident|jumin|passport|card_no|card_number|account_no|birth|password|passwd|pwd|token|secret|ip_addr|전화|휴대|이메일|주소|주민|계좌|카드|생년|비밀번호)/i;
@@ -171,17 +172,27 @@ export function renderRowDocument(
 export const rowHash = (title: string, content: string) => createHash("sha256").update(title + "\u0000" + content).digest("hex");
 export const rowKeyOf = (value: unknown) => (value === null || value === undefined ? "" : String(value));
 
-/** 숫자 타입 본문 컬럼 → 하이브리드 검색용 숫자 필드. 단위가 같은 질문 조건("2만원 이하")과 비교한다. */
+/**
+ * 숫자·날짜 타입 본문 컬럼 → 하이브리드 검색용 필드. 숫자는 단위를 정리해 저장하고(질문 조건과 같은 단위끼리 비교),
+ * 날짜는 unit "date"·초 단위 값으로 저장한다. 타입을 모르면 앞자리 0이 없는 숫자 모양 값만 숫자로 본다.
+ */
 export function numericFieldsOf(row: Record<string, unknown>, bodyColumns: BodyColumn[]): { column: string; label: string; unit: string; value: number }[] {
   const out: { column: string; label: string; unit: string; value: number }[] = [];
   for (const col of bodyColumns) {
     const raw = row[col.column];
     if (raw === null || raw === undefined || raw === "") continue;
-    const numericType = col.type ? isNumber(col.type) : typeof raw === "number";
+    const label = col.label || col.column;
+    if (col.type && /date|time/i.test(col.type) && !/interval/i.test(col.type)) {
+      const t = new Date(String(raw)).getTime();
+      if (Number.isFinite(t)) out.push({ column: col.column, label, unit: "date", value: Math.floor(t / 1000) });
+      continue;
+    }
+    const text = String(raw).replace(/,/g, "").trim();
+    const numericType = col.type ? isNumber(col.type) : typeof raw === "number" || /^-?(?:[1-9]\d*|0)(?:\.\d+)?$/.test(text);
     if (!numericType) continue;
-    const value = Number(String(raw).replace(/,/g, ""));
+    const value = Number(text);
     if (!Number.isFinite(value)) continue;
-    out.push({ column: col.column, label: col.label || col.column, unit: col.unit ?? "", value });
+    out.push({ column: col.column, label, unit: normalizeUnit(col.unit), value });
   }
   return out;
 }
