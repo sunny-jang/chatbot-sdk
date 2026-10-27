@@ -92,7 +92,7 @@ async function findRelevantDocs(
 ): Promise<{ title: string; content: string; score: number }[]> {
   // Step 1: fetch only id + embedding (skip heavy content field)
   const rows = await sql`
-    SELECT id, title, embedding FROM documents WHERE bot_id = ${botId} AND embedding IS NOT NULL
+    SELECT id, title, embedding FROM documents WHERE bot_id = ${botId} AND embedding IS NOT NULL AND archived_at IS NULL
   `;
   const scored = rows
     .map((r) => ({

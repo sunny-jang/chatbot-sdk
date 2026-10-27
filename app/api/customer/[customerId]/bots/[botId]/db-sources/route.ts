@@ -1,0 +1,26 @@
+import sql from "@/lib/neon";
+import { readDbSources as read, manageDbSources as manage } from "@/lib/db-sources/handlers";
+import { portalUser } from "@/lib/customer-portal/auth";
+import { customerBot } from "@/lib/customer-portal/bots";
+import { failure, sameOrigin } from "@/lib/customer-portal/input";
+import { enforceRateLimit } from "@/lib/support";
+type C = { params: Promise<{ customerId: string; botId: string }> };
+export const maxDuration = 60;
+async function handle(req: Request, { params }: C, mutation: boolean) {
+  try {
+    const p = await params,
+      user = await portalUser();
+    await customerBot(sql, user.id, p.customerId, p.botId, "knowledge.manage");
+    if (mutation) {
+      sameOrigin(req);
+      // 가져오기는 100행마다 한 번씩 호출하므로 분당 한도를 넉넉히 둔다.
+      if (!(await enforceRateLimit("customer-db:" + user.id, req, 120)))
+        return Response.json({ error: "잠시 후 다시 시도해주세요." }, { status: 429 });
+    }
+    return (mutation ? manage : read)(req, { params: Promise.resolve({ id: p.botId }) }, true);
+  } catch (e) {
+    return failure(e);
+  }
+}
+export const GET = (r: Request, c: C) => handle(r, c, false);
+export const POST = (r: Request, c: C) => handle(r, c, true);

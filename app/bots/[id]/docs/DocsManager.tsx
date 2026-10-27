@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 type Folder = { id: string; name: string; parent_id: string | null };
-type Doc = { id: string; folder_id: string | null; title: string; content: string; created_at: number };
+type Doc = { id: string; folder_id: string | null; title: string; content: string; created_at: number; source_kind?: string | null; archived_at?: number | null };
 
 export default function DocsManager({
   botId,
@@ -488,7 +488,11 @@ export default function DocsManager({
                   <div className="flex items-center gap-3 px-5 py-4">
                     <span className="text-lg">📄</span>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm truncate">{doc.title}</p>
+                      <p className="font-medium text-gray-900 text-sm truncate">
+                        {doc.title}
+                        {doc.source_kind === "db" && <span className="ml-2 align-middle rounded px-1.5 py-0.5 text-[11px] font-semibold" style={{ background: "var(--brand-soft)", color: "var(--brand-text)" }}>DB</span>}
+                        {doc.archived_at && <span className="ml-1.5 align-middle rounded px-1.5 py-0.5 text-[11px] font-semibold bg-gray-100 text-gray-500">보관됨 · 검색 제외</span>}
+                      </p>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {folderName && <span className="text-blue-500 mr-1.5">📁 {folderName} ·</span>}
                         {doc.content.length.toLocaleString()}자 ·{" "}

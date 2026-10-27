@@ -57,11 +57,14 @@ export type Connector = {
   testConnection(config: ConnectionConfig): Promise<TestResult>;
   listTables(config: ConnectionConfig): Promise<TableInfo[]>;
   sample(config: ConnectionConfig, schema: string, table: string, limit?: number): Promise<SampleResult>;
-  /** 고유키 순으로 batch 단위 읽기. cursor는 마지막 키 값(JSON 문자열) */
+  /** 고유키 순으로 batch 단위 읽기. startAfter를 주면 그 키 다음부터. onBatch가 false를 돌려주면 멈춘다. */
   readRows(
     config: ConnectionConfig,
     query: RowQuery,
-    onBatch: (rows: Record<string, unknown>[]) => Promise<boolean | void>,
+    onBatch: (rows: Record<string, unknown>[], lastKey: unknown) => Promise<boolean | void>,
     batch?: number,
+    startAfter?: unknown,
   ): Promise<void>;
+  /** 필터를 적용한 행 수와 그중 고유키 값이 서로 다른(NULL 제외) 행 수. 둘이 다르면 고유키로 쓸 수 없다. */
+  countRows(config: ConnectionConfig, query: RowQuery): Promise<{ total: number; distinctKeys: number }>;
 };

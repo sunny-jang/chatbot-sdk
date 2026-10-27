@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import sql from "@/lib/neon";
 import { Bot, Document, DocFolder } from "@/lib/db";
 import { getTenantId } from "@/lib/auth";
+import DbSourceManager from "@/app/components/DbSourceManager";
+import "@/app/customer/portal.css";
 import WebSourceManager from "@/app/components/WebSourceManager";
 import DocsManager from "./DocsManager";
 import BotHeader from "../BotHeader";
@@ -53,7 +55,7 @@ export default async function DocsPage({
   `) as unknown as DocFolder[];
 
   const docs = (await sql`
-    SELECT id, bot_id, folder_id, title, content, created_at
+    SELECT id, bot_id, folder_id, title, content, created_at, source_kind, archived_at
     FROM documents WHERE bot_id = ${id} ORDER BY created_at DESC
   `) as unknown as Document[];
 
@@ -61,6 +63,11 @@ export default async function DocsPage({
     <div>
       <BotHeader bot={bot} current="문서 관리" actions={<HelpButton content={HELP} />} />
       <WebSourceManager botId={id} folders={folders}/>
+      <DbSourceManager
+        apiBase={`/api/bots/${id}`}
+        folders={folders.map((f) => ({ id: f.id, name: f.name }))}
+        settingsHref={(bot as Bot & { customer_id?: string | null }).customer_id ? `/customers/${(bot as Bot & { customer_id?: string | null }).customer_id}` : null}
+      />
       <DocsManager key={JSON.stringify(docs.map(d=>[d.id,d.title,d.content]))} botId={id} initialDocs={docs} initialFolders={folders} />
     </div>
   );

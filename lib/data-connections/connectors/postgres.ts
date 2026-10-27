@@ -151,6 +151,14 @@ export function buildRowQuery(query: RowQuery, kind: "postgres" = "postgres", ba
   return { sql, params, cursorIndex };
 }
 
+/** 필터만 적용한 행 수 질의. WHERE는 행 질의와 같은 방식(식별자 인용·값 바인딩)으로 만든다. */
+export function buildCountQuery(query: RowQuery, kind: "postgres" = "postgres") {
+  const built = buildRowQuery({ ...query, columns: [] }, kind, 1, false);
+  const from = built.sql.slice(built.sql.indexOf(" FROM "), built.sql.indexOf(" ORDER BY "));
+  const key = quoteIdentifier(query.keyColumn, kind);
+  return { sql: `SELECT count(*)::bigint AS n, count(DISTINCT ${key})::bigint AS k${from}`, params: built.params };
+}
+
 export const postgresConnector: Connector = {
   async testConnection(config): Promise<TestResult> {
     try {
@@ -173,21 +181,29 @@ export const postgresConnector: Connector = {
       return { columns, rows: rows.map(plainRow) };
     });
   },
-  readRows(config, query, onBatch, batch = READ_BATCH) {
+  countRows(config, query) {
+    return withReadOnly(config, async (tx) => {
+      const built = buildCountQuery(query);
+      const [row] = (await tx.unsafe(built.sql, built.params as never[])) as unknown as { n: unknown; k: unknown }[];
+      return { total: Number(row?.n ?? 0), distinctKeys: Number(row?.k ?? 0) };
+    });
+  },
+  readRows(config, query, onBatch, batch = READ_BATCH, startAfter = undefined) {
     return withReadOnly(config, async (tx) => {
       const first = buildRowQuery(query, "postgres", batch, false);
       const next = buildRowQuery(query, "postgres", batch, true);
-      let cursor: unknown = undefined;
+      let cursor: unknown = startAfter === null ? undefined : startAfter;
       while (true) {
         const built = cursor === undefined ? first : next;
         const params = [...built.params];
         if (built.cursorIndex) params[built.cursorIndex - 1] = cursor;
         const rows = (await tx.unsafe(built.sql, params as never[])) as unknown as Record<string, unknown>[];
         if (!rows.length) return;
-        const stop = await onBatch(rows.map(plainRow));
-        if (stop === false || rows.length < batch) return;
         // 커서는 변환 전 원본 값으로 넘겨 컬럼 타입 그대로 비교한다.
-        cursor = rows[rows.length - 1][query.keyColumn];
+        const last = rows[rows.length - 1][query.keyColumn];
+        const stop = await onBatch(rows.map(plainRow), last);
+        if (stop === false || rows.length < batch) return;
+        cursor = last;
         if (cursor === null || cursor === undefined) return;
       }
     });

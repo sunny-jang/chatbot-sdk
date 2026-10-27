@@ -318,6 +318,10 @@ export type Document = {
   content: string;
   embedding: string | null;
   created_at: number;
+  /** null=직접 등록, web=URL/사이트 가져오기, file=파일, db=고객사 DB 행 */
+  source_kind?: "web" | "file" | "db" | null;
+  /** 보관된 문서는 검색에서 제외된다(사라진 DB 행 등). */
+  archived_at?: number | null;
 };
 
 export type QaPair = {

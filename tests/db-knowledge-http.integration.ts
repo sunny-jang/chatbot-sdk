@@ -133,7 +133,9 @@ async function main() {
   });
   await check("A-12 연결 4개째는 거부", async () => {
     const extra: string[] = [];
-    for (const name of [PREFIX + "둘", PREFIX + "셋"]) {
+    // 화면 점검용으로 만든 다른 연결이 있을 수 있으니 한도(3)까지 남은 만큼만 채운다.
+    const existing = (await api(deskBase, desk, admin)).data.length;
+    for (const name of [PREFIX + "둘", PREFIX + "셋"].slice(0, Math.max(0, 3 - existing))) {
       const r = await api(deskBase, desk, admin, "POST", { action: "create", ...conn, name });
       assert.equal(r.status, 201);
       extra.push(r.data.id);
@@ -152,6 +154,156 @@ async function main() {
       assert.match(String(r.data), /203\.0\.113\.10|배포 후 안내/);
       assert.ok(!String(r.data).includes(db.password));
     }
+  });
+  // ---------- 단계 B: DB 소스 ----------
+  const deskSrc = "/api/customer/qa-cafe/bots/portal-cafe-bot/db-sources",
+    agencySrc = "/api/bots/portal-cafe-bot/db-sources",
+    shopSrc = "/api/customer/qa-shop/bots/portal-shop-bot/db-sources";
+  // 이전 실행이 남긴 이 스위트의 소스·문서 정리(연결 이름 접두사로 한정)
+  const stale = await sql`SELECT s.id FROM db_sources s JOIN data_connections c ON c.id=s.connection_id WHERE c.name LIKE ${PREFIX + "%"}`.catch(() => []);
+  for (const s of stale) {
+    await sql`DELETE FROM documents WHERE id IN (SELECT document_id FROM db_source_rows WHERE source_id=${s.id})`;
+    await sql`DELETE FROM db_sources WHERE id=${s.id}`;
+  }
+  const menuConfig = {
+    connectionId: "",
+    table: "menu",
+    titleColumn: "name",
+    keyColumn: "id",
+    bodyColumns: [
+      { column: "category", label: "분류" },
+      { column: "price", label: "가격", unit: "원" },
+      { column: "is_active", label: "판매 상태", valueMap: { "1": "판매중", "0": "품절" } },
+      { column: "description", label: "설명" },
+    ],
+    excludedColumns: ["updated_at"],
+    filters: [{ column: "is_active", op: "eq", value: "1", kind: "number" }],
+    schedule: "daily",
+  };
+  let menuSourceId = "";
+  const importAll = async (path: string, host: string, cookie: string, sourceId: string) => {
+    let state: Record<string, unknown> | null = null;
+    for (let i = 0; i < 80; i++) {
+      // 진행 상태는 서버가 들고 있다. 클라이언트가 보낸 state는 무시된다.
+      const r = await api(path, host, cookie, "POST", { action: "import", sourceId, ...(state ? { state: { processed: -100000 } } : { begin: true }) });
+      assert.equal(r.status, 200, JSON.stringify(r.data));
+      state = r.data.state;
+      if (state!.done) return state!;
+    }
+    throw Error("가져오기가 끝나지 않음");
+  };
+  await check("B-01 소스 화면: 관리자는 연결 목록·소스, 담당자·다른 고객사는 404", async () => {
+    menuConfig.connectionId = id;
+    const r = await api(deskSrc, desk, admin);
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.assigned, true);
+    assert.ok(r.data.connections.some((c: { id: string }) => c.id === id));
+    assert.ok(!JSON.stringify(r.data).includes(db.password));
+    assert.equal((await api(deskSrc, desk, agent)).status, 404);
+    assert.equal((await api(deskSrc, desk, other)).status, 404);
+    const shop = await api(shopSrc, desk, other, "POST", { action: "tables", connectionId: id });
+    assert.equal(shop.status, 404, "다른 고객사 봇에서 이 연결로 테이블 조회 불가");
+  });
+  await check("B-02 테이블 목록·미리보기 행과 컬럼 타입", async () => {
+    const t = await api(deskSrc, desk, admin, "POST", { action: "tables", connectionId: id });
+    assert.equal(t.status, 200);
+    assert.ok(t.data.tables.some((x: { name: string }) => x.name === "menu"));
+    const s = await api(deskSrc, desk, admin, "POST", { action: "sample", connectionId: id, table: "menu" });
+    assert.equal(s.status, 200, JSON.stringify(s.data));
+    assert.equal(s.data.rows.length, 10);
+    assert.ok(s.data.columns.some((c: { name: string; type: string }) => c.name === "price" && /int/.test(c.type)));
+  });
+  await check("B-03 초안: 제목 name·고유키 id·본문 4개·제외 updated_at, 키 없으면 규칙 초안", async () => {
+    const r = await api(deskSrc, desk, admin, "POST", { action: "draft", connectionId: id, table: "menu" });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const role = Object.fromEntries(r.data.draft.columns.map((c: { column: string; role: string }) => [c.column, c.role]));
+    assert.equal(role.id, "key");
+    assert.equal(role.name, "title");
+    assert.equal(role.updated_at, "excluded");
+    for (const c of ["category", "price", "description", "is_active"]) assert.equal(role[c], "body", c);
+    assert.equal(r.data.draft.draftedBy, "rules");
+    assert.equal(r.data.draft.questions.length, 3);
+  });
+  await check("B-04 개인정보 추정 컬럼(이름·전화·이메일·주소)은 기본 제외", async () => {
+    const r = await api(deskSrc, desk, admin, "POST", { action: "draft", connectionId: id, table: "members" });
+    assert.equal(r.status, 200);
+    for (const c of ["phone", "email", "address"]) {
+      const col = r.data.draft.columns.find((x: { column: string }) => x.column === c);
+      assert.equal(col.personal, true, c);
+      assert.equal(col.role, "excluded", c);
+    }
+  });
+  await check("B-05 답변 미리보기: 3문서 '라벨: 값'·값 매핑·필터, 질문마다 근거 문서", async () => {
+    const r = await api(deskSrc, desk, admin, "POST", { action: "preview", ...menuConfig, questions: ["아메리카노 가격이 얼마예요?", "카페라떼 있어요?"] });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.documents.length, 3);
+    assert.equal(r.data.documents[0].title, "아메리카노");
+    assert.match(r.data.documents[0].content, /가격: 4,500원/);
+    assert.match(r.data.documents[0].content, /판매 상태: 판매중/);
+    assert.equal(r.data.answers.length, 2);
+    assert.equal(r.data.answers[0].title, "아메리카노");
+    assert.ok(r.data.answers.every((a: { note: string | null }) => a.note), "키가 없으면 근거 문서만 표시한다는 안내");
+  });
+  await check("B-06 저장하고 가져오기: 15행 → 문서(source_kind db)·감사 create/sync", async () => {
+    const c = await api(deskSrc, desk, admin, "POST", { action: "create", ...menuConfig });
+    assert.equal(c.status, 201, JSON.stringify(c.data));
+    menuSourceId = c.data.id;
+    const state = await importAll(deskSrc, desk, admin, menuSourceId);
+    assert.equal(state.created, 15);
+    assert.equal(state.total, 15);
+    const docs = await sql`SELECT d.title,d.source_kind FROM documents d JOIN db_source_rows r ON r.document_id=d.id WHERE r.source_id=${menuSourceId}`;
+    assert.equal(docs.length, 15);
+    assert.ok(docs.every((d) => d.source_kind === "db"));
+    const list = await api(deskSrc, desk, admin);
+    const mine = list.data.sources.find((x: { id: string }) => x.id === menuSourceId);
+    assert.equal(mine.lastResult.created, 15);
+    assert.equal(mine.syncing, false);
+    for (const action of ["db_source.create", "db_source.sync"]) {
+      const [a] = await sql`SELECT 1 FROM access_audit_logs WHERE action=${action} AND target_id=${menuSourceId}`;
+      assert.ok(a, action);
+    }
+  });
+  await check("B-13 시작 없이 단계만 호출하면 409, 클라이언트 state로 상한을 넘길 수 없음", async () => {
+    const r = await api(deskSrc, desk, admin, "POST", { action: "import", sourceId: menuSourceId, state: { processed: -100000, cursor: null, done: false } });
+    assert.equal(r.status, 409, JSON.stringify(r.data));
+    assert.match(r.data.error, /처음부터 다시 시작/);
+  });
+  await check("B-07 같은 테이블 소스 중복은 409", async () => {
+    const r = await api(deskSrc, desk, admin, "POST", { action: "create", ...menuConfig });
+    assert.equal(r.status, 409);
+    assert.match(r.data.error, /이미 등록된 테이블/);
+  });
+  await check("B-08 행 상한 50으로 menu_big(5,200행) → 50행 반영·5,150행 초과 안내", async () => {
+    const c = await api(deskSrc, desk, admin, "POST", {
+      action: "create", connectionId: id, table: "menu_big", titleColumn: "name", keyColumn: "id",
+      bodyColumns: [{ column: "price", label: "가격", unit: "원" }], rowLimit: 50, schedule: "manual",
+    });
+    assert.equal(c.status, 201, JSON.stringify(c.data));
+    const state = await importAll(deskSrc, desk, admin, c.data.id);
+    assert.equal(state.created, 50);
+    assert.equal(state.truncated, 5150);
+    const del = await api(deskSrc, desk, admin, "POST", { action: "delete", sourceId: c.data.id, documents: "delete" });
+    assert.equal(del.status, 200);
+  });
+  await check("B-10 고유키 없이 저장하면 거부", async () => {
+    const r = await api(deskSrc, desk, admin, "POST", { action: "create", ...menuConfig, table: "members", keyColumn: "" });
+    assert.equal(r.status, 400);
+    assert.match(r.data.error, /고유키/);
+  });
+  await check("B-11 담당자·다른 고객사 관리자는 소스 가져오기·삭제 불가(404)", async () => {
+    assert.equal((await api(deskSrc, desk, agent, "POST", { action: "import", sourceId: menuSourceId })).status, 404);
+    assert.equal((await api(deskSrc, desk, other, "POST", { action: "delete", sourceId: menuSourceId })).status, 404);
+    assert.equal((await api(shopSrc, desk, other, "POST", { action: "import", sourceId: menuSourceId })).status, 404);
+  });
+  await check("B-12 에이전시 소유자도 /api/bots 경로로 같은 소스를 보고 다시 가져오기", async () => {
+    const r = await api(agencySrc, agency, owner);
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.ok(r.data.sources.some((x: { id: string }) => x.id === menuSourceId));
+    const state = await importAll(agencySrc, agency, owner, menuSourceId);
+    assert.equal(state.unchanged, 15);
+    assert.equal(state.created, 0);
+    const del = await api(agencySrc, agency, owner, "POST", { action: "delete", sourceId: menuSourceId, documents: "delete" });
+    assert.equal(del.status, 200);
   });
   await check("A-10 삭제 후 secret_enc NULL·목록 제외·감사", async () => {
     assert.equal((await api(`${deskBase}/${id}`, desk, agent, "DELETE")).status, 404);

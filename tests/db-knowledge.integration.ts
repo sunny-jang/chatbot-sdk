@@ -19,6 +19,9 @@ import {
 } from "../lib/data-connections/store";
 import { postgresConnector } from "../lib/data-connections/connectors/postgres";
 import type { ConnectionConfig } from "../lib/data-connections/types";
+import { createDbSource, dbSource, deleteDbSource, listDbSources } from "../lib/db-sources/store";
+import { beginImport, importStep } from "../lib/db-sources/import";
+import { fakeEmbeddingsEnabled } from "../lib/embeddings";
 
 async function main() {
   if (process.env.PORTAL_DB_CHECK !== "1") {
@@ -180,6 +183,140 @@ async function main() {
       await postgresConnector.readRows(fixture, { schema: "public", table: "menu", columns: ["name", "price"], keyColumn: "id", filters: [{ column: "is_active", op: "eq", value: 1 }] }, async (batch) => { rows += batch.length; }, 4);
       assert.equal(rows, 15, "is_active=1 행 15개를 4개씩 키셋 페이징");
       pass("A-D6 커넥터 읽기 전용(사용자 권한·식별자 인용)·샘플·테이블 목록·키셋 읽기");
+
+      // ---------- 단계 B ----------
+      if (!fakeEmbeddingsEnabled()) throw Error("B 검사는 EMBEDDINGS_FAKE=1(로컬 DB)이 필요합니다");
+      const live = await createDataConnection(db, admin, customer, { ...input, name: "메뉴 DB" }).catch(async () => {
+        // 위에서 한도(3개)를 채웠으므로 하나를 지우고 만든다.
+        const [spare] = await tx`SELECT id FROM data_connections WHERE customer_id=${customer} AND status<>'deleted' ORDER BY created_at DESC LIMIT 1`;
+        await deleteDataConnection(db, admin, customer, String(spare.id));
+        return createDataConnection(db, admin, customer, { ...input, name: "메뉴 DB" });
+      });
+      const bot = "bot-" + suffix,
+        otherBot = "bot-other-" + suffix;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${bot},${tenant},${customer},'카페 봇','ai'),(${otherBot},${tenant},${other},'쇼핑몰 봇','ai')`;
+      const actor = { userId: admin, tenantId: tenant, customerId: customer };
+      const menuConfig = {
+        connectionId: live.id,
+        table: "menu",
+        titleColumn: "name",
+        keyColumn: "id",
+        bodyColumns: [
+          { column: "category", label: "분류" },
+          { column: "price", label: "가격", unit: "원" },
+          { column: "is_active", label: "판매 상태", valueMap: { "1": "판매중", "0": "품절" } },
+          { column: "description", label: "설명" },
+        ],
+        excludedColumns: ["updated_at"],
+        filters: [{ column: "is_active", op: "eq", value: "1", kind: "number" }],
+        schedule: "daily",
+      };
+      const menuSource = await createDbSource(db, actor, { id: bot, customer_id: customer }, menuConfig);
+      assert.equal(menuSource.tableLabel, "menu");
+      await assert.rejects(() => createDbSource(db, actor, { id: bot, customer_id: customer }, menuConfig), { status: 409 });
+      await assert.rejects(() => createDbSource(db, actor, { id: otherBot, customer_id: other }, menuConfig), { status: 404 });
+      const [createAudit] = await tx`SELECT 1 FROM access_audit_logs WHERE action='db_source.create' AND target_id=${menuSource.id}`;
+      assert.ok(createAudit);
+      pass("B-D0 소스 생성·같은 테이블 중복 409·다른 고객사 봇에서 이 연결 사용 불가(404)·감사");
+
+      // B-D1 단계별 가져오기 → documents(source_kind='db')·db_source_rows
+      let source = await dbSource(db, bot, menuSource.id);
+      let state = await beginImport(source, tx as never);
+      assert.equal(state.total, 15, "is_active=1 15행");
+      assert.equal(state.truncated, 0);
+      let steps = 0;
+      while (!state.done && steps < 20) {
+        state = await importStep(source, null, tx as never);
+        steps++;
+      }
+      assert.ok(state.done);
+      assert.equal(state.created, 15);
+      const docs = await tx`SELECT d.title,d.content,d.source_kind,d.embedding,d.archived_at FROM documents d WHERE d.bot_id=${bot} ORDER BY d.title`;
+      assert.equal(docs.length, 15);
+      assert.ok(docs.every((d) => d.source_kind === "db" && d.embedding && d.archived_at === null));
+      const americano = docs.find((d) => d.title === "아메리카노")!;
+      assert.equal(americano.content.split("\n")[0], "menu: 아메리카노");
+      assert.ok(americano.content.includes("가격: 4,500원") && americano.content.includes("판매 상태: 판매중"));
+      assert.ok(!docs.some((d) => d.title === "초코 브라우니"), "품절 행은 필터로 제외");
+      const rowCount = await tx`SELECT count(*)::int AS n FROM db_source_rows WHERE source_id=${menuSource.id} AND status='active' AND document_id IS NOT NULL`;
+      assert.equal(rowCount[0].n, 15);
+      source = await dbSource(db, bot, menuSource.id);
+      assert.equal(source.sync_locked_at, null);
+      assert.ok(source.last_synced_at);
+      assert.equal(source.last_result?.created, 15);
+      pass("B-D1 단계별 가져오기: 15행 → 문서(source_kind=db, '라벨: 값'), 행 테이블·소스 결과 기록, 잠금 해제");
+
+      // B-D2 같은 데이터로 다시 가져오기 → 변경 없음, 문서 수 그대로
+      state = await beginImport(source, tx as never);
+      // 단계마다 하트비트가 sync_locked_at을 앞으로 옮겨도 이번 실행에서 본 행은 보관하지 않아야 한다.
+      await tx`UPDATE db_sources SET sync_locked_at=sync_locked_at+300 WHERE id=${menuSource.id}`;
+      await tx`UPDATE db_source_rows SET synced_at=synced_at-600 WHERE source_id=${menuSource.id}`;
+      while (!state.done) state = await importStep(source, null, tx as never);
+      assert.equal(state.archived, 0, "하트비트와 무관하게 실행 시작 시각 기준");
+      assert.equal(state.created, 0);
+      assert.equal(state.unchanged, 15);
+      assert.equal((await tx`SELECT count(*)::int AS n FROM documents WHERE bot_id=${bot}`)[0].n, 15);
+      pass("B-D2 재가져오기는 해시가 같으면 변경 없음(임베딩·문서 재생성 없음)");
+
+      // B-D3 상한: menu_big 5,200행을 row_limit 50으로 → 50행 반영 + 5,150행 초과
+      const big = await createDbSource(db, actor, { id: bot, customer_id: customer }, {
+        connectionId: live.id, table: "menu_big", titleColumn: "name", keyColumn: "id",
+        bodyColumns: [{ column: "price", label: "가격", unit: "원" }], rowLimit: 50, schedule: "manual",
+      });
+      const bigSource = await dbSource(db, bot, big.id);
+      state = await beginImport(bigSource, tx as never);
+      assert.equal(state.total, 50);
+      assert.equal(state.truncated, 5150);
+      while (!state.done) state = await importStep(bigSource, null, tx as never);
+      assert.equal(state.created, 50);
+      assert.equal((await tx`SELECT count(*)::int AS n FROM db_source_rows WHERE source_id=${big.id}`)[0].n, 50);
+      pass("B-D3 행 상한: 50행만 반영하고 초과 5,150행을 결과에 기록");
+
+      // 리뷰 반영: 진행 상태는 서버가 들고, 시작 없이 단계 호출은 거부, 고유키 중복 거부, 화면 실패는 연속 실패에 안 셈
+      await assert.rejects(() => importStep(source, null, tx as never), { status: 409 });
+      const dupKey = await createDbSource(db, actor, { id: bot, customer_id: customer }, {
+        connectionId: live.id, table: "members", titleColumn: "grade", keyColumn: "grade",
+        bodyColumns: [{ column: "joined_at", label: "가입일", type: "date" }], schedule: "manual",
+      });
+      // members.grade는 2행 모두 달라 고유하므로 정상 → 지우고 menu.category(중복 있음)로 확인
+      await deleteDbSource(db, actor, { id: bot, customer_id: customer }, dupKey.id, "delete");
+      const bot2 = "bot2-" + suffix;
+      await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${bot2},${tenant},${customer},'카페 봇 2','ai')`;
+      const catKey = await createDbSource(db, actor, { id: bot2, customer_id: customer }, {
+        connectionId: live.id, table: "menu", schema: "public", titleColumn: "name", keyColumn: "category",
+        bodyColumns: [{ column: "price", label: "가격", unit: "원", type: "integer" }], schedule: "manual",
+      });
+      const catSource = await dbSource(db, bot2, catKey.id);
+      await assert.rejects(() => beginImport(catSource, tx as never), (e: unknown) => /같은 값이나 빈 값/.test((e as Error).message));
+      const [afterFail] = await tx`SELECT consecutive_failures, last_error, sync_locked_at, sync_state FROM db_sources WHERE id=${catKey.id}`;
+      assert.equal(Number(afterFail.consecutive_failures), 0, "화면에서 누른 실패는 연속 실패로 세지 않음");
+      assert.match(String(afterFail.last_error), /같은 값이나 빈 값/);
+      assert.equal(afterFail.sync_locked_at, null);
+      assert.equal(afterFail.sync_state, null);
+      await deleteDbSource(db, actor, { id: bot2, customer_id: customer }, catKey.id, "delete");
+      pass("B-D6 시작 없는 단계 409·고유키 중복 거부·화면 실패는 연속 실패 미집계·잠금 해제");
+
+      // B-09 고객사당 소스 10개 한도
+      for (let i = 0; i < 8; i++)
+        await tx`INSERT INTO db_sources(id,bot_id,connection_id,schema_name,table_name,title_column,key_column) VALUES(${"fill-" + i + "-" + suffix},${bot},${live.id},'public',${"t" + i},'name','id')`;
+      await assert.rejects(() => createDbSource(db, actor, { id: bot, customer_id: customer }, { ...menuConfig, table: "members", titleColumn: "grade" }), { status: 409 });
+      await tx`DELETE FROM db_sources WHERE id LIKE ${"fill-%-" + suffix}`;
+      pass("B-09 고객사당 DB 소스 10개 한도");
+
+      // 동시 실행 잠금
+      await tx`UPDATE db_sources SET sync_locked_at=EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id=${big.id}`;
+      await assert.rejects(() => beginImport(bigSource, tx as never), { status: 409 });
+      await tx`UPDATE db_sources SET sync_locked_at=NULL WHERE id=${big.id}`;
+      pass("B-D4 동기화 중인 소스는 다시 시작 불가(409)");
+
+      // 소스 삭제: 기본은 문서 보관, delete면 삭제
+      await deleteDbSource(db, actor, { id: bot, customer_id: customer }, big.id, "delete");
+      assert.equal((await tx`SELECT count(*)::int AS n FROM documents WHERE bot_id=${bot} AND title LIKE '샘플 메뉴%'`)[0].n, 0);
+      await deleteDbSource(db, actor, { id: bot, customer_id: customer }, menuSource.id);
+      const kept = await tx`SELECT count(*)::int AS n FROM documents WHERE bot_id=${bot} AND archived_at IS NOT NULL`;
+      assert.equal(kept[0].n, 15);
+      assert.equal((await listDbSources(db, bot)).length, 0);
+      pass("B-D5 소스 삭제: 기본은 문서 보관(검색 제외), 선택 시 문서까지 삭제");
 
       throw rollback;
     });

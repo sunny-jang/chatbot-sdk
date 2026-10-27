@@ -70,7 +70,7 @@ async function POSTHandler(req:Request,{params}:Context){
     if("reason" in reservation)return Response.json(reservation.reason==="monthly_limit"?{decision:"offer",message:config.message.slice(0,60),reason:"monthly_limit"}:quiet(reservation.reason!));
     if("existing" in reservation){const e=reservation.existing!;if(e.visit_id!==behavior.visitId||e.summary_hash!==hash)throw new OperationError("평가 식별자가 일치하지 않습니다.",409);return Response.json(e.result?{...e.result,id:e.id}:quiet("processing"));}
     reservedId=behavior.evaluationId;
-    const docs=await sql`SELECT id,title,LEFT(content,12000) AS content FROM documents WHERE bot_id=${botId} ORDER BY created_at DESC LIMIT 60`;
+    const docs=await sql`SELECT id,title,LEFT(content,12000) AS content FROM documents WHERE bot_id=${botId} AND archived_at IS NULL ORDER BY created_at DESC LIMIT 60`;
     const qa=await sql`SELECT id,question AS title,LEFT(answer,2000) AS content FROM qa_pairs WHERE bot_id=${botId} ORDER BY created_at DESC LIMIT 100`;
     const knowledge=rankKnowledge(behavior.sections.filter(s=>s.id===behavior.currentId),[...docs,...qa] as unknown as {id:string;title:string;content:string}[]);
     const result=await generateProactive(botId,String(bot.model||"gpt-4o-mini"),behavior,knowledge);

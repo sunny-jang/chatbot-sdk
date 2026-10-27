@@ -22,7 +22,7 @@ export async function bindProactiveContext(botId: string, sessionId: string, val
   });
   if(!bound)return null;
   const ids=bound.sourceIds;
-  const docs=ids.length?await sql`SELECT title,LEFT(content,2000) AS content FROM documents WHERE bot_id=${botId} AND id=ANY(${ids}::text[])`:[];
+  const docs=ids.length?await sql`SELECT title,LEFT(content,2000) AS content FROM documents WHERE bot_id=${botId} AND archived_at IS NULL AND id=ANY(${ids}::text[])`:[];
   const qa=ids.length?await sql`SELECT question AS title,LEFT(answer,2000) AS content FROM qa_pairs WHERE bot_id=${botId} AND id=ANY(${ids}::text[])`:[];
   return {offer:bound,knowledge:[...docs,...qa]};
 }
