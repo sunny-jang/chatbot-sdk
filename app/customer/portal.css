@@ -1678,3 +1678,5 @@ form.cp-row {
   .dbs-source-actions { width: 100%; }
 }
 .dbs-badge { margin-left: 8px; font-size: 11px; padding: 2px 6px; vertical-align: middle; }
+.dbs-schedule { margin-top: 0 !important; min-height: 40px; width: auto !important; min-width: 108px; padding: 8px 30px 8px 10px; font-size: 13px; }
+.dbs-hint { margin-top: 10px; font-size: 12.5px; }

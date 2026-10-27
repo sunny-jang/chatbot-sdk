@@ -21,6 +21,8 @@ import { postgresConnector } from "../lib/data-connections/connectors/postgres";
 import type { ConnectionConfig } from "../lib/data-connections/types";
 import { createDbSource, dbSource, deleteDbSource, listDbSources } from "../lib/db-sources/store";
 import { beginImport, importStep } from "../lib/db-sources/import";
+import { dueSources, syncSource, STOPPED_MESSAGE } from "../lib/db-sources/sync";
+import { updateDbSource } from "../lib/db-sources/store";
 import { fakeEmbeddingsEnabled } from "../lib/embeddings";
 
 async function main() {
@@ -317,6 +319,105 @@ async function main() {
       assert.equal(kept[0].n, 15);
       assert.equal((await listDbSources(db, bot)).length, 0);
       pass("B-D5 소스 삭제: 기본은 문서 보관(검색 제외), 선택 시 문서까지 삭제");
+
+      // ---------- 단계 C: 자동 동기화 ----------
+      // 고객사 DB에 이 검사 전용 표(menu_sync)를 만들어 바꿔 가며 확인하고 끝나면 지운다.
+      const adminDb = direct((fixture as unknown as { adminUrl: string }).adminUrl, { ssl: "require", max: 1, prepare: false, onnotice: () => {} });
+      const syncTable = "menu_sync_" + suffix.replace(/-/g, "").slice(0, 12);
+      try {
+        await adminDb.unsafe(`CREATE TABLE ${syncTable} (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price INTEGER NOT NULL)`);
+        await adminDb.unsafe(`INSERT INTO ${syncTable} VALUES (1,'아메리카노',4500),(2,'카페라떼',5000),(3,'바닐라라떼',5500),(4,'콜드브루',5000),(5,'스콘',3800)`);
+        await adminDb.unsafe(`GRANT SELECT ON ${syncTable} TO ${fixture.username}`);
+        const syncBot = "bot-sync-" + suffix;
+        await tx`INSERT INTO bots(id,tenant_id,customer_id,name,type) VALUES(${syncBot},${tenant},${customer},'동기화 봇','ai')`;
+        const created3 = await createDbSource(db, actor, { id: syncBot, customer_id: customer }, {
+          connectionId: live.id, table: syncTable, titleColumn: "name", keyColumn: "id",
+          bodyColumns: [{ column: "price", label: "가격", unit: "원", type: "integer" }], schedule: "daily",
+        });
+        const now = Math.floor(Date.now() / 1000);
+        const due = async () => (await dueSources(tx as never, now, 50)).map((x) => x.id);
+        assert.ok(!(await due()).includes(created3.id), "예정 시각 전에는 고르지 않음");
+        await tx`UPDATE db_sources SET next_sync_at=${now - 10} WHERE id=${created3.id}`;
+        assert.ok((await due()).includes(created3.id), "예정 시각이 지나면 고름");
+        await tx`UPDATE db_sources SET sync_locked_at=${now} WHERE id=${created3.id}`;
+        assert.ok(!(await due()).includes(created3.id), "화면에서 진행 중(잠금 유효)이면 건너뜀");
+        await tx`UPDATE db_sources SET sync_locked_at=NULL WHERE id=${created3.id}`;
+        pass("C-D1 예정 시각이 지난 소스만, 진행 중인 소스는 건너뜀");
+
+        const runDue = async () => {
+          await tx`UPDATE db_sources SET next_sync_at=${Math.floor(Date.now() / 1000) - 5} WHERE id=${created3.id}`;
+          const [src] = await tx`SELECT s.*, b.customer_id, b.tenant_id FROM db_sources s JOIN bots b ON b.id=s.bot_id WHERE s.id=${created3.id}`;
+          return syncSource(src as never, Date.now() + 30_000, tx as never);
+        };
+        let out = await runDue();
+        assert.equal(out.status, "done", JSON.stringify(out));
+        assert.equal(out.state?.created, 5);
+        const [afterFirst] = await tx`SELECT next_sync_at, last_synced_at FROM db_sources WHERE id=${created3.id}`;
+        assert.ok(Number(afterFirst.next_sync_at) > now, "다음 예정 시각으로 넘어감");
+
+        await adminDb.unsafe(`UPDATE ${syncTable} SET price=4800 WHERE id=1`);
+        out = await runDue();
+        assert.equal(out.state?.updated, 1);
+        assert.equal(out.state?.unchanged, 4);
+        const [americano] = await tx`SELECT d.content FROM documents d JOIN db_source_rows r ON r.document_id=d.id WHERE r.source_id=${created3.id} AND r.row_key='1'`;
+        assert.match(americano.content, /가격: 4,800원/);
+        pass("C-D2 값이 바뀐 1행만 갱신(나머지 변경 없음)");
+
+        await adminDb.unsafe(`DELETE FROM ${syncTable} WHERE id=5`);
+        out = await runDue();
+        assert.equal(out.state?.archived, 1);
+        const [gone] = await tx`SELECT d.archived_at, r.status FROM db_source_rows r JOIN documents d ON d.id=r.document_id WHERE r.source_id=${created3.id} AND r.row_key='5'`;
+        assert.ok(gone.archived_at);
+        assert.equal(gone.status, "archived");
+        pass("C-D3 원본에서 사라진 행의 문서는 보관(검색 제외)");
+
+        await adminDb.unsafe(`INSERT INTO ${syncTable} VALUES (5,'스콘',3800),(6,'마들렌',3000)`);
+        out = await runDue();
+        assert.equal(out.state?.created, 1, "새 행 6");
+        const [back] = await tx`SELECT d.archived_at, r.status FROM db_source_rows r JOIN documents d ON d.id=r.document_id WHERE r.source_id=${created3.id} AND r.row_key='5'`;
+        assert.equal(back.archived_at, null, "다시 나타난 행은 보관 해제");
+        assert.equal(back.status, "active");
+        pass("C-D5 새 행은 추가, 다시 나타난 행은 보관 해제");
+
+        await updateDbSource(db, actor, { id: syncBot, customer_id: customer }, created3.id, { missingRows: "delete" });
+        await adminDb.unsafe(`DELETE FROM ${syncTable} WHERE id=6`);
+        out = await runDue();
+        assert.equal(out.state?.deleted, 1);
+        assert.equal((await tx`SELECT count(*)::int AS n FROM db_source_rows WHERE source_id=${created3.id} AND row_key='6'`)[0].n, 0);
+        pass("C-D4 삭제 옵션이면 사라진 행의 문서를 지움");
+
+        // C-D6 연속 3회 실패 → 자동 동기화 중지, 다시 켜면 초기화
+        await updateDataConnection(db, admin, customer, live.id, { password: "wrong-" + suffix });
+        assert.equal((await runDue()).status, "failed");
+        assert.equal((await runDue()).status, "failed");
+        const third = await runDue();
+        assert.equal(third.status, "stopped");
+        const [stopped] = await tx`SELECT enabled, consecutive_failures, last_error FROM db_sources WHERE id=${created3.id}`;
+        assert.equal(stopped.enabled, false);
+        assert.equal(Number(stopped.consecutive_failures), 3);
+        assert.ok(String(stopped.last_error).includes(STOPPED_MESSAGE));
+        assert.ok(!(await dueSources(tx as never, Math.floor(Date.now() / 1000), 50)).some((x) => x.id === created3.id), "멈춘 소스는 고르지 않음");
+        await updateDataConnection(db, admin, customer, live.id, { password: fixture.password });
+        await updateDbSource(db, actor, { id: syncBot, customer_id: customer }, created3.id, { enabled: true });
+        const [resumed] = await tx`SELECT enabled, consecutive_failures, last_error FROM db_sources WHERE id=${created3.id}`;
+        assert.equal(resumed.enabled, true);
+        assert.equal(Number(resumed.consecutive_failures), 0);
+        assert.equal(resumed.last_error, null);
+        assert.equal((await runDue()).status, "done");
+        pass("C-D6 연속 3회 실패 시 자동 동기화 중지·안내, 다시 켜면 실패 횟수·사유 초기화");
+
+        // C-D7 연결 삭제 → 소스 중지, 문서 보관
+        await deleteDataConnection(db, admin, customer, live.id);
+        const [afterDelete] = await tx`SELECT enabled, last_error FROM db_sources WHERE id=${created3.id}`;
+        assert.equal(afterDelete.enabled, false);
+        assert.match(String(afterDelete.last_error), /연결이 삭제돼/);
+        const archivedDocs = await tx`SELECT count(*)::int AS n FROM documents WHERE bot_id=${syncBot} AND archived_at IS NULL`;
+        assert.equal(archivedDocs[0].n, 0, "연결 삭제 후 이 소스의 문서는 모두 보관");
+        pass("C-D7 연결 삭제 시 소스 중지·문서 보관(검색 제외)");
+      } finally {
+        await adminDb.unsafe(`DROP TABLE IF EXISTS ${syncTable}`).catch(() => null);
+        await adminDb.end();
+      }
 
       throw rollback;
     });

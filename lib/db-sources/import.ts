@@ -22,8 +22,12 @@ export type ImportState = {
   done: boolean;
   archived: number;
   deleted: number;
+  /** 누가 시작했는지. 자동 동기화(cron)는 다음 호출에서 이어 받고, 화면(manual) 실행은 브라우저가 이어 간다. */
+  runner?: "manual" | "cron";
+  /** 이번 실행 식별자. 이번 실행에서 본 행에 기록하고, 끝날 때 기록이 없는 행을 사라진 행으로 본다. */
+  runId?: string;
 };
-const LOCK_TTL = 600;
+export const LOCK_TTL = 600;
 type Db = typeof sql;
 /** 바깥 트랜잭션 안(검사)에서는 savepoint, 아니면 새 트랜잭션. */
 async function withTx<T>(db: Db, fn: (tx: Db) => Promise<T>): Promise<T> {
@@ -44,7 +48,7 @@ export async function liveConnection(db: AccessDatabase, source: DbSourceRow) {
 }
 
 /** 첫 단계: 잠금을 걸고 행 수·고유키 중복을 확인한 뒤 진행 상태를 서버에 저장한다. 이미 진행 중이면 409. */
-export async function beginImport(source: DbSourceRow, db: Db = sql): Promise<ImportState> {
+export async function beginImport(source: DbSourceRow, db: Db = sql, runner: "manual" | "cron" = "manual"): Promise<ImportState> {
   const now = Math.floor(Date.now() / 1000);
   const [locked] = await db`UPDATE db_sources SET sync_locked_at=${now}, sync_started_at=${now}, sync_state=NULL WHERE id=${source.id} AND (sync_locked_at IS NULL OR sync_locked_at < ${now - LOCK_TTL}) RETURNING id`;
   if (!locked) throw new PortalError("이미 동기화 중이에요. 잠시 후 다시 시도해주세요.", 409);
@@ -58,11 +62,11 @@ export async function beginImport(source: DbSourceRow, db: Db = sql): Promise<Im
         `고유키로 고른 ${config.keyColumn} 컬럼에 같은 값이나 빈 값이 있어요(${count.toLocaleString("ko-KR")}행 중 서로 다른 값 ${distinctKeys.toLocaleString("ko-KR")}개). 행마다 다른 값이 들어 있는 컬럼(예: id)을 골라주세요.`,
       );
     const total = Math.min(count, config.rowLimit);
-    const state: ImportState = { cursor: null, processed: 0, total, truncated: Math.max(0, count - config.rowLimit), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0 };
+    const state: ImportState = { cursor: null, processed: 0, total, truncated: Math.max(0, count - config.rowLimit), created: 0, updated: 0, unchanged: 0, failed: 0, done: total === 0, archived: 0, deleted: 0, runner, runId: randomUUID() };
     await db`UPDATE db_sources SET sync_state=${db.json(state as never)} WHERE id=${source.id}`;
     return state;
   } catch (e) {
-    await failImport(source, e, db);
+    await failImport(source, e, db, runner === "cron");
     throw e;
   }
 }
@@ -101,7 +105,7 @@ export async function importStep(source: DbSourceRow, openaiKey: string | null, 
           state.cursor,
         );
       if (rows.length) {
-        const applied = await applyRows(source, config, rows, openaiKey, `${config.schema === "public" ? "" : config.schema + "."}${config.table}`, db);
+        const applied = await applyRows(source, config, rows, openaiKey, `${config.schema === "public" ? "" : config.schema + "."}${config.table}`, db, state.runId ?? null);
         next.created += applied.created;
         next.updated += applied.updated;
         next.unchanged += applied.unchanged;
@@ -147,6 +151,7 @@ export async function applyRows(
   openaiKey: string | null,
   tableLabel: string,
   db: Db = sql,
+  runId: string | null = null,
 ) {
   const counters = { created: 0, updated: 0, unchanged: 0, failed: 0 };
   const docs = rows.map((row) => {
@@ -186,7 +191,7 @@ export async function applyRows(
       const e = byKey.get(d.key);
       const vector = vectorOf.get(d.key);
       if (e && e.document_id && !vector) {
-        await tx`UPDATE db_source_rows SET status='active', synced_at=${now} WHERE source_id=${source.id} AND row_key=${d.key}`;
+        await tx`UPDATE db_source_rows SET status='active', synced_at=${now}, run_id=${runId} WHERE source_id=${source.id} AND row_key=${d.key}`;
         if (e.status === "archived") await tx`UPDATE documents SET archived_at=NULL WHERE id=${e.document_id}`;
         counters.unchanged++;
         continue;
@@ -197,13 +202,13 @@ export async function applyRows(
       }
       if (e && e.document_id) {
         await tx`UPDATE documents SET title=${d.title}, content=${d.content}, embedding=${JSON.stringify(vector)}, folder_id=${config.folderId}, archived_at=NULL, source_kind='db' WHERE id=${e.document_id} AND bot_id=${source.bot_id}`;
-        await tx`UPDATE db_source_rows SET row_hash=${d.hash}, status='active', synced_at=${now} WHERE source_id=${source.id} AND row_key=${d.key}`;
+        await tx`UPDATE db_source_rows SET row_hash=${d.hash}, status='active', synced_at=${now}, run_id=${runId} WHERE source_id=${source.id} AND row_key=${d.key}`;
         counters.updated++;
       } else {
         const docId = randomUUID();
         await tx`INSERT INTO documents(id,bot_id,folder_id,title,content,embedding,source_kind) VALUES(${docId},${source.bot_id},${config.folderId},${d.title},${d.content},${JSON.stringify(vector)},'db')`;
-        await tx`INSERT INTO db_source_rows(source_id,row_key,row_hash,document_id,status,synced_at) VALUES(${source.id},${d.key},${d.hash},${docId},'active',${now})
-          ON CONFLICT(source_id,row_key) DO UPDATE SET row_hash=EXCLUDED.row_hash, document_id=EXCLUDED.document_id, status='active', synced_at=EXCLUDED.synced_at`;
+        await tx`INSERT INTO db_source_rows(source_id,row_key,row_hash,document_id,status,synced_at,run_id) VALUES(${source.id},${d.key},${d.hash},${docId},'active',${now},${runId})
+          ON CONFLICT(source_id,row_key) DO UPDATE SET row_hash=EXCLUDED.row_hash, document_id=EXCLUDED.document_id, status='active', synced_at=EXCLUDED.synced_at, run_id=EXCLUDED.run_id`;
         counters.created++;
       }
     }
@@ -218,15 +223,19 @@ export async function finalizeImport(source: DbSourceRow, state: ImportState, db
   let archived = 0,
     deleted = 0;
   await withTx(db, async (tx) => {
-    const missing = await tx`SELECT row_key, document_id FROM db_source_rows WHERE source_id=${source.id} AND synced_at < ${startedAt} AND status='active'`;
+    const runId = state.runId ?? null;
+    const missing = runId
+      ? await tx`SELECT row_key, document_id FROM db_source_rows WHERE source_id=${source.id} AND run_id IS DISTINCT FROM ${runId} AND status='active'`
+      : await tx`SELECT row_key, document_id FROM db_source_rows WHERE source_id=${source.id} AND synced_at < ${startedAt} AND status='active'`;
+    const missingKeys = missing.map((m) => String(m.row_key));
     const docIds = missing.map((m) => m.document_id).filter((x): x is string => typeof x === "string");
     if (current?.missing_rows === "delete") {
       if (docIds.length) await tx`DELETE FROM documents WHERE id=ANY(${docIds}::text[]) AND bot_id=${source.bot_id}`;
-      await tx`DELETE FROM db_source_rows WHERE source_id=${source.id} AND synced_at < ${startedAt}`;
+      if (missingKeys.length) await tx`DELETE FROM db_source_rows WHERE source_id=${source.id} AND row_key=ANY(${missingKeys}::text[])`;
       deleted = missing.length;
     } else {
       if (docIds.length) await tx`UPDATE documents SET archived_at=COALESCE(archived_at,${startedAt}) WHERE id=ANY(${docIds}::text[]) AND bot_id=${source.bot_id}`;
-      await tx`UPDATE db_source_rows SET status='archived' WHERE source_id=${source.id} AND synced_at < ${startedAt} AND status='active'`;
+      if (missingKeys.length) await tx`UPDATE db_source_rows SET status='archived' WHERE source_id=${source.id} AND row_key=ANY(${missingKeys}::text[])`;
       archived = missing.length;
     }
     const { nextSyncAt } = await import("./store");

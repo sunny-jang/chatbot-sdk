@@ -305,6 +305,41 @@ async function main() {
     const del = await api(agencySrc, agency, owner, "POST", { action: "delete", sourceId: menuSourceId, documents: "delete" });
     assert.equal(del.status, 200);
   });
+  // ---------- 단계 C ----------
+  let syncSourceId = "";
+  await check("C-01 /api/cron/db-sync 는 CRON_SECRET 없이는 401, 있으면 실행 결과(접속 정보 없음)", async () => {
+    assert.equal((await api("/api/cron/db-sync", agency)).status, 401);
+    assert.equal((await api("/api/cron/db-sync", agency, "", "GET", undefined, { Authorization: "Bearer wrong" })).status, 401);
+    const r = await api("/api/cron/db-sync", agency, "", "GET", undefined, { Authorization: `Bearer ${process.env.CRON_SECRET}` });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.ok, true);
+    assert.ok(!JSON.stringify(r.data).includes(db.password));
+  });
+  await check("C-02 소스 목록: 주기·마지막·다음 예정, 주기 변경 시 다음 예정 재계산", async () => {
+    const c = await api(deskSrc, desk, admin, "POST", { action: "create", ...menuConfig, schedule: "daily" });
+    assert.equal(c.status, 201, JSON.stringify(c.data));
+    syncSourceId = c.data.id;
+    await importAll(deskSrc, desk, admin, syncSourceId);
+    let mine = (await api(deskSrc, desk, admin)).data.sources.find((x: { id: string }) => x.id === syncSourceId);
+    assert.equal(mine.schedule, "daily");
+    assert.ok(mine.lastSyncedAt && mine.nextSyncAt > mine.lastSyncedAt);
+    const u = await api(deskSrc, desk, admin, "POST", { action: "update", sourceId: syncSourceId, schedule: "hourly" });
+    assert.equal(u.status, 200, JSON.stringify(u.data));
+    mine = (await api(deskSrc, desk, admin)).data.sources.find((x: { id: string }) => x.id === syncSourceId);
+    assert.equal(mine.schedule, "hourly");
+    assert.ok(Math.abs(mine.nextSyncAt - (Math.floor(Date.now() / 1000) + 3600)) < 120, "매시간이면 약 1시간 뒤");
+  });
+  await check("C-05 멈춘 소스는 '다시 켜기'로 실패 횟수·사유 초기화", async () => {
+    await sql`UPDATE db_sources SET enabled=FALSE, consecutive_failures=3, last_error='QA 멈춤' WHERE id=${syncSourceId}`;
+    let mine = (await api(deskSrc, desk, admin)).data.sources.find((x: { id: string }) => x.id === syncSourceId);
+    assert.equal(mine.enabled, false);
+    const u = await api(deskSrc, desk, admin, "POST", { action: "update", sourceId: syncSourceId, enabled: true });
+    assert.equal(u.status, 200);
+    mine = (await api(deskSrc, desk, admin)).data.sources.find((x: { id: string }) => x.id === syncSourceId);
+    assert.equal(mine.enabled, true);
+    assert.equal(mine.consecutiveFailures, 0);
+    assert.equal(mine.lastError, null);
+  });
   await check("A-10 삭제 후 secret_enc NULL·목록 제외·감사", async () => {
     assert.equal((await api(`${deskBase}/${id}`, desk, agent, "DELETE")).status, 404);
     const r = await api(`${deskBase}/${id}`, desk, admin, "DELETE");
@@ -316,6 +351,18 @@ async function main() {
     assert.equal((await api(`${deskBase}/${id}`, desk, admin)).status, 404);
     const [audit] = await sql`SELECT 1 FROM access_audit_logs WHERE action='data_connection.delete' AND target_id=${id}`;
     assert.ok(audit);
+  });
+  await check("C-07 연결 삭제 후 소스는 '연결 삭제됨'·자동 동기화 중지, 문서는 보관(검색 제외)", async () => {
+    const mine = (await api(deskSrc, desk, admin)).data.sources.find((x: { id: string }) => x.id === syncSourceId);
+    assert.equal(mine.connectionDeleted, true);
+    assert.equal(mine.enabled, false);
+    assert.match(mine.lastError, /연결이 삭제돼/);
+    const [live] = await sql`SELECT count(*)::int AS n FROM documents d JOIN db_source_rows r ON r.document_id=d.id WHERE r.source_id=${syncSourceId} AND d.archived_at IS NULL`;
+    assert.equal(live.n, 0);
+    const imp = await api(deskSrc, desk, admin, "POST", { action: "import", sourceId: syncSourceId, begin: true });
+    assert.equal(imp.status, 409, "삭제된 연결로는 가져오지 않음");
+    const del = await api(deskSrc, desk, admin, "POST", { action: "delete", sourceId: syncSourceId, documents: "delete" });
+    assert.equal(del.status, 200);
   });
   await writeFile("/tmp/db-knowledge-http-results.json", JSON.stringify(results, null, 2));
   console.log(JSON.stringify({ passed: results.filter((r) => r.status === "pass").length, failed: results.filter((r) => r.status === "fail").length }));
