@@ -69,8 +69,10 @@ test("LA-05 buildLookupQuery(Postgres): 인용·바인딩·포함 이스케이�
   });
   assert.equal(
     q.sql,
-    `SELECT "name", "stock" FROM "public"."me""nu" WHERE "is_active" = $1 AND "name"::text ILIKE '%' || $2 || '%' ESCAPE '\\' AND lower("size"::text) = lower($3) AND "id" = $4 LIMIT 6`,
+    `SELECT "name", "stock" FROM "public"."me""nu" WHERE "is_active" = $1 AND "name"::text ILIKE '%' || $2 || '%' ESCAPE '\\' AND "size"::text = $3 AND "id" = $4 LIMIT 6`,
   );
+  // 결과가 없을 때 쓰는 대소문자 무시 질의
+  assert.match(buildLookupQuery({ schema: "public", table: "menu", columns: ["name"], filters: [], conditions: [{ column: "size", match: "eq", kind: "text", value: "r" }], limit: 6 }, true).sql, /lower\("size"::text\) = lower\(\$1\)/);
   assert.deepEqual(q.params, [1, "50\\%\\_off\\\\", "L", 3]);
   assert.throws(() => buildLookupQuery({ schema: "public", table: "menu", columns: ["name"], filters: [], conditions: [], limit: 6 }), /조건이 없는/);
   assert.match(buildLookupQuery({ schema: "public", table: "menu", columns: ["name"], filters: [], conditions: [{ column: "name", match: "eq", value: "a" }], limit: 999 }).sql, /LIMIT 11$/);
@@ -92,7 +94,7 @@ test("LA-05 buildMysqlLookupQuery: 백틱·?·기본 스키마는 접속 DB", ()
     },
     config,
   );
-  assert.equal(q.sql, "SELECT `name`, `stock` FROM `shop`.`menu` WHERE LOWER(CAST(`name` AS CHAR)) = LOWER(?) AND CAST(`category` AS CHAR) LIKE CONCAT('%', ?, '%') LIMIT 6");
+  assert.equal(q.sql, "SELECT `name`, `stock` FROM `shop`.`menu` WHERE `name` = ? AND CAST(`category` AS CHAR) LIKE CONCAT('%', ?, '%') LIMIT 6");
   assert.deepEqual(q.params, ["아메리카노'; DROP TABLE menu; --", "커\\_"]);
 });
 
@@ -128,7 +130,7 @@ test("LA-15 isBroadRequest: 대량 요청 표현만 넓은 요청으로 본다(G
     "전체 메뉴 알려줘",
   ])
     assert.equal(isBroadRequest(m), true, m);
-  for (const m of ["아메리카노 재고 있어요?", "라떼 몇 개 남았어요", "전체 메뉴 중 라떼 가격", "오늘 영업해요?", "다 팔렸어요?", "모두 몇 시에 열어요?"])
+  for (const m of ["아메리카노 재고 있어요?", "라떼 몇 개 남았어요", "전체 메뉴 중 라떼 가격", "오늘 영업해요?", "다 팔렸어요?", "모두 몇 시에 열어요?", "아메리카노 재고 확인해 주세요, 모두 고마워요", "전체 매장 중 강남점 영업 확인"])
     assert.equal(isBroadRequest(m), false, m);
 });
 

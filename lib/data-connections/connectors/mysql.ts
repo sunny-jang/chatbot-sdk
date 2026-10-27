@@ -151,7 +151,7 @@ export function buildMysqlRowQuery(query: RowQuery, config: ConnectionConfig, ba
   return { sql, count, params, withCursor };
 }
 
-/** 실시간 조회 질의(MySQL). 같음은 대소문자 무시, 포함은 LIKE(와일드카드 이스케이프), 숫자는 숫자 비교. */
+/** 실시간 조회 질의(MySQL). 같음은 콜레이션 비교(기본 대소문자 무시), 포함은 LIKE(와일드카드 이스케이프), 숫자는 숫자 비교. */
 export function buildMysqlLookupQuery(query: LookupQuery, config: ConnectionConfig) {
   if (!query.conditions.length) throw new PortalError("조건이 없는 조회는 실행할 수 없어요.");
   if (!query.columns.length) throw new PortalError("보여줄 컬럼을 하나 이상 골라주세요.");
@@ -166,8 +166,9 @@ export function buildMysqlLookupQuery(query: LookupQuery, config: ConnectionConf
       params.push(escapeLike(String(c.value)));
       where.push(`CAST(${col} AS CHAR) LIKE CONCAT('%', ?, '%')`);
     } else {
+      // MySQL 기본 콜레이션은 대소문자를 구분하지 않으므로 그대로 비교해 인덱스를 쓴다.
       params.push(String(c.value));
-      where.push(`LOWER(CAST(${col} AS CHAR)) = LOWER(?)`);
+      where.push(`${col} = ?`);
     }
   }
   const cols = [...new Set(query.columns)].map((c) => quoteIdentifier(c, "mysql")).join(", ");

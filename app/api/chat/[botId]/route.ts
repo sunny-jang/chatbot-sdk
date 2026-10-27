@@ -395,7 +395,8 @@ async function POSTHandler(
           tool_calls: calls.map((c) => ({ id: c.id, type: "function" as const, function: { name: c.name, arguments: c.arguments } })),
         });
         for (const run of toolRuns) messages.push({ role: "tool", tool_call_id: run.id, content: JSON.stringify(run.result) });
-        completion = await openai.chat.completions.create({ model: bot.model || "gpt-4o-mini", messages });
+        // 같은 도구 정의를 주되 tool_choice "none"으로 더 부르지 못하게 한다(라운드 1회).
+        completion = await openai.chat.completions.create({ model: bot.model || "gpt-4o-mini", messages, tools: liveTools, tool_choice: "none" });
       } else completion = first;
     } else {
       completion = await openai.chat.completions.create({

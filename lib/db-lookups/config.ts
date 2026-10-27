@@ -149,8 +149,8 @@ export function checkLookupArgs(
  * 대량 요청 표현(G8). 이런 질문에는 조회 도구를 주지 않는다.
  * "전체 메뉴 중 라떼 가격"처럼 특정 대상을 묻는 문장은 넓은 요청이 아니다.
  */
-const ALL_WORD = /(전부|전체|모든|모두|싹\s*다|통째로)/;
-const LIST_VERB = /(보여|알려|뽑아|정리|나열|출력|조회|확인|리스트|목록)/;
+/** "전부/모든"이 가까이 있는 나열 동사와 함께 쓰일 때만(예: "재고 전부 알려줘", "모든 상품 재고 보여줘"). 조회·확인은 넣지 않는다. */
+const ALL_LIST = /(전부|전체|모든|모두|싹\s*다|통째로)[^.?!]{0,12}?(보여|알려|뽑아|정리|나열|출력|리스트|목록)/;
 const BROAD_REQUEST = [
   /(\S+)\s*(을|를)?\s*(다|죄다)\s*(보여|알려|뽑아|정리|나열|출력)/,
   /(합계|총합|총액|총\s*매출|평균|통계|집계|순위|랭킹|top\s*\d+|상위\s*\d+|하위\s*\d+)/i,
@@ -162,7 +162,7 @@ export function isBroadRequest(message: string): boolean {
   const m = String(message ?? "").replace(/\s+/g, " ").trim();
   if (!m) return false;
   if (SPECIFIC_TARGET.test(m) && !/(합계|총합|평균|통계|엑셀|다운로드|csv)/i.test(m)) return false;
-  if (ALL_WORD.test(m) && LIST_VERB.test(m)) return true;
+  if (ALL_LIST.test(m)) return true;
   return BROAD_REQUEST.some((r) => r.test(m));
 }
 

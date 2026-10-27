@@ -74,7 +74,7 @@ export async function dbLookup(db: AccessDatabase, botId: string, lookupId: stri
 }
 
 /** 표의 실제 컬럼에 없는 컬럼을 고르면 거부한다(저장 전에 커넥터로 읽은 컬럼 목록). */
-function assertColumnsExist(config: LookupConfig, columns: string[]) {
+export function assertColumnsExist(config: LookupConfig, columns: string[]) {
   const known = new Set(columns);
   const used = [...config.params.map((p) => p.column), ...config.outputs.map((o) => o.column), ...config.filters.map((f) => f.column)];
   const missing = used.filter((c) => !known.has(c));

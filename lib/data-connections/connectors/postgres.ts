@@ -178,10 +178,10 @@ export function buildCountQuery(query: RowQuery, kind: "postgres" = "postgres") 
 /** 행 질의 최대 크기. 실시간 조회는 최대 결과 수(≤10)+1만 읽는다. */
 export const LOOKUP_READ_MAX = 11;
 /**
- * 실시간 조회 질의. 고정 필터 + 방문자 조건(같음: 대소문자 무시 텍스트 비교 / 포함: ILIKE, 와일드카드 이스케이프 / 숫자: 숫자 비교).
+ * 실시간 조회 질의. 고정 필터 + 방문자 조건(같음: 텍스트 비교, 없으면 대소문자 무시로 재시도 / 포함: ILIKE, 와일드카드 이스케이프 / 숫자: 숫자 비교).
  * 조건이 없으면 만들지 않는다(전체 조회 금지).
  */
-export function buildLookupQuery(query: LookupQuery) {
+export function buildLookupQuery(query: LookupQuery, caseInsensitive = false) {
   if (!query.conditions.length) throw new PortalError("조건이 없는 조회는 실행할 수 없어요.");
   if (!query.columns.length) throw new PortalError("보여줄 컬럼을 하나 이상 골라주세요.");
   const params: unknown[] = [];
@@ -196,7 +196,8 @@ export function buildLookupQuery(query: LookupQuery) {
       where.push(`${col}::text ILIKE '%' || $${params.length} || '%' ESCAPE '\\'`);
     } else {
       params.push(String(c.value));
-      where.push(`lower(${col}::text) = lower($${params.length})`);
+      // 먼저 그대로 비교해 인덱스를 쓰고, 결과가 없을 때만 대소문자 무시로 한 번 더 읽는다.
+      where.push(caseInsensitive ? `lower(${col}::text) = lower($${params.length})` : `${col}::text = $${params.length}`);
     }
   }
   const cols = [...new Set(query.columns)].map((c) => quoteIdentifier(c)).join(", ");
@@ -258,7 +259,11 @@ export const postgresConnector: Connector = {
       config,
       async (tx) => {
         const built = buildLookupQuery(query);
-        const rows = (await tx.unsafe(built.sql, built.params as never[])) as unknown as Record<string, unknown>[];
+        let rows = (await tx.unsafe(built.sql, built.params as never[])) as unknown as Record<string, unknown>[];
+        if (!rows.length && query.conditions.some((c) => c.kind !== "number" && c.match === "eq")) {
+          const ci = buildLookupQuery(query, true);
+          rows = (await tx.unsafe(ci.sql, ci.params as never[])) as unknown as Record<string, unknown>[];
+        }
         return rows.map(plainRow);
       },
       { timeoutMs, connectTimeoutS: LOOKUP_CONNECT_TIMEOUT_S },

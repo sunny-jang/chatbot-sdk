@@ -66,7 +66,7 @@ async function overLimit(db: AccessDatabase, ctx: Ctx, kind: "session" | "bot") 
     return Number(n) >= CALLS_PER_SESSION;
   }
   const [{ n }] = await db`SELECT count(*)::int AS n FROM db_lookup_calls
-    WHERE bot_id=${ctx.botId} AND NOT test AND NOT cached AND status IN ('ok','empty','too_broad','timeout','error') AND created_at > ${t - 60}`;
+    WHERE bot_id=${ctx.botId} AND NOT test AND NOT cached AND (status IN ('ok','empty','timeout','error') OR (status='too_broad' AND row_count > 0)) AND created_at > ${t - 60}`;
   return Number(n) >= CALLS_PER_BOT_MINUTE;
 }
 
@@ -124,7 +124,8 @@ export async function runLookup(db: AccessDatabase, lookup: Lookup, args: Record
       if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string);
       cache.set(key, { at: result.at, result });
     }
-    return done(result, result.status === "ok" ? rows.length : 0);
+    // 결과 수 초과(G4)도 읽은 행 수를 남겨, 실행 전에 막힌 too_broad(G3, row_count 0)와 구분한다(챗봇 한도 계산).
+    return done(result, rows.length);
   } catch (e) {
     if (e instanceof LookupTimeoutError) return done({ status: "timeout", message: MESSAGES.timeout, at: now() });
     const reason = e instanceof PortalError ? e.message : MESSAGES.error;
@@ -155,22 +156,25 @@ export type ToolRun = { id: string; lookup: Lookup | null; result: LookupResult 
 
 /** 모델이 부른 도구들. 앞의 2개만 실행하고(G5) 나머지는 too_many_calls. 모든 호출 id에 결과를 돌려줘야 2차 호출이 성립한다. */
 export async function runToolCalls(db: AccessDatabase, lookups: Lookup[], calls: ToolCall[], ctx: Ctx): Promise<ToolRun[]> {
-  return Promise.all(
-    calls.map(async (call, index): Promise<ToolRun> => {
-      const lookup = lookups.find((_, i) => toolName(i) === call.name) ?? null;
-      if (!lookup) return { id: call.id, lookup: null, result: { status: "error", message: MESSAGES.error, at: now() } };
-      if (index >= CALLS_PER_MESSAGE) {
-        await record(db, lookup.id, ctx, "too_many_calls", 0, 0);
-        return { id: call.id, lookup, result: { status: "too_many_calls", message: MESSAGES.too_many_calls, at: now() } };
-      }
-      let args: Record<string, unknown> = {};
-      try {
-        const parsed = JSON.parse(call.arguments || "{}");
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
-      } catch {
-        args = {};
-      }
-      return { id: call.id, lookup, result: await runLookup(db, lookup, args, ctx) };
-    }),
-  );
+  // 순서대로 실행한다. 동시에 돌리면 두 호출이 같은 횟수를 읽어 한도를 하나 넘길 수 있다.
+  const out: ToolRun[] = [];
+  for (const [index, call] of calls.entries()) out.push(await runOne(call, index));
+  return out;
+
+  async function runOne(call: ToolCall, index: number): Promise<ToolRun> {
+    const lookup = lookups.find((_, i) => toolName(i) === call.name) ?? null;
+    if (!lookup) return { id: call.id, lookup: null, result: { status: "error", message: MESSAGES.error, at: now() } };
+    if (index >= CALLS_PER_MESSAGE) {
+      await record(db, lookup.id, ctx, "too_many_calls", 0, 0);
+      return { id: call.id, lookup, result: { status: "too_many_calls", message: MESSAGES.too_many_calls, at: now() } };
+    }
+    let args: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(call.arguments || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
+    } catch {
+      args = {};
+    }
+    return { id: call.id, lookup, result: await runLookup(db, lookup, args, ctx) };
+  }
 }

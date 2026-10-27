@@ -9,7 +9,7 @@ import { assertDbKnowledgeAllowed, credentialsOf, tenantDbRowLimit } from "@/lib
 import { connectionForBot, listConnectionsForBot } from "@/lib/db-sources/store";
 import { lookupConfig } from "./config";
 import { runLookup } from "./run";
-import { createLookup, dbLookup, deleteLookup, listLookups, setLookupEnabled, updateLookup, type DbLookupRow } from "./store";
+import { assertColumnsExist, createLookup, dbLookup, deleteLookup, listLookups, setLookupEnabled, updateLookup, type DbLookupRow } from "./store";
 
 type Context = { params: Promise<{ id: string }> };
 const db = sql as unknown as AccessDatabase;
@@ -81,6 +81,8 @@ export async function manageLookups(req: Request, { params }: Context, allowCust
       const schema = typeof body.schema === "string" && body.schema ? body.schema : existing?.schema_name ?? "public";
       const table = typeof body.table === "string" && body.table ? body.table : existing?.table_name ?? "";
       if (!connectionId || !table) throw new OperationError("데이터 연결과 테이블을 골라주세요.");
+      // 요금제 확인을 고객사 DB 접속보다 먼저 한다.
+      await wrap(assertDbKnowledgeAllowed(db, tenantId));
       const columns = await wrap(tableColumns(b, connectionId, schema, table));
       if (action === "create")
         return Response.json(await wrap(sql.begin((tx) => createLookup(tx as unknown as AccessDatabase, actor, b, body, columns))), { status: 201 });
@@ -97,7 +99,11 @@ export async function manageLookups(req: Request, { params }: Context, allowCust
       if (body.lookupId) lookup = await wrap(dbLookup(db, id, text(body.lookupId, "조회", 200)));
       else {
         const input = (body.config ?? {}) as Record<string, unknown>;
-        const config = await wrap(Promise.resolve().then(() => lookupConfig(input)));
+        // 저장 때와 같은 검사: 표 전체 컬럼 기준 개인정보 추정·존재 여부.
+        const draft = await wrap(Promise.resolve().then(() => lookupConfig(input)));
+        const columns = await wrap(tableColumns(b, draft.connectionId, draft.schema, draft.table));
+        const config = await wrap(Promise.resolve().then(() => lookupConfig(input, columns)));
+        await wrap(Promise.resolve().then(() => assertColumnsExist(config, columns)));
         lookup = {
           id: "",
           bot_id: id,
