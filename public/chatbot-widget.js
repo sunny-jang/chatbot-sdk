@@ -168,6 +168,13 @@
       .cb-msg li:last-child { margin-bottom: 0; }
       .cb-msg.user { align-self: flex-end; background: ${color}; color: white; border-bottom-right-radius: 4px; }
       .cb-msg.bot { align-self: flex-start; background: #f3f4f6; color: #111; border-bottom-left-radius: 4px; }
+      .cb-sources { align-self: flex-start; max-width: 85%; margin: -2px 0 2px; font-size: 12px; color: #6b7280; }
+      .cb-sources summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; }
+      .cb-sources summary::-webkit-details-marker { display: none; }
+      .cb-sources summary::before { content: "▸"; font-size: 10px; transition: transform .15s; }
+      .cb-sources[open] summary::before { transform: rotate(90deg); }
+      .cb-sources ul { margin: 4px 0 0; padding: 0 0 0 14px; }
+      .cb-sources li { margin: 2px 0; word-break: break-all; }
       .cb-msg.typing { color: #9ca3af; font-style: italic; }
       .cb-choices { display: flex; flex-wrap: wrap; gap: 7px; align-self: stretch; margin: 2px 0 6px; }
       .cb-choice { padding: 8px 11px; border-radius: 999px; border: 1px solid ${color}55; background: #fff; color: ${color}; font-size: 13px; cursor: pointer; text-align: left; }
@@ -701,6 +708,25 @@
       return el;
     }
 
+    /** 답변 근거가 된 등록 데이터(행 제목). 원본 값·내부 이름은 담지 않는다. */
+    function addSources(sources) {
+      if (!Array.isArray(sources) || !sources.length) return;
+      const box = document.createElement("details");
+      box.className = "cb-sources";
+      const summary = document.createElement("summary");
+      summary.textContent = "출처 보기";
+      box.appendChild(summary);
+      const list = document.createElement("ul");
+      [...new Set(sources.map((s) => String(s && s.label || "")).filter(Boolean))].slice(0, 5).forEach((label) => {
+        const li = document.createElement("li");
+        li.textContent = "등록된 데이터 · " + label;
+        list.appendChild(li);
+      });
+      box.appendChild(list);
+      messagesEl.appendChild(box);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
     function addChoices(items, onChoose) {
       const wrap = document.createElement("div");
       wrap.className = "cb-choices";
@@ -832,6 +858,7 @@
           history.push({ role: "user", content: text });
           history.push({ role: "assistant", content: data.reply });
           if (history.length > 20) history = history.slice(-20);
+          addSources(data.sources);
           if (data.handoffAvailable) addChoices([{ label: "상담원에게 문의하기" }], () => requestHandoff("챗봇 답변 부족"));
         }
       } catch {
