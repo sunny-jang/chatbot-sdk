@@ -273,7 +273,9 @@ export default function LiveLookupManager({ apiBase, settingsHref }: { apiBase: 
       // 결과가 나온 테스트 값으로 첫 예시 질문을 채워 준다(비어 있을 때만). 예: "아메리카노 재고 알려줘"
       if (d.result?.status === "ok" && !examples.some((e) => e.trim())) {
         const subject = testArgs.map((v) => v.trim()).filter(Boolean).join(" ");
-        const topic = name.trim().replace(/\s*조회$/, "");
+        // 이름에서 "조회"를 뺀 주제어. 한글이 없는 기본 이름(menu_stock 조회)은 주제어로 쓰지 않는다.
+        const stripped = name.trim().replace(/\s*조회$/, "");
+        const topic = /[가-힣]/.test(stripped) ? stripped : "";
         if (subject) setExamples([`${subject} ${topic || "알려줘"}${topic ? " 알려줘" : ""}`.trim(), "", ""]);
       }
     } catch (e) {
