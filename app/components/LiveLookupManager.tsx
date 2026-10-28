@@ -24,6 +24,7 @@ type Lookup = {
   filters: { column: string; op: FilterOp; value?: unknown }[];
   max_rows: number;
   enabled: boolean;
+  examples?: string[];
   stats: { total: number; ok: number; tooBroad: number; failed: number };
 };
 type Result = { status: string; rows?: Record<string, string>[]; message?: string };
@@ -91,6 +92,7 @@ export default function LiveLookupManager({ apiBase, settingsHref }: { apiBase: 
     [filters, setFilters] = useState<Filter[]>([]),
     [maxRows, setMaxRows] = useState(5),
     [testArgs, setTestArgs] = useState<string[]>([]),
+    [examples, setExamples] = useState<string[]>(["", "", ""]),
     [testResult, setTestResult] = useState<Result | null>(null),
     [quickTest, setQuickTest] = useState<{ id: string; args: string[]; result: Result | null } | null>(null),
     [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -138,6 +140,7 @@ export default function LiveLookupManager({ apiBase, settingsHref }: { apiBase: 
     setMaxRows(5);
     setTestArgs([]);
     setTestResult(null);
+    setExamples(["", "", ""]);
   }
   async function loadTables(id: string) {
     setBusy("tables");
@@ -214,6 +217,7 @@ export default function LiveLookupManager({ apiBase, settingsHref }: { apiBase: 
     setFilters(l.filters.map((f) => ({ column: f.column, op: f.op, value: f.value === undefined || f.value === null ? "" : String(f.value) })));
     setMaxRows(l.max_rows);
     setTestArgs(l.params.map(() => ""));
+    setExamples([0, 1, 2].map((i) => l.examples?.[i] ?? ""));
     const tableName = tableLabel(l.schema_name, l.table_name);
     setTable(tableName);
     try {
@@ -244,6 +248,7 @@ export default function LiveLookupManager({ apiBase, settingsHref }: { apiBase: 
       .filter((f) => f.column)
       .map((f) => ({ column: f.column, op: f.op, ...(OPS.find((o) => o.value === f.op)?.needsValue ? { value: f.value } : {}), kind: isNumberType(columnOf(f.column)?.type ?? "") ? "number" : "text" })),
     maxRows,
+    examples: examples.map((e) => e.trim()).filter(Boolean),
   });
   const problems = useMemo(() => {
     const list: string[] = [];
@@ -265,6 +270,12 @@ export default function LiveLookupManager({ apiBase, settingsHref }: { apiBase: 
       const args = Object.fromEntries(testArgs.map((v, i) => [`p${i + 1}`, v]));
       const d = await post({ action: "test", config: config(), args });
       setTestResult(d.result);
+      // 결과가 나온 테스트 값으로 첫 예시 질문을 채워 준다(비어 있을 때만). 예: "아메리카노 재고 알려줘"
+      if (d.result?.status === "ok" && !examples.some((e) => e.trim())) {
+        const subject = testArgs.map((v) => v.trim()).filter(Boolean).join(" ");
+        const topic = name.trim().replace(/\s*조회$/, "");
+        if (subject) setExamples([`${subject} ${topic || "알려줘"}${topic ? " 알려줘" : ""}`.trim(), "", ""]);
+      }
     } catch (e) {
       fail(e, "테스트하지 못했어요.");
     } finally {
@@ -382,6 +393,7 @@ export default function LiveLookupManager({ apiBase, settingsHref }: { apiBase: 
                   <small>
                     방문자가 말할 값: {l.params.map((p) => `${p.label}${p.required ? "" : "(선택)"}`).join(", ")} · 답: {l.outputs.map((o) => o.label).join(", ")} · 최대 {l.max_rows}건
                   </small>
+                  {l.examples && l.examples.length > 0 && <small>예시 질문: {l.examples.map((e) => `“${e}”`).join(", ")}</small>}
                   <small>
                     최근 7일 실행 {n(l.stats.total)} · 범위 초과·한도 {n(l.stats.tooBroad)} · 실패 {n(l.stats.failed)}
                   </small>
@@ -623,6 +635,24 @@ export default function LiveLookupManager({ apiBase, settingsHref }: { apiBase: 
                   </button>
                 </div>
                 {testResult && <TestResult result={testResult} />}
+              </div>
+
+              <div className="dbs-step">
+                <h3><span className="dbs-step-no">7</span>예시 질문</h3>
+                <p className="cp-note">방문자가 범위가 너무 넓은 질문을 하면 “범위가 너무 넓어요” 안내와 함께 이 질문들을 버튼으로 보여줘요. 누르면 그 질문이 바로 전송돼요.</p>
+                <div className="dbs-questions">
+                  {examples.map((q, i) => (
+                    <input
+                      key={i}
+                      className="cp-input"
+                      aria-label={`예시 질문 ${i + 1}`}
+                      value={q}
+                      maxLength={60}
+                      placeholder={i === 0 ? "예: 아메리카노 재고 알려줘" : `예시 질문 ${i + 1} (선택)`}
+                      onChange={(e) => setExamples((list) => list.map((x, j) => (j === i ? e.target.value : x)))}
+                    />
+                  ))}
+                </div>
               </div>
 
               {problems.length > 0 && (

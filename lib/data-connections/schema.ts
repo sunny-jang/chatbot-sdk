@@ -106,6 +106,8 @@ export async function createDataKnowledgeSchema(db: AccessDatabase) {
     updated_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
   )`;
   await db`CREATE INDEX IF NOT EXISTS db_lookups_bot_idx ON db_lookups(bot_id)`;
+  // 범위가 너무 넓은 질문에 칩으로 보여줄 예시 질문(최대 3개).
+  await addColumn(db, "db_lookups", "examples", "JSONB NOT NULL DEFAULT '[]'");
   // 실행 기록. 방문자가 입력한 값은 저장하지 않는다(상태·행 수·시간만).
   await db`CREATE TABLE IF NOT EXISTS db_lookup_calls (
     id TEXT PRIMARY KEY,

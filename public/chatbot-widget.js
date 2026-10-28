@@ -860,6 +860,13 @@
           history.push({ role: "assistant", content: data.reply });
           if (history.length > 20) history = history.slice(-20);
           addSources(data.sources);
+          // 범위가 너무 넓은 질문이면 예시 질문 칩을 보여준다. 누르면 입력창에 넣고 바로 보낸다.
+          if (Array.isArray(data.suggestions) && data.suggestions.length) {
+            addChoices(data.suggestions.slice(0, 4).map((q) => ({ label: String(q) })), ({ label }) => {
+              inputEl.value = label;
+              void sendMessage();
+            });
+          }
           if (data.handoffAvailable) addChoices([{ label: "상담원에게 문의하기" }], () => requestHandoff("챗봇 답변 부족"));
         }
       } catch {

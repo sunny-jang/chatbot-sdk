@@ -20,6 +20,9 @@ export const SESSION_WINDOW_S = 600;
 export const CALLS_PER_BOT_MINUTE = 60;
 export const CACHE_SECONDS = 30;
 export const MIN_CONTAINS_CHARS = 2;
+export const MAX_EXAMPLES = 3;
+/** 범위가 넓다고 안내할 때 함께 보여줄 예시 질문 칩 수. */
+export const MAX_SUGGESTIONS = 4;
 
 export const TOO_BROAD_MESSAGE = "한 번에 확인하기엔 범위가 너무 넓어요. 상품명처럼 하나를 정해서 물어봐 주세요.";
 
@@ -36,6 +39,8 @@ export type LookupConfig = {
   filters: RowFilter[];
   maxRows: number;
   enabled: boolean;
+  /** 범위가 넓은 질문에 "이렇게 물어보세요" 칩으로 보여줄 예시 질문. */
+  examples: string[];
 };
 export type LookupStatus = "ok" | "empty" | "need_input" | "too_broad" | "too_many_calls" | "rate_limited" | "timeout" | "error";
 export type LookupResult = {
@@ -106,7 +111,15 @@ export function lookupConfig(input: Record<string, unknown>, columns: string[] =
 
   const maxRows = input.maxRows === undefined || input.maxRows === "" ? DEFAULT_MAX_ROWS : Number(input.maxRows);
   if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > MAX_ROWS) throw new PortalError(`최대 결과 수는 1~${MAX_ROWS} 사이로 입력해주세요.`);
-  return { connectionId, name, description, schema, table, params, outputs, filters, maxRows, enabled: input.enabled !== false };
+  const examples = [
+    ...new Set(
+      (Array.isArray(input.examples) ? input.examples : [])
+        .map((e) => (typeof e === "string" ? e.replace(/\s+/g, " ").trim().slice(0, 60) : ""))
+        .filter(Boolean),
+    ),
+  ].slice(0, MAX_EXAMPLES);
+  if (examples.some((e) => isBroadRequest(e))) throw new PortalError("예시 질문은 하나를 정해서 묻는 질문으로 적어주세요. 예: 아메리카노 재고 알려줘");
+  return { connectionId, name, description, schema, table, params, outputs, filters, maxRows, enabled: input.enabled !== false, examples };
 }
 
 /** 넓은 값(G3). 와일드카드·"전체"류·포함 검색 1글자. */
@@ -218,6 +231,15 @@ export const LIVE_LOOKUP_INSTRUCTIONS = [
 ].join("\n");
 
 export const BROAD_REQUEST_INSTRUCTIONS = `이번 질문은 범위가 넓은 요청이라 실시간 조회를 하지 않는다. 참고 문서로 답할 수 있으면 문서로 답하고, 실시간 값(재고·잔여석 등)을 전부 또는 대량으로 요구하거나 합계·통계·내보내기를 요구하면 "${TOO_BROAD_MESSAGE}"라고 답하라. 숫자를 지어내지 마라.`;
+
+/** 범위가 넓다고 안내할 때 보여줄 예시 질문. 켜진 조회의 예시를 앞에서부터 고르고 중복은 뺀다. */
+export function suggestionsOf(lookups: { examples?: string[] | null }[]): string[] {
+  return [...new Set(lookups.flatMap((l) => (Array.isArray(l.examples) ? l.examples : [])).filter(Boolean))].slice(0, MAX_SUGGESTIONS);
+}
+/** 답이 "범위가 너무 넓다"는 안내인지. 조회 결과가 too_broad였거나, 넓은 요청에 모델이 안내문으로 답했을 때. */
+export function isTooBroadReply(reply: string, broadRequest: boolean, statuses: string[]) {
+  return statuses.includes("too_broad") || (broadRequest && /범위가\s*너무\s*넓/.test(reply));
+}
 
 /** 출처 표시용 라벨: "재고 조회 · 14:03 기준"(KST). */
 export function liveSourceLabel(name: string, at: number) {

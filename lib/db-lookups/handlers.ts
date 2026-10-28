@@ -137,6 +137,7 @@ export async function manageLookups(req: Request, { params }: Context, allowCust
           filters: config.filters,
           max_rows: config.maxRows,
           enabled: true,
+          examples: config.examples,
           created_at: 0,
           updated_at: 0,
         };

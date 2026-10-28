@@ -17,7 +17,7 @@ import { readTenantId } from "@/lib/auth";
 import { bindProactiveContext } from "@/lib/proactive-context";
 import type { AccessDatabase } from "@/lib/access/schema";
 import { liveLookupsFor, runToolCalls, toolsOf, type ToolRun } from "@/lib/db-lookups/run";
-import { BROAD_REQUEST_INSTRUCTIONS, LIVE_LOOKUP_INSTRUCTIONS, isBroadRequest, liveSourceLabel } from "@/lib/db-lookups/config";
+import { BROAD_REQUEST_INSTRUCTIONS, LIVE_LOOKUP_INSTRUCTIONS, isBroadRequest, isTooBroadReply, liveSourceLabel, suggestionsOf } from "@/lib/db-lookups/config";
 
 type AnalyticsLog = {
   intent: string;
@@ -425,6 +425,8 @@ async function POSTHandler(
       sources.push({ kind: "live", label: liveSourceLabel(run.lookup.name, run.result.at) });
   const liveToolName = toolRuns.length ? `실시간 조회(${[...new Set(toolRuns.map((r) => r.lookup?.name ?? "알 수 없음"))].join(", ")})` : null;
   const liveToolSuccess = toolRuns.length ? toolRuns.some((r) => r.result.status === "ok" || r.result.status === "empty") : null;
+  // 범위가 너무 넓다고 안내한 답이면 예시 질문 칩을 함께 보낸다. 누르면 그 질문이 바로 전송된다.
+  const suggestions = liveLookups.length && isTooBroadReply(reply, broadRequest, toolRuns.map((r) => r.result.status)) ? suggestionsOf(liveLookups) : [];
   const model = completion.model || bot.model || "gpt-4o-mini";
   await saveLog(botId, sessionId, message, reply, {
     intent: classifyIntent(message),
@@ -442,7 +444,7 @@ async function POSTHandler(
   await saveChatMessage(sessionId, "bot", reply, "bot");
 
   const usedDocs = relevantDocs.map((d) => ({ title: d.title, score: Math.round(d.score * 100) }));
-  return NextResponse.json({ reply, usedDocs, sources, usage: reservation.usage, handoffAvailable: supportLive && (refusal.refused || (relevantDocs.length === 0 && !liveToolSuccess)) });
+  return NextResponse.json({ reply, usedDocs, sources, suggestions, usage: reservation.usage, handoffAvailable: supportLive && (refusal.refused || (relevantDocs.length === 0 && !liveToolSuccess)) });
 }
 
 export const POST = withWidgetCors(POSTHandler);
