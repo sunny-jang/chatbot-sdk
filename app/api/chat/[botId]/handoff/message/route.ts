@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
 import { fanOutToSupportChannels, saveChatMessage } from "@/lib/support";
+import { withWidgetCors } from "@/lib/widget-origin";
 
-export async function POST(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+// 위젯이 상담 중에 보내는 메시지. 다른 위젯 API처럼 등록된 홈페이지 출처만 허용하고 CORS 헤더를 붙인다.
+// (빠져 있으면 고객 홈페이지에서 응답을 읽지 못해 전송은 됐는데도 "전송 실패"가 뜬다.)
+async function POSTHandler(req: Request, { params }: { params: Promise<{ botId: string }> }) {
   const { botId } = await params;
   const { sessionId, message } = await req.json();
   if (!sessionId || !message?.trim()) return NextResponse.json({ error: "sessionId and message are required" }, { status: 400 });
@@ -19,3 +22,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
   }, `고객: ${message.trim()}`);
   return NextResponse.json({ ok: true, message: saved });
 }
+
+export const POST = withWidgetCors(POSTHandler);
