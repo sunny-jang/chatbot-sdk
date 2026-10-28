@@ -19,6 +19,7 @@ export type DbLookupRow = {
   filters: RowFilter[];
   max_rows: number;
   enabled: boolean;
+  examples?: string[] | null;
   created_at: number;
   updated_at: number;
 };
@@ -39,6 +40,7 @@ export const configOf = (row: DbLookupRow): LookupConfig => ({
   filters: row.filters,
   maxRows: row.max_rows,
   enabled: row.enabled,
+  examples: Array.isArray(row.examples) ? row.examples : [],
 });
 
 /** 화면 목록. 최근 7일 실행 집계(테스트 실행 제외)를 함께 돌려준다. */
@@ -90,8 +92,8 @@ export async function createLookup(db: AccessDatabase, actor: Actor, bot: BotRef
   const [{ count }] = await db`SELECT count(*)::int AS count FROM db_lookups WHERE bot_id=${bot.id}`;
   if (Number(count) >= LOOKUP_LIMIT_PER_BOT) throw new PortalError(`실시간 조회는 챗봇당 ${LOOKUP_LIMIT_PER_BOT}개까지 만들 수 있어요.`, 409);
   const id = randomUUID();
-  await db`INSERT INTO db_lookups(id,bot_id,connection_id,name,description,schema_name,table_name,params,outputs,filters,max_rows,enabled,created_by)
-    VALUES(${id},${bot.id},${config.connectionId},${config.name},${config.description},${config.schema},${config.table},${db.json(config.params)},${db.json(config.outputs)},${db.json(config.filters)},${config.maxRows},${config.enabled},${actor.userId})`;
+  await db`INSERT INTO db_lookups(id,bot_id,connection_id,name,description,schema_name,table_name,params,outputs,filters,max_rows,enabled,examples,created_by)
+    VALUES(${id},${bot.id},${config.connectionId},${config.name},${config.description},${config.schema},${config.table},${db.json(config.params)},${db.json(config.outputs)},${db.json(config.filters)},${config.maxRows},${config.enabled},${db.json(config.examples)},${actor.userId})`;
   await audit(db, actor, connection.customer_id, "db_lookup.create", id);
   return (await listLookups(db, bot.id, id))[0];
 }
@@ -111,7 +113,7 @@ export async function updateLookup(
   const connection = await connectionForBot(db, bot, config.connectionId);
   await db`UPDATE db_lookups SET connection_id=${config.connectionId}, name=${config.name}, description=${config.description},
     schema_name=${config.schema}, table_name=${config.table}, params=${db.json(config.params)}, outputs=${db.json(config.outputs)},
-    filters=${db.json(config.filters)}, max_rows=${config.maxRows}, enabled=${config.enabled}, updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT
+    filters=${db.json(config.filters)}, max_rows=${config.maxRows}, enabled=${config.enabled}, examples=${db.json(config.examples)}, updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT
     WHERE id=${lookupId}`;
   await audit(db, actor, connection.customer_id, "db_lookup.update", lookupId);
   return (await listLookups(db, bot.id, lookupId))[0];

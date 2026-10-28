@@ -159,3 +159,16 @@ test("LA-20·21 출처 라벨·결과 포맷·지시문", () => {
   assert.match(LIVE_LOOKUP_INSTRUCTIONS, /지어내지 마라/);
   assert.ok(LIVE_LOOKUP_INSTRUCTIONS.includes(TOO_BROAD_MESSAGE));
 });
+
+test("LA-22 예시 질문: 최대 3개·중복 제거·넓은 질문 거부, 범위 초과 답에만 칩", async () => {
+  const { suggestionsOf, isTooBroadReply } = await import("../lib/db-lookups/config");
+  const c = lookupConfig({ ...base, examples: [" 아메리카노  재고 알려줘 ", "아메리카노 재고 알려줘", "라떼 몇 개 남았어요", "치즈케이크 재고", "x"] }, menuColumns);
+  assert.deepEqual(c.examples, ["아메리카노 재고 알려줘", "라떼 몇 개 남았어요", "치즈케이크 재고"]);
+  assert.deepEqual(lookupConfig(base, menuColumns).examples, []);
+  assert.throws(() => lookupConfig({ ...base, examples: ["재고 전부 알려줘"] }, menuColumns), /하나를 정해서/);
+  assert.deepEqual(suggestionsOf([{ examples: ["a", "b"] }, { examples: ["b", "c", "d"] }, { examples: null }]), ["a", "b", "c", "d"]);
+  assert.equal(isTooBroadReply("아무 답", false, ["too_broad"]), true);
+  assert.equal(isTooBroadReply(TOO_BROAD_MESSAGE, true, []), true);
+  assert.equal(isTooBroadReply("전체 메뉴는 아메리카노, 라떼…", true, []), false, "넓은 질문이어도 문서로 답했으면 칩 없음");
+  assert.equal(isTooBroadReply(TOO_BROAD_MESSAGE, false, ["ok"]), false);
+});

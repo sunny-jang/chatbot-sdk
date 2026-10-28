@@ -1683,6 +1683,7 @@ form.cp-row {
 
 /* 실시간 조회 (LiveLookupManager). 레이아웃은 .dbs-* 를 그대로 쓰고 다른 부분만 둔다. */
 .lkp { margin-top: 16px; }
+.dbs-head > .cp-button { flex: none; white-space: nowrap; }
 .lkp-empty { margin-top: 14px; }
 .lkp .dbs-step > .lkp-help, .lkp .dbs-filters .lkp-help { margin: 8px 0 0; font-size: 12.5px; }
 .lkp-param { grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) minmax(150px, 1fr) auto; }

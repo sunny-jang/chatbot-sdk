@@ -75,6 +75,7 @@ async function main() {
           { column: "stock", label: "남은 수량", unit: "개", type: "integer" },
         ],
         filters: [{ column: "is_active", op: "eq", value: 1, kind: "number" }],
+        examples: ["아메리카노 재고 알려줘", "카페라떼 라지 몇 개 남았어요"],
       };
 
       // LA-04·LA-18·LA-16 생성 규칙
@@ -155,6 +156,7 @@ async function main() {
       // LA-10 한 메시지 3개 호출(G5)
       const lookups = await liveLookupsFor(db, bot, tenant);
       assert.equal(lookups.length, 1);
+      assert.deepEqual(lookups[0].examples, ["아메리카노 재고 알려줘", "카페라떼 라지 몇 개 남았어요"], "예시 질문이 저장돼 대화에 붙는 조회에 실린다");
       const tools = toolsOf(lookups);
       assert.equal(tools[0].function.name, "lookup_1");
       const runs = await runToolCalls(

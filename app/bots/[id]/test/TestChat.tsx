@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 
 type UsedDoc = { title: string; score: number };
-type Message = { role: "user" | "bot"; text: string; usedDocs?: UsedDoc[] };
+type Message = { role: "user" | "bot"; text: string; usedDocs?: UsedDoc[]; suggestions?: string[] };
 type Folder = { id: string; name: string };
 type QaPair = { id: string; folder_id: string | null; question: string; answer: string };
 
@@ -21,8 +21,8 @@ export default function TestChat({ botId, folders, qaPairs, logoUrl, themeColor 
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function send() {
-    const text = input.trim();
+  async function send(override?: string) {
+    const text = (override ?? input).trim();
     if (!text || loading) return;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", text }]);
@@ -36,7 +36,8 @@ export default function TestChat({ botId, folders, qaPairs, logoUrl, themeColor 
       });
       const data = await res.json();
       const reply = data.reply || "오류가 발생했습니다.";
-      setMessages((prev) => [...prev, { role: "bot", text: reply, usedDocs: data.usedDocs }]);
+      const suggestions = Array.isArray(data.suggestions) ? (data.suggestions as string[]).slice(0, 4) : [];
+      setMessages((prev) => [...prev, { role: "bot", text: reply, usedDocs: data.usedDocs, suggestions }]);
       history.current = [
         ...history.current,
         { role: "user", content: text },
@@ -107,6 +108,22 @@ export default function TestChat({ botId, folders, qaPairs, logoUrl, themeColor 
                 </div>
               )}
             </div>
+            {/* 범위가 너무 넓다는 답의 예시 질문 칩. 마지막 답에서만 누를 수 있고, 누르면 입력하고 바로 보낸다. */}
+            {msg.suggestions && msg.suggestions.length > 0 && i === messages.length - 1 && (
+              <div className="mt-2 flex flex-wrap gap-1.5 max-w-[75%]">
+                {msg.suggestions.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => { setInput(q); void send(q); }}
+                    className="px-3 py-1.5 rounded-full border border-blue-200 bg-white text-blue-700 text-xs hover:bg-blue-50 disabled:opacity-50"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
             {msg.usedDocs && msg.usedDocs.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1 max-w-[75%]">
                 {msg.usedDocs.map((d, j) => (
@@ -171,7 +188,7 @@ export default function TestChat({ botId, folders, qaPairs, logoUrl, themeColor 
           className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
         />
         <button
-          onClick={send}
+          onClick={() => void send()}
           disabled={loading || !input.trim()}
           className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
