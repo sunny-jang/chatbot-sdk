@@ -103,6 +103,11 @@ export async function sendSlackMessage(botId: string, text: string, threadTs?: s
   return result as { ok: boolean; channel: string; ts: string };
 }
 
+/** 상담 종료 명령. "/close"는 Slack에서 슬래시 명령으로 막힐 수 있어 "종료"·"상담 종료"·"!close"도 받는다. */
+export function isCloseCommand(text: string) {
+  return /^(\/close|!close|종료|상담\s*종료)$/i.test(text.trim());
+}
+
 export function verifySlackSignature(secret: string, rawBody: string, timestamp: string | null, signature: string | null) {
   if (!timestamp || !signature || Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) > 300) return false;
   const expected = `v0=${createHmac("sha256", secret).update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
