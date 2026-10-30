@@ -9,6 +9,7 @@ import {
   reserveDemoModelCall,
 } from "@/lib/demo/store";
 import { answerDemo } from "@/lib/demo/answer";
+import { readDemoBackground } from "@/lib/demo/backgrounds";
 import { body, failure, PortalError, text } from "@/lib/customer-portal/input";
 import {
   widgetTitle,
@@ -43,6 +44,23 @@ export async function GET(req: Request, { params }: C) {
     const { demo, path } = await resolve(req, params);
     if (path === "chatbot-default.svg")
       return Response.redirect(new URL("/chatbot-default.svg", req.url));
+    if (path === "background") {
+      // 에이전시가 올린 홈페이지 캡처. 주소에 버전(?v=)이 붙어 잠시 캐시해도 됩니다.
+      // 최대 3MB를 DB에서 읽으므로 방문자별로 횟수를 제한합니다.
+      if (!(await enforceRateLimit("demo-background:" + demo.id, req, 30)))
+        return json({ error: "잠시 후 다시 시도해주세요." }, 429);
+      const image = await readDemoBackground(sql, demo.id);
+      if (!image) return json({ error: "배경 이미지가 없습니다." }, 404);
+      return new Response(Buffer.from(image.bytes), {
+        headers: {
+          "Content-Type": image.mime,
+          "Cache-Control": "private, max-age=3600",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; sandbox",
+        },
+      });
+    }
     if (path === `api/widget/${demo.bot_id}`) {
       const [bot] =
         await sql`SELECT name,type,widget_title,widget_color,greeting_message,logo_url,support_mode,support_hours,force_unattended,qa_handoff_always FROM bots WHERE id=${demo.bot_id}`;
