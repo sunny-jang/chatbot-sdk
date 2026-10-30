@@ -1,5 +1,7 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonList } from "@/app/components/Skeleton";
 import { useRouter } from "next/navigation";
 type Source = {
   folder_id: string | null;
@@ -37,8 +39,7 @@ export default function WebSourceManager({
   folders: { id: string; name: string }[];
 }) {
   const router = useRouter();
-  const [sources, setSources] = useState<Source[]>([]),
-    [url, setUrl] = useState(""),
+  const [url, setUrl] = useState(""),
     [preview, setPreview] = useState<Preview | null>(null),
     [folder, setFolder] = useState(""),
     [busy, setBusy] = useState(false),
@@ -53,19 +54,16 @@ export default function WebSourceManager({
       total: number;
       results: ImportResult[];
     } | null>(null);
-  const load = useCallback(async () => {
-    const r = await fetch(`${apiBase || `/api/bots/${botId}`}/web-sources`);
-    const d = await r.json();
-    if (!r.ok) throw Error(d.error);
-    setSources(d);
-  }, [botId, apiBase]);
-  useEffect(() => {
-    const timer = setTimeout(
-      () => void load().catch((e) => setNotice(e.message)),
-      0,
-    );
-    return () => clearTimeout(timer);
-  }, [load]);
+  const sourcesKey = ["web-sources", apiBase || botId];
+  const sourcesQuery = useApiQuery<Source[]>(
+    sourcesKey,
+    `${apiBase || `/api/bots/${botId}`}/web-sources`,
+  );
+  const sources = sourcesQuery.data ?? [];
+  const invalidate = useInvalidate();
+  // 수집·반영 뒤 가져온 URL 목록 캐시를 새로 고친다.
+  const load = () => invalidate(sourcesKey);
+  const shownNotice = notice || sourcesQuery.error?.message || "";
   async function fetchPage(source?: Source) {
     setFolder(source?.folder_id || "");
     setBusy(true);
@@ -242,9 +240,9 @@ export default function WebSourceManager({
           {busy ? "처리 중..." : "가져오기"}
         </button>
       </form>
-      {notice && (
+      {shownNotice && (
         <p role="status" className="text-sm text-violet-700 mt-3">
-          {notice}
+          {shownNotice}
         </p>
       )}
       <div className="border-t border-gray-200 mt-5 pt-4">
@@ -503,6 +501,9 @@ export default function WebSourceManager({
             </button>
           </div>
         </div>
+      )}
+      {sourcesQuery.isPending && (
+        <SkeletonList rows={2} label="가져온 URL 목록을 불러오는 중입니다." />
       )}
       {sources.map((s) => (
         <article key={s.id} className="border-t border-gray-200 mt-4 pt-3">

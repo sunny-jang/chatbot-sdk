@@ -38,9 +38,17 @@ export async function localFetch(url: string, init: RequestInit = {}) {
     req.end(payload);
   });
 }
-export const base = "http://127.0.0.1:3012",
-  desk = "desk.localhost:3012",
-  agency = "localhost:3012";
+/** PORTAL_HTTP_BASE로 다른 포트(예: 3013)의 QA 서버를 가리킬 수 있다. 호스트 이름은 같은 포트로 맞춘다. */
+const port = (() => {
+  try {
+    return new URL(process.env.PORTAL_HTTP_BASE || "http://127.0.0.1:3012").port || "80";
+  } catch {
+    return "3012";
+  }
+})();
+export const base = `http://127.0.0.1:${port}`,
+  desk = `desk.localhost:${port}`,
+  agency = `localhost:${port}`;
 type Login = { email: string; password: string };
 export async function api(
   path: string,

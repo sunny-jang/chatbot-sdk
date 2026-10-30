@@ -1,5 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonList } from "@/app/components/Skeleton";
 type Member = {
   id: string;
   name: string;
@@ -23,40 +25,21 @@ export default function Members({
   owner: boolean;
   portal?: boolean;
 }) {
-  const [items, setItems] = useState<Member[]>([]),
-    [invitations, setInvitations] = useState<Invitation[]>([]),
-    [email, setEmail] = useState(""),
+  const [email, setEmail] = useState(""),
     [role, setRole] = useState("agent"),
     [url, setUrl] = useState(""),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [revision, setRevision] = useState(0);
+    [busy, setBusy] = useState(false);
   const base = `/api/${portal ? "customer" : "customers"}/${customerId}`;
-  useEffect(() => {
-    const c = new AbortController();
-    async function load() {
-      try {
-        const r = await fetch(base + "/members", {
-          signal: c.signal,
-          cache: "no-store",
-        });
-        const d = await r.json();
-        if (!r.ok) throw Error(d.error);
-        setItems(d.items);
-        setInvitations(d.invitations);
-      } catch (e) {
-        if (!c.signal.aborted) {
-          setItems([]);
-          setInvitations([]);
-          setError(
-            e instanceof Error ? e.message : "담당자를 불러오지 못했습니다.",
-          );
-        }
-      }
-    }
-    void load();
-    return () => c.abort();
-  }, [base, revision]);
+  const key = ["customers", customerId, "members", portal ? "desk" : "agency"];
+  const query = useApiQuery<{ items: Member[]; invitations: Invitation[] }>(
+    key,
+    base + "/members",
+  );
+  const invalidate = useInvalidate();
+  const items = query.isError ? [] : (query.data?.items ?? []);
+  const invitations = query.isError ? [] : (query.data?.invitations ?? []);
+  const shownError = error || query.error?.message || "";
   async function invite(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -72,7 +55,7 @@ export default function Members({
       if (!r.ok) throw Error(d.error);
       setUrl(d.url);
       setEmail("");
-      setRevision((v) => v + 1);
+      await invalidate(key);
     } catch (e) {
       setError(e instanceof Error ? e.message : "초대를 만들지 못했습니다.");
     } finally {
@@ -90,7 +73,7 @@ export default function Members({
       });
       const d = await r.json();
       if (!r.ok) throw Error(d.error);
-      setRevision((v) => v + 1);
+      await invalidate(key);
     } catch (e) {
       setError(e instanceof Error ? e.message : "변경하지 못했습니다.");
     } finally {
@@ -104,9 +87,9 @@ export default function Members({
         담당자는 자기 계정으로 고객사 전용 상담함에 로그인합니다. 초대 링크는
         72시간 유효하며 이메일 확인을 거쳐 수락합니다.
       </p>
-      {error && (
+      {shownError && (
         <p className="cp-error" role="alert">
-          {error}
+          {shownError}
         </p>
       )}
       <form className="cp-row" onSubmit={invite}>
@@ -159,6 +142,9 @@ export default function Members({
           </div>
         </div>
       )}
+      {query.isPending ? (
+        <SkeletonList rows={3} label="담당자 목록을 불러오는 중입니다." />
+      ) : (
       <div className="cp-table-wrap">
         <table className="cp-table">
           <thead>
@@ -200,7 +186,8 @@ export default function Members({
           </tbody>
         </table>
       </div>
-      {!items.length && (
+      )}
+      {!query.isPending && !items.length && (
         <p className="cp-note">아직 연결된 담당자가 없습니다.</p>
       )}
       {invitations.length > 0 && <h3>최근 초대</h3>}

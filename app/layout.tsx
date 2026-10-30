@@ -4,6 +4,7 @@ import Sidebar from "./Sidebar";
 import WorkspaceFrame from "./WorkspaceFrame";
 import MasterBar from "./MasterBar";
 import AgencyHelpWidget from "./components/AgencyHelpWidget";
+import QueryProvider from "./components/QueryProvider";
 import { headers } from "next/headers";
 import { isCustomerPortalHost } from "@/lib/customer-portal/host";
 import { isMasterHost, masterOrigin } from "@/lib/master-host";
@@ -64,6 +65,8 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-screen">
+        {/* 계정이 바뀌면 key가 바뀌어 캐시가 새로 시작된다. 다른 사람의 목록이 잠깐이라도 보이지 않게 한다. */}
+        <QueryProvider key={String(session?.customer_user_id ?? session?.tenant_id ?? platformUserId ?? "anonymous")}>
         {tenantName ? (
           <WorkspaceFrame
             customerHost={customerHost}
@@ -83,6 +86,7 @@ export default async function RootLayout({
         ) : (
           <>{children}</>
         )}
+        </QueryProvider>
         {/* 파트너 에이전시 화면(에이전시 호스트)에만 안내 챗봇을 설치합니다. */}
         {!customerHost && !masterHost && <AgencyHelpWidget />}
       </body>

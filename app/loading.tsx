@@ -1,15 +1,17 @@
+import { Skeleton, SkeletonList, SkeletonMetrics } from "./components/Skeleton";
+
+/** 에이전시 화면 공통 자리 표시: 제목 → 지표 줄 → 목록 패널. 실제 화면과 같은 틀이라 바뀔 때 덜컹이지 않는다. */
 export default function Loading() {
   return (
     <div className="workspace-page" role="status" aria-live="polite">
-      <div className="workspace-page-heading">
-        <div>
-          <h1>불러오는 중이에요</h1>
-          <p>작업 공간의 최신 정보를 확인하고 있습니다.</p>
-        </div>
+      <span className="skeleton-sr">화면을 불러오는 중입니다.</span>
+      <div className="skeleton-page-head" aria-hidden="true">
+        <Skeleton width={180} height={26} />
+        <Skeleton width={320} height={13} />
       </div>
-      <div className="workspace-panel workspace-empty">
-        <strong>잠시만 기다려 주세요</strong>
-        <p>상담과 챗봇 정보를 안전하게 불러오고 있어요.</p>
+      <SkeletonMetrics />
+      <div className="workspace-panel" aria-hidden="true">
+        <SkeletonList rows={5} label="" />
       </div>
     </div>
   );

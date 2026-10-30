@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonPanel } from "@/app/components/Skeleton";
 import { signIn } from "next-auth/react";
 import HelpButton from "@/app/HelpButton";
 
@@ -25,42 +27,36 @@ const HELP = {
   ],
 };
 
+type KeyStatus = { hasKey?: boolean; maskedKey?: string | null };
+type TenantSettings = {
+  openai?: KeyStatus;
+  gemini?: KeyStatus;
+  googleLinked?: boolean;
+};
+
 export default function SettingsPage() {
-  const [hasKey, setHasKey] = useState(false);
-  const [maskedKey, setMaskedKey] = useState<string | null>(null);
   const [provider, setProvider] = useState<"openai" | "gemini">("openai");
   const [newKey, setNewKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showInput, setShowInput] = useState(false);
-  const [googleLinked, setGoogleLinked] = useState(false);
-  const [googleAvailable, setGoogleAvailable] = useState(false);
+  const settingsQuery = useApiQuery<TenantSettings>(["tenant-settings"], "/api/tenants/settings");
+  const providersQuery = useApiQuery<Record<string, unknown> | null>(["auth-providers"], "/api/auth/providers");
+  const invalidate = useInvalidate();
+  const hasKey = settingsQuery.data?.[provider]?.hasKey ?? false;
+  const maskedKey = settingsQuery.data?.[provider]?.maskedKey ?? null;
+  const googleLinked = Boolean(settingsQuery.data?.googleLinked);
+  const googleAvailable = Boolean(providersQuery.data?.google);
+  const shownMessage =
+    message ?? (settingsQuery.error ? { type: "error" as const, text: settingsQuery.error.message } : null);
 
   useEffect(() => {
-    async function loadIdentity() {
-      // Returning from the Google callback with ?google=linked confirms the link without a second round-trip.
+    // Returning from the Google callback with ?google=linked confirms the link without a second round-trip.
+    const timer = setTimeout(() => {
       if (new URLSearchParams(window.location.search).get("google") === "linked")
         setMessage({ type: "success", text: "Google 계정을 연결했습니다. 다음부터 Google로도 로그인할 수 있습니다." });
-      try {
-        const providers = await (await fetch("/api/auth/providers")).json();
-        setGoogleAvailable(Boolean(providers?.google));
-        const settings = await (await fetch("/api/tenants/settings")).json();
-        setGoogleLinked(Boolean(settings.googleLinked));
-      } catch {
-        setGoogleAvailable(false);
-      }
-    }
-    const timer = setTimeout(() => void loadIdentity(), 0);
+    }, 0);
     return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/tenants/settings")
-      .then((r) => r.json())
-      .then((d) => {
-        setHasKey(d.openai?.hasKey ?? false);
-        setMaskedKey(d.openai?.maskedKey ?? null);
-      });
   }, []);
 
   async function handleSave(e: React.FormEvent) {
@@ -77,8 +73,7 @@ export default function SettingsPage() {
       if (!res.ok) {
         setMessage({ type: "error", text: data.error ?? "저장 실패" });
       } else {
-        setHasKey(true);
-        setMaskedKey(newKey.trim().slice(0, 8) + "••••••••••••••••••••");
+        await invalidate(["tenant-settings"]);
         setNewKey("");
         setShowInput(false);
         setMessage({ type: "success", text: `${provider === "gemini" ? "Gemini" : "OpenAI"} API 키가 저장되었습니다.` });
@@ -98,8 +93,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider, [`${provider}_api_key`]: "" }),
       });
-      setHasKey(false);
-      setMaskedKey(null);
+      await invalidate(["tenant-settings"]);
       setShowInput(false);
       setMessage({ type: "success", text: "API 키가 삭제되었습니다." });
     } finally {
@@ -136,6 +130,11 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+      {settingsQuery.isPending ? (
+        <div className="bg-white border border-gray-200 rounded-2xl p-6">
+          <SkeletonPanel lines={4} label="API 키 설정을 불러오는 중입니다." />
+        </div>
+      ) : (
       <div className="bg-white border border-gray-200 rounded-2xl p-6">
         <div className="flex items-start justify-between mb-1">
           <div>
@@ -164,10 +163,7 @@ export default function SettingsPage() {
                 setProvider(item);
                 setNewKey("");
                 setShowInput(false);
-                fetch("/api/tenants/settings").then((r) => r.json()).then((d) => {
-                  setHasKey(d[item]?.hasKey ?? false);
-                  setMaskedKey(d[item]?.maskedKey ?? null);
-                });
+                void invalidate(["tenant-settings"]);
               }}
               className={`px-3 py-2 text-sm font-medium border-b-2 ${provider === item ? "border-purple-600 text-purple-700" : "border-transparent text-gray-400"}`}
             >
@@ -226,14 +222,14 @@ export default function SettingsPage() {
           </form>
         )}
 
-        {message && (
+        {shownMessage && (
           <p
             className={`mt-3 text-sm ${
-              message.type === "success" ? "text-green-600" : "text-red-600"
+              shownMessage.type === "success" ? "text-green-600" : "text-red-600"
             }`}
           >
-            {message.type === "success" ? "✅ " : "❌ "}
-            {message.text}
+            {shownMessage.type === "success" ? "✅ " : "❌ "}
+            {shownMessage.text}
           </p>
         )}
 
@@ -246,6 +242,7 @@ export default function SettingsPage() {
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }
