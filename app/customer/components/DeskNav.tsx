@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import NavIcon from "@/app/components/NavIcon";
+import NavPending from "@/app/components/NavPending";
 
 export type DeskNavItem = { href: string; label: string; icon: string };
 
@@ -21,6 +22,7 @@ export default function DeskNav({ items }: { items: DeskNavItem[] }) {
           >
             <NavIcon name={item.icon} />
             {item.label}
+            <NavPending />
           </Link>
         );
       })}
