@@ -1,5 +1,8 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonList, SkeletonPanel } from "@/app/components/Skeleton";
 type Item = {
   id: string;
   receipt: string;
@@ -28,64 +31,50 @@ const labels: Record<string, string> = {
   consultation: "상담 신청",
 };
 export default function RequestsManager({ botId }: { botId: string }) {
-  const [items, setItems] = useState<Item[]>([]),
-    [detail, setDetail] = useState<Detail | null>(null),
+  const [selectedId, setSelectedId] = useState(""),
     [status, setStatus] = useState("all"),
     [kind, setKind] = useState("all"),
     [search, setSearch] = useState(""),
     [days, setDays] = useState(90),
     [page, setPage] = useState(1),
-    [total, setTotal] = useState(0),
     [note, setNote] = useState(""),
     [busy, setBusy] = useState(false),
-    [loading, setLoading] = useState(true),
-    [error, setError] = useState("");
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await fetch(
-        `/api/bots/${botId}/requests?status=${status}&kind=${kind}&search=${encodeURIComponent(search)}&page=${page}&days=${days}`,
-      );
-      const d = await r.json();
-      if (!r.ok) throw Error(d.error);
-      setItems(d.items);
-      setTotal(d.total);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "조회 실패");
-    } finally {
-      setLoading(false);
-    }
-  }, [botId, status, kind, search, page, days]);
-  const select = useCallback(
-    async (id: string) => {
-      setError("");
-      try {
-        const r = await fetch(
-          `/api/bots/${botId}/requests?requestId=${encodeURIComponent(id)}`,
-        );
-        const d = await r.json();
-        if (!r.ok) throw Error(d.error);
-        setDetail(d);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "조회 실패");
-      }
-    },
-    [botId],
+    [actionError, setActionError] = useState("");
+  const requestsKey = ["bot", botId, "requests"] as const;
+  const invalidate = useInvalidate();
+  const listQuery = useApiQuery<{ items: Item[]; total: number }>(
+    [...requestsKey, "list", { status, kind, search, page, days }],
+    `/api/bots/${botId}/requests?status=${status}&kind=${kind}&search=${encodeURIComponent(search)}&page=${page}&days=${days}`,
+    { placeholderData: keepPreviousData },
   );
-  useEffect(() => {
-    const timer = setTimeout(() => void load(), 0);
-    return () => clearTimeout(timer);
-  }, [load]);
+  const detailQuery = useApiQuery<Detail>(
+    [...requestsKey, "detail", selectedId],
+    selectedId
+      ? `/api/bots/${botId}/requests?requestId=${encodeURIComponent(selectedId)}`
+      : null,
+  );
+  const items = listQuery.data?.items ?? [];
+  const total = listQuery.data?.total ?? 0;
+  const detail = selectedId ? (detailQuery.data ?? null) : null;
+  const error =
+    actionError ||
+    (selectedId ? detailQuery.error?.message : "") ||
+    listQuery.error?.message ||
+    "";
+  function select(id: string) {
+    setActionError("");
+    setSelectedId(id);
+  }
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("requestId");
     if (!id) return;
-    const timer = setTimeout(() => void select(id), 0);
+    const timer = setTimeout(() => setSelectedId(id), 0);
     return () => clearTimeout(timer);
-  }, [select]);
+  }, []);
   async function change(data: Record<string, string>) {
     if (!detail) return;
     setBusy(true);
-    setError("");
+    setActionError("");
     try {
       const r = await fetch(`/api/bots/${botId}/requests`, {
         method: "PATCH",
@@ -94,10 +83,9 @@ export default function RequestsManager({ botId }: { botId: string }) {
       });
       if (!r.ok) throw Error((await r.json()).error);
       setNote("");
-      await select(detail.id);
-      await load();
+      await invalidate(requestsKey);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "처리 실패");
+      setActionError(e instanceof Error ? e.message : "처리 실패");
     } finally {
       setBusy(false);
     }
@@ -164,10 +152,7 @@ export default function RequestsManager({ botId }: { botId: string }) {
         </select>
         <button
           className={button}
-          onClick={() => {
-            void load();
-            if (detail) void select(detail.id);
-          }}
+          onClick={() => void invalidate(requestsKey)}
         >
           새로고침
         </button>
@@ -179,8 +164,8 @@ export default function RequestsManager({ botId }: { botId: string }) {
       )}
       <div className="grid lg:grid-cols-2 gap-4">
         <div>
-          {loading ? (
-            <p className="p-6 text-gray-500">불러오는 중...</p>
+          {listQuery.isPending ? (
+            <SkeletonList rows={5} label="접수 목록을 불러오는 중입니다." />
           ) : items.length ? (
             items.map((i) => (
               <button
@@ -353,6 +338,8 @@ export default function RequestsManager({ botId }: { botId: string }) {
               </p>
             ))}
           </article>
+        ) : selectedId && detailQuery.isPending ? (
+          <SkeletonPanel lines={6} label="신청 내용을 불러오는 중입니다." />
         ) : (
           <p className="text-gray-400 text-center p-12">
             신청을 선택하면 내용을 확인할 수 있습니다.

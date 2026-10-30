@@ -291,3 +291,28 @@ button{font:inherit}
 .bot-tabs a[aria-current="page"]{color:var(--brand-text);border-bottom-color:var(--brand);font-weight:600}
 .bot-tabs a[aria-current="page"] svg{color:var(--brand)}
 @media(max-width:700px){.bot-header{padding:14px 16px 0}.bot-prompt{display:none}.bot-tabs a{padding:11px 10px;font-size:13px}.bot-identity{flex-wrap:wrap}.bot-actions{margin-left:0;width:100%}}
+
+/* ---------- Skeleton: 불러오는 동안 화면 모양을 미리 보여준다 ---------- */
+.skeleton{display:block;background:linear-gradient(90deg,var(--line-soft) 0%,#f6f7fa 40%,var(--line-soft) 80%);background-size:300% 100%;border-radius:6px;animation:skeleton-wave 1.4s ease-in-out infinite}
+@keyframes skeleton-wave{0%{background-position:100% 0}100%{background-position:0 0}}
+@media (prefers-reduced-motion:reduce){.skeleton{animation:none}}
+.skeleton-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skeleton-list{display:grid}
+.skeleton-row{display:flex;gap:12px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line-soft)}
+.skeleton-row:last-child{border-bottom:0}
+.skeleton-lines{flex:1;display:grid;gap:8px;min-width:0}
+.skeleton-panel{display:grid;gap:12px;padding:22px 24px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-panel);margin:18px 0}
+.skeleton-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);background:var(--surface);border-radius:var(--r-panel);overflow:hidden;margin-bottom:22px}
+.skeleton-metrics>div{display:grid;gap:10px;padding:18px 22px;border-right:1px solid var(--line-soft)}
+.skeleton-metrics>div:last-child{border-right:0}
+@media (max-width:760px){.skeleton-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- 메뉴 이동 중 표시: 새 화면이 늦을 때(0.3초 이상)만 링크 끝에 작은 원 ---------- */
+.nav-pending{display:inline-block;width:12px;height:12px;margin-left:auto;flex:none;border-radius:50%;border:2px solid var(--brand-soft);border-top-color:var(--brand);opacity:0;visibility:hidden}
+.nav-pending.is-pending{visibility:visible;animation:nav-pending-in .15s ease .3s forwards,nav-pending-spin .7s linear .3s infinite}
+@keyframes nav-pending-in{to{opacity:1}}
+@keyframes nav-pending-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.nav-pending.is-pending{animation:nav-pending-in .15s ease .3s forwards}}
+/* 알약 메뉴·탭은 폭이 바뀌지 않게 링크 오른쪽 위에 겹쳐 띄운다. */
+.cp-nav a,.bot-tabs a{position:relative}
+.cp-nav .nav-pending,.bot-tabs .nav-pending{position:absolute;top:5px;right:3px;width:9px;height:9px;margin:0;border-width:1.5px}
