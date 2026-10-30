@@ -33,7 +33,14 @@ export default function DemoSite({
   const [view, setView] = useState<"shot" | "frame" | "fallback">(
       backgroundUrl ? "shot" : insecureSite ? "fallback" : "frame",
     ),
-    [frameReady, setFrameReady] = useState(false);
+    [frameReady, setFrameReady] = useState(false),
+    [hintVisible, setHintVisible] = useState(true);
+  // 안내 상자는 홈페이지 메뉴를 가리므로 불러온 뒤 잠시만 보여줍니다. 상단 버튼은 계속 남습니다.
+  useEffect(() => {
+    if (!frameReady) return;
+    const timer = setTimeout(() => setHintVisible(false), 6000);
+    return () => clearTimeout(timer);
+  }, [frameReady]);
   const scriptRef = useRef<HTMLScriptElement | null>(null);
   useEffect(() => {
     const script = document.createElement("script");
@@ -125,12 +132,14 @@ export default function DemoSite({
             referrerPolicy="no-referrer"
             onLoad={() => setFrameReady(true)}
           />
-          {/* Browsers do not report X-Frame-Options/CSP blocks, so the cue stays after load. */}
-          <p className="site-demo-frame-hint">
-            {frameReady
-              ? "홈페이지가 외부 표시를 차단하면 이 영역이 비어 보입니다. 상단의 대체 화면을 선택해주세요."
-              : "홈페이지 배경을 불러오는 중입니다. 보이지 않으면 상단의 대체 화면을 선택해주세요."}
-          </p>
+          {/* Browsers do not report X-Frame-Options/CSP blocks, so a short cue appears after load. */}
+          {hintVisible && (
+            <p className="site-demo-frame-hint" role="status">
+              {frameReady
+                ? "배경이 비어 보이면 상단의 대체 화면을 선택해주세요."
+                : "홈페이지 배경을 불러오는 중입니다."}
+            </p>
+          )}
         </div>
       )}
     </main>
