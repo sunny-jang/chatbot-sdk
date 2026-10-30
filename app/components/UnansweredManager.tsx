@@ -1,5 +1,8 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonList } from "@/app/components/Skeleton";
 type Item = {
   id: string;
   question: string;
@@ -19,18 +22,14 @@ export default function UnansweredManager({
   botId: string;
   days: number;
 }) {
-  const [items, setItems] = useState<Item[]>([]),
-    [folders, setFolders] = useState<Folder[]>([]),
-    [status, setStatus] = useState("pending"),
-    [page, setPage] = useState(1),
-    [total, setTotal] = useState(0);
+  const [status, setStatus] = useState("pending"),
+    [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Item | null>(null),
     [question, setQuestion] = useState(""),
     [answer, setAnswer] = useState(""),
     [folder, setFolder] = useState(""),
-    [error, setError] = useState(""),
+    [actionError, setActionError] = useState(""),
     [busy, setBusy] = useState(false),
-    [loading, setLoading] = useState(true),
     [duplicate, setDuplicate] = useState<{
       id: string;
       question: string;
@@ -39,31 +38,27 @@ export default function UnansweredManager({
   useEffect(() => {
     questionInput.current?.focus();
   }, [selected]);
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await fetch(
-        `/api/bots/${botId}/unanswered?days=${days}&status=${status}&page=${page}`,
-      );
-      const d = await r.json();
-      if (!r.ok) throw Error(d.error);
-      setItems(d.items);
-      setFolders(d.folders);
-      setTotal(d.total);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "불러오기 실패");
-    } finally {
-      setLoading(false);
-    }
-  }, [botId, days, status, page]);
-  useEffect(() => {
-    const timer = setTimeout(() => void load(), 0);
-    return () => clearTimeout(timer);
-  }, [load]);
+  const unansweredKey = ["bot", botId, "unanswered"] as const;
+  const invalidate = useInvalidate();
+  const listQuery = useApiQuery<{
+    items: Item[];
+    folders: Folder[];
+    total: number;
+  }>(
+    [...unansweredKey, { days, status, page }],
+    `/api/bots/${botId}/unanswered?days=${days}&status=${status}&page=${page}`,
+    { placeholderData: keepPreviousData },
+  );
+  const items = listQuery.data?.items ?? [];
+  const folders = listQuery.data?.folders ?? [];
+  const total = listQuery.data?.total ?? 0;
+  // 새 페이지·필터를 불러오는 동안에는 페이지 이동을 막는다.
+  const loading = listQuery.isPending || listQuery.isPlaceholderData;
+  const error = actionError || listQuery.error?.message || "";
   async function submit(qaId?: string) {
     if (!selected) return;
     setBusy(true);
-    setError("");
+    setActionError("");
     try {
       const r = await fetch(`/api/bots/${botId}/unanswered`, {
         method: "POST",
@@ -80,16 +75,16 @@ export default function UnansweredManager({
       if (d.duplicate) setDuplicate(d.duplicate);
       if (!r.ok) throw Error(d.error);
       setSelected(null);
-      await load();
+      await invalidate(unansweredKey);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "등록 실패");
+      setActionError(e instanceof Error ? e.message : "등록 실패");
     } finally {
       setBusy(false);
     }
   }
   async function change(item: Item, next: string) {
     setBusy(true);
-    setError("");
+    setActionError("");
     try {
       const r = await fetch(`/api/bots/${botId}/unanswered`, {
         method: "PATCH",
@@ -97,9 +92,9 @@ export default function UnansweredManager({
         body: JSON.stringify({ logId: item.id, status: next }),
       });
       if (!r.ok) throw Error((await r.json()).error);
-      await load();
+      await invalidate(unansweredKey);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "처리 실패");
+      setActionError(e instanceof Error ? e.message : "처리 실패");
     } finally {
       setBusy(false);
     }
@@ -133,8 +128,8 @@ export default function UnansweredManager({
           {error}
         </p>
       )}
-      {loading ? (
-        <p className="p-5 text-gray-500">불러오는 중...</p>
+      {listQuery.isPending ? (
+        <SkeletonList rows={4} label="미응답 질문을 불러오는 중입니다." />
       ) : items.length ? (
         items.map((item) => (
           <article key={item.id} className="border-t border-gray-200 py-4 mt-2">
@@ -179,7 +174,7 @@ export default function UnansweredManager({
                       setAnswer("");
                       setFolder("");
                       setDuplicate(null);
-                      setError("");
+                      setActionError("");
                     }}
                   >
                     답변 등록

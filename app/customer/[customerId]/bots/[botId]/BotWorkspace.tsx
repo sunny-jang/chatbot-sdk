@@ -1,6 +1,8 @@
 "use client";
 import WebSourceManager from "@/app/components/WebSourceManager";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonList, SkeletonMetrics } from "@/app/components/Skeleton";
 import Link from "next/link";
 import {
   DEFAULT_SUPPORT_HOURS,
@@ -65,78 +67,69 @@ export default function BotWorkspace({
     ),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState(""),
-    [rows, setRows] = useState<RecordRow[]>([]),
-    [folders, setFolders] = useState<RecordRow[]>([]),
-    [stats, setStats] = useState<Stats | null>(null),
-    [revision, setRevision] = useState(0);
+    [notice, setNotice] = useState("");
   const [edit, setEdit] = useState<string | null>(null),
     [title, setTitle] = useState(""),
     [content, setContent] = useState(""),
     [folder, setFolder] = useState(""),
     [folderName, setFolderName] = useState(""),
-    [confirmDelete, setConfirmDelete] = useState<string | null>(null),
-    [loading, setLoading] = useState(false);
+    [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const kind = tab === "docs" ? "docs" : "qa";
-  useEffect(() => {
-    const controller = new AbortController();
-    async function load() {
-      try {
-        if (["docs", "qa"].includes(tab)) {
-          const responses = await Promise.all([
-            fetch(`${base}/${tab}`, {
-              signal: controller.signal,
-              cache: "no-store",
-            }),
-            fetch(`${base}/${tab === "docs" ? "folders" : "qa-folders"}`, {
-              signal: controller.signal,
-              cache: "no-store",
-            }),
-          ]);
-          const data = await Promise.all(responses.map((r) => r.json()));
-          for (let i = 0; i < responses.length; i++)
-            if (!responses[i].ok) throw Error(data[i].error);
-          if (!controller.signal.aborted) {
-            setRows(data[0]);
-            setFolders(data[1]);
-          }
-        } else if (["analytics", "logs"].includes(tab)) {
-          const r = await fetch(`${base}/${tab}`, {
-              signal: controller.signal,
-              cache: "no-store",
-            }),
-            d = await r.json();
-          if (!r.ok) throw Error(d.error);
-          if (!controller.signal.aborted) {
-            if (tab === "analytics") setStats(d);
-            else setRows(d);
-          }
-        }
-      } catch (e) {
-        if (!controller.signal.aborted)
-          setError(e instanceof Error ? e.message : "불러오지 못했습니다.");
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }
-    const initial = setTimeout(() => {
-      setLoading(["docs", "qa", "analytics", "logs"].includes(tab));
-      setError("");
-      setNotice("");
-      setRows([]);
-      setStats(null);
-      setEdit(null);
-      setConfirmDelete(null);
-      setTitle("");
-      setContent("");
-      setFolder("");
-      void load();
-    }, 0);
-    return () => {
-      clearTimeout(initial);
-      controller.abort();
-    };
-  }, [base, tab, revision]);
+  const folderPath = (k: "docs" | "qa") =>
+    k === "docs" ? "folders" : "qa-folders";
+  // 탭마다 따로 캐시해서, 다른 탭에 갔다 돌아와도 이전 목록이 바로 보이고 뒤에서 새로 고친다.
+  const queryKey = (part: string) => ["desk-bot", customerId, bot.id, part];
+  const at = (name: string, path: string) =>
+    tab === name ? `${base}/${path}` : null;
+  const docsQuery = useApiQuery<RecordRow[]>(
+    queryKey("docs"),
+    at("docs", "docs"),
+  );
+  const docFoldersQuery = useApiQuery<RecordRow[]>(
+    queryKey("folders"),
+    at("docs", "folders"),
+  );
+  const qaQuery = useApiQuery<RecordRow[]>(queryKey("qa"), at("qa", "qa"));
+  const qaFoldersQuery = useApiQuery<RecordRow[]>(
+    queryKey("qa-folders"),
+    at("qa", "qa-folders"),
+  );
+  const statsQuery = useApiQuery<Stats>(
+    queryKey("analytics"),
+    at("analytics", "analytics"),
+  );
+  const logsQuery = useApiQuery<RecordRow[]>(
+    queryKey("logs"),
+    at("logs", "logs"),
+  );
+  const rowsQuery =
+    tab === "logs" ? logsQuery : kind === "docs" ? docsQuery : qaQuery;
+  const foldersQuery = kind === "docs" ? docFoldersQuery : qaFoldersQuery;
+  const rows = rowsQuery.data ?? [];
+  const folders = foldersQuery.data ?? [];
+  const stats = statsQuery.data ?? null;
+  const loadError =
+    tab === "docs" || tab === "qa"
+      ? (rowsQuery.error ?? foldersQuery.error)
+      : tab === "analytics"
+        ? statsQuery.error
+        : tab === "logs"
+          ? logsQuery.error
+          : null;
+  const shownError = error || loadError?.message || "";
+  const invalidate = useInvalidate();
+  function resetEditor() {
+    setEdit(null);
+    setConfirmDelete(null);
+    setTitle("");
+    setContent("");
+    setFolder("");
+  }
+  /** 저장·삭제 뒤 해당 탭의 목록과 폴더를 새로 불러오고 입력 칸을 비운다. */
+  async function refresh(k: "docs" | "qa") {
+    resetEditor();
+    await invalidate(queryKey(k), queryKey(folderPath(k)));
+  }
   async function request(url: string, method: string, input?: unknown) {
     const r = await fetch(url, {
         method,
@@ -162,7 +155,11 @@ export default function BotWorkspace({
     }
   }
   function chooseTab(next: string) {
+    if (next === tab) return;
     setTab(next);
+    setError("");
+    setNotice("");
+    resetEditor();
   }
   const snippet = `<script src="${endpoint}/chatbot-widget.js" data-endpoint="${endpoint}" data-bot-id="${bot.id}" data-bot-token="${bot.public_token}"></script>`;
   return (
@@ -192,9 +189,9 @@ export default function BotWorkspace({
           </button>
         ))}
       </nav>
-      {error && (
+      {shownError && (
         <p role="alert" className="cp-error">
-          {error}
+          {shownError}
         </p>
       )}
       {notice && (
@@ -445,11 +442,6 @@ export default function BotWorkspace({
           />
         </section>
       )}
-      {loading && (
-        <p role="status" className="cp-note">
-          불러오는 중입니다.
-        </p>
-      )}
       {["docs", "qa"].includes(tab) && (
         <section className="cp-panel">
           <h2>
@@ -483,7 +475,7 @@ export default function BotWorkspace({
                     }),
                     d = await r.json();
                   if (!r.ok) throw Error(d.error);
-                  setRevision((v) => v + 1);
+                  await refresh(kind);
                 });
                 e.target.value = "";
               }}
@@ -495,7 +487,7 @@ export default function BotWorkspace({
         <WebSourceManager
           botId={bot.id}
           apiBase={base}
-          onApplied={() => setRevision((v) => v + 1)}
+          onApplied={() => void refresh("docs")}
           folders={folders.map((f) => ({ id: f.id, name: f.name || "" }))}
         />
       )}
@@ -525,7 +517,7 @@ export default function BotWorkspace({
                           folder_id: folder || null,
                         },
                   );
-                  setRevision((v) => v + 1);
+                  await refresh(kind);
                 });
               }}
             >
@@ -601,7 +593,7 @@ export default function BotWorkspace({
                     { name: folderName },
                   );
                   setFolderName("");
-                  setRevision((v) => v + 1);
+                  await refresh(kind);
                 });
               }}
             >
@@ -623,6 +615,9 @@ export default function BotWorkspace({
             <p className="cp-note">
               폴더를 삭제해도 안의 문서와 질문은 미분류로 남습니다.
             </p>
+            {foldersQuery.isPending && (
+              <SkeletonList rows={2} label="폴더를 불러오는 중입니다." />
+            )}
             {folders.map((f) => (
               <article className="cp-knowledge-row" key={f.id + f.name}>
                 <form
@@ -636,7 +631,7 @@ export default function BotWorkspace({
                         "PUT",
                         { name },
                       );
-                      setRevision((v) => v + 1);
+                      await refresh(kind);
                     });
                   }}
                 >
@@ -677,7 +672,7 @@ export default function BotWorkspace({
                             "DELETE",
                           );
                           setConfirmDelete(null);
-                          setRevision((v) => v + 1);
+                          await refresh(kind);
                         })
                       }
                     >
@@ -696,8 +691,10 @@ export default function BotWorkspace({
           </section>
           <section className="cp-panel">
             <h2>
-              {kind === "docs" ? "등록 문서" : "등록 Q&A"} · {rows.length}개
+              {kind === "docs" ? "등록 문서" : "등록 Q&A"}
+              {rowsQuery.data ? ` · ${rows.length}개` : ""}
             </h2>
+            {rowsQuery.isPending && <SkeletonList rows={4} />}
             {rows.map((r) => (
               <article className="cp-knowledge-row" key={r.id}>
                 <strong>{r.title || r.question}</strong>
@@ -730,7 +727,7 @@ export default function BotWorkspace({
                         onClick={() =>
                           void perform(async () => {
                             await request(`${base}/${kind}/${r.id}`, "DELETE");
-                            setRevision((v) => v + 1);
+                            await refresh(kind);
                           })
                         }
                       >
@@ -747,7 +744,7 @@ export default function BotWorkspace({
                 </div>
               </article>
             ))}
-            {!rows.length && !loading && (
+            {rowsQuery.data && !rows.length && (
               <p className="cp-note">등록된 항목이 없습니다.</p>
             )}
           </section>
@@ -795,14 +792,18 @@ export default function BotWorkspace({
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="cp-note">통계를 불러오는 중입니다.</p>
-          )}
+          ) : statsQuery.isPending ? (
+            <div role="status" aria-live="polite">
+              <span className="skeleton-sr">통계를 불러오는 중입니다.</span>
+              <SkeletonMetrics count={4} />
+            </div>
+          ) : null}
         </section>
       )}
       {tab === "logs" && (
         <section className="cp-panel">
           <h2>최근 대화 기록 · 최대 100건</h2>
+          {rowsQuery.isPending && <SkeletonList rows={4} />}
           {rows.map((r) => (
             <article className="cp-knowledge-row" key={r.id}>
               <strong>{r.user_message}</strong>
@@ -816,7 +817,7 @@ export default function BotWorkspace({
               </small>
             </article>
           ))}
-          {!rows.length && !loading && (
+          {rowsQuery.data && !rows.length && (
             <p className="cp-note">대화 기록이 없습니다.</p>
           )}
         </section>
