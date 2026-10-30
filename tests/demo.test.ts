@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { demoSiteUrl } from "../lib/demo/store";
 import { demoBackgroundBlocked } from "../lib/demo/background";
+import {
+  demoBackgroundImage,
+  DEMO_BACKGROUND_MAX_BYTES,
+} from "../lib/demo/backgrounds";
 test("demo backgrounds accept public HTTP websites only", () => {
   assert.equal(
     demoSiteUrl("https://example.com/path#section"),
@@ -39,4 +43,18 @@ test("http:// homepages are flagged because HTTPS demo pages cannot frame them",
     assert.equal(demoBackgroundBlocked(url), true);
   for (const url of ["https://example.com/", "", "httpx://example.com"])
     assert.equal(demoBackgroundBlocked(url), false);
+});
+test("demo background screenshots must be real raster images within 3MB", () => {
+  const png = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0]);
+  assert.equal(demoBackgroundImage(png, "image/png"), "image/png");
+  for (const [bytes, type] of [
+    [new TextEncoder().encode("<svg onload=alert(1)>"), "image/svg+xml"],
+    [new TextEncoder().encode("<html>"), "image/png"],
+    [png, "image/jpeg"],
+    [new Uint8Array(), "image/png"],
+  ] as const)
+    assert.throws(() => demoBackgroundImage(bytes, type));
+  const big = new Uint8Array(DEMO_BACKGROUND_MAX_BYTES + 1);
+  big.set(png);
+  assert.throws(() => demoBackgroundImage(big, "image/png"), /3MB/);
 });

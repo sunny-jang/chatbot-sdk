@@ -16,12 +16,26 @@ type Demo = {
   revoked_at: number | null;
   request_count: number;
   max_requests: number;
+  has_background: boolean;
 };
+const BACKGROUND_ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
+async function uploadBackground(id: string, file: File) {
+  if (file.size > 3 * 1024 * 1024)
+    throw Error("배경 이미지는 3MB 이하만 올릴 수 있습니다.");
+  const form = new FormData();
+  form.set("file", file);
+  const r = await fetch(`/api/demos/${encodeURIComponent(id)}/background`, {
+    method: "POST",
+    body: form,
+  });
+  if (!r.ok) throw Error((await r.json()).error);
+}
 export default function DemoManager() {
   const [bots, setBots] = useState<Bot[]>([]),
     [items, setItems] = useState<Demo[]>([]),
     [botId, setBotId] = useState(""),
     [website, setWebsite] = useState(""),
+    [background, setBackground] = useState<File | null>(null),
     [hours, setHours] = useState(24),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -73,8 +87,40 @@ export default function DemoManager() {
       if (!r.ok) throw Error(d.error);
       setLink(d.url);
       setRevision((v) => v + 1);
+      if (background) {
+        try {
+          await uploadBackground(d.id, background);
+          setBackground(null);
+          setRevision((v) => v + 1);
+        } catch (e) {
+          throw Error(
+            `데모는 만들었지만 배경 이미지를 올리지 못했습니다. 목록에서 다시 올려주세요. (${e instanceof Error ? e.message : "오류"})`,
+          );
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "데모를 만들지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function changeBackground(id: string, file: File | null) {
+    setBusy(true);
+    setError("");
+    try {
+      if (file) await uploadBackground(id, file);
+      else {
+        const r = await fetch(
+          `/api/demos/${encodeURIComponent(id)}/background`,
+          { method: "DELETE" },
+        );
+        if (!r.ok) throw Error((await r.json()).error);
+      }
+      setRevision((v) => v + 1);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "배경 이미지를 바꾸지 못했습니다.",
+      );
     } finally {
       setBusy(false);
     }
@@ -146,10 +192,24 @@ export default function DemoManager() {
             <p className="cp-note" role="status">
               http:// 주소는 보안 연결(HTTPS)이 아니라서 데모 화면 배경에
               홈페이지가 표시되지 않습니다. 홈페이지가 HTTPS를 지원하면
-              https://로 입력해주세요. 그대로 만들면 홈페이지 대신 대체 화면
-              위에서 챗봇을 체험합니다.
+              https://로 입력해주세요. 아니면 아래에 홈페이지 캡처 이미지를
+              올려 배경으로 쓰세요.
             </p>
           )}
+          <label>
+            배경 캡처 이미지 (선택)
+            <input
+              className="cp-input"
+              type="file"
+              accept={BACKGROUND_ACCEPT}
+              onChange={(e) => setBackground(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          <p className="cp-note">
+            홈페이지 화면을 캡처해 올리면 데모 배경으로 먼저 보여줍니다.
+            HTTPS가 아니거나 외부 표시를 막은 홈페이지에 쓰세요. PNG·JPG·WebP,
+            3MB 이하. 배경 안의 링크는 동작하지 않습니다.
+          </p>
           <label>
             공유 기간
             <select
@@ -234,14 +294,14 @@ export default function DemoManager() {
                   </td>
                   <td>
                     {d.site_url}
-                    {demoBackgroundBlocked(d.site_url) && (
-                      <>
-                        <br />
-                        <small className="cp-note">
-                          HTTPS 아님 · 대체 화면으로 표시
-                        </small>
-                      </>
-                    )}
+                    <br />
+                    <small className="cp-note">
+                      {d.has_background
+                        ? "캡처 이미지 배경"
+                        : demoBackgroundBlocked(d.site_url)
+                          ? "HTTPS 아님 · 대체 화면으로 표시"
+                          : "실제 홈페이지 배경"}
+                    </small>
                   </td>
                   <td>
                     {new Date(Number(d.expires_at) * 1000).toLocaleString(
@@ -256,13 +316,38 @@ export default function DemoManager() {
                     {d.revoked_at ? (
                       "해제됨"
                     ) : (
-                      <button
-                        className="cp-link"
-                        disabled={busy}
-                        onClick={() => void revoke(d.id)}
-                      >
-                        링크 해제
-                      </button>
+                      <div className="cp-demo-actions">
+                        <label className="cp-link">
+                          {d.has_background ? "배경 이미지 바꾸기" : "배경 이미지 올리기"}
+                          <input
+                            type="file"
+                            accept={BACKGROUND_ACCEPT}
+                            hidden
+                            disabled={busy}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              e.target.value = "";
+                              if (file) void changeBackground(d.id, file);
+                            }}
+                          />
+                        </label>
+                        {d.has_background && (
+                          <button
+                            className="cp-link"
+                            disabled={busy}
+                            onClick={() => void changeBackground(d.id, null)}
+                          >
+                            배경 이미지 삭제
+                          </button>
+                        )}
+                        <button
+                          className="cp-link"
+                          disabled={busy}
+                          onClick={() => void revoke(d.id)}
+                        >
+                          링크 해제
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>

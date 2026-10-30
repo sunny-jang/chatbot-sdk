@@ -1,5 +1,6 @@
 import sql from "@/lib/neon";
 import { readPublicDemo } from "@/lib/demo/store";
+import { demoBackgroundVersion } from "@/lib/demo/backgrounds";
 import DemoSite from "./DemoSite";
 import "./site-demo.css";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function Page({
       </main>
     );
   }
+  const backgroundVersion = await demoBackgroundVersion(sql, demo.id);
   return (
     <DemoSite
       token={token}
@@ -36,6 +38,11 @@ export default async function Page({
       customerName={demo.customer_name}
       botName={demo.bot_name}
       expiresAt={Number(demo.expires_at)}
+      backgroundUrl={
+        backgroundVersion
+          ? `/api/demo/${token}/background?v=${backgroundVersion}`
+          : null
+      }
     />
   );
 }

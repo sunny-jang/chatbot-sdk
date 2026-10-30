@@ -8,13 +8,15 @@ import {
   createDemo,
   revokeDemo,
 } from "@/lib/demo/store";
+import { ensureDemoBackgroundSchema } from "@/lib/demo/backgrounds";
 import { enforceRateLimit } from "@/lib/support";
 export async function GET() {
   try {
     const { tenantId } = await agencyOwner();
     await requireDemoSchema(sql);
+    await ensureDemoBackgroundSchema(sql);
     const items =
-      await sql`SELECT d.id,d.customer_id,d.bot_id,d.site_url,d.expires_at,d.revoked_at,d.created_at,d.request_count,d.max_requests,c.name AS customer_name,b.name AS bot_name FROM customer_demos d JOIN customers c ON c.id=d.customer_id JOIN bots b ON b.id=d.bot_id WHERE d.tenant_id=${tenantId} ORDER BY d.created_at DESC,d.id LIMIT 100`;
+      await sql`SELECT d.id,d.customer_id,d.bot_id,d.site_url,d.expires_at,d.revoked_at,d.created_at,d.request_count,d.max_requests,c.name AS customer_name,b.name AS bot_name,EXISTS(SELECT 1 FROM demo_backgrounds g WHERE g.demo_id=d.id) AS has_background FROM customer_demos d JOIN customers c ON c.id=d.customer_id JOIN bots b ON b.id=d.bot_id WHERE d.tenant_id=${tenantId} ORDER BY d.created_at DESC,d.id LIMIT 100`;
     const bots =
       await sql`SELECT b.id,b.name,b.customer_id,c.name AS customer_name FROM bots b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id AND c.status='active' WHERE b.tenant_id=${tenantId} ORDER BY c.name,b.name`;
     return Response.json({ items, bots });

@@ -1444,3 +1444,10 @@ form.cp-row {
     grid-template-columns: 1fr;
   }
 }
+.cp-demo-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  white-space: nowrap;
+}
