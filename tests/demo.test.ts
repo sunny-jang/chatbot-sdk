@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { demoSiteUrl } from "../lib/demo/store";
+import { demoBackgroundBlocked } from "../lib/demo/background";
 test("demo backgrounds accept public HTTP websites only", () => {
   assert.equal(
     demoSiteUrl("https://example.com/path#section"),
@@ -32,4 +33,10 @@ test("demo backgrounds never frame the agency app or desk portal", () => {
     process.env.AUTH_URL = saved.a;
     process.env.CUSTOMER_PORTAL_ORIGIN = saved.d;
   }
+});
+test("http:// homepages are flagged because HTTPS demo pages cannot frame them", () => {
+  for (const url of ["http://www.ik-tech.co.kr/", " HTTP://example.com"])
+    assert.equal(demoBackgroundBlocked(url), true);
+  for (const url of ["https://example.com/", "", "httpx://example.com"])
+    assert.equal(demoBackgroundBlocked(url), false);
 });

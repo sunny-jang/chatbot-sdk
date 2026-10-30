@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { demoBackgroundBlocked } from "@/lib/demo/background";
 type Bot = {
   id: string;
   name: string;
@@ -141,6 +142,14 @@ export default function DemoManager() {
               placeholder="https://www.example.com"
             />
           </label>
+          {demoBackgroundBlocked(website) && (
+            <p className="cp-note" role="status">
+              http:// 주소는 보안 연결(HTTPS)이 아니라서 데모 화면 배경에
+              홈페이지가 표시되지 않습니다. 홈페이지가 HTTPS를 지원하면
+              https://로 입력해주세요. 그대로 만들면 홈페이지 대신 대체 화면
+              위에서 챗봇을 체험합니다.
+            </p>
+          )}
           <label>
             공유 기간
             <select
@@ -223,7 +232,17 @@ export default function DemoManager() {
                     <br />
                     {d.bot_name}
                   </td>
-                  <td>{d.site_url}</td>
+                  <td>
+                    {d.site_url}
+                    {demoBackgroundBlocked(d.site_url) && (
+                      <>
+                        <br />
+                        <small className="cp-note">
+                          HTTPS 아님 · 대체 화면으로 표시
+                        </small>
+                      </>
+                    )}
+                  </td>
                   <td>
                     {new Date(Number(d.expires_at) * 1000).toLocaleString(
                       "ko-KR",

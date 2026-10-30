@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { demoBackgroundBlocked } from "@/lib/demo/background";
 export default function DemoSite({
   token,
   botId,
@@ -15,7 +16,9 @@ export default function DemoSite({
   botName: string;
   expiresAt: number;
 }) {
-  const [fallback, setFallback] = useState(false),
+  // http:// 홈페이지는 HTTPS 데모 안에서 브라우저가 막으므로 처음부터 대체 화면을 보여줍니다.
+  const insecureSite = demoBackgroundBlocked(siteUrl);
+  const [fallback, setFallback] = useState(insecureSite),
     [frameReady, setFrameReady] = useState(false);
   const scriptRef = useRef<HTMLScriptElement | null>(null);
   useEffect(() => {
@@ -51,9 +54,11 @@ export default function DemoSite({
           <a href={siteUrl} target="_blank" rel="noopener noreferrer">
             원본 홈페이지
           </a>
-          <button onClick={() => setFallback((v) => !v)}>
-            {fallback ? "홈페이지 배경 보기" : "배경이 안 보이면 대체 화면"}
-          </button>
+          {!insecureSite && (
+            <button onClick={() => setFallback((v) => !v)}>
+              {fallback ? "홈페이지 배경 보기" : "배경이 안 보이면 대체 화면"}
+            </button>
+          )}
         </div>
       </header>
       <p className="site-demo-note">
@@ -71,8 +76,9 @@ export default function DemoSite({
           <div>
             <h2>{botName}을 체험해보세요</h2>
             <p>
-              실제 홈페이지가 외부 표시를 차단하는 경우 이 화면에서 같은 챗봇을
-              사용할 수 있습니다. 이 배경은 원본 홈페이지 화면이 아닙니다.
+              {insecureSite
+                ? "이 홈페이지는 보안 연결(HTTPS)을 지원하지 않아 브라우저가 데모 배경으로 표시하지 않습니다. 이 화면에서 같은 챗봇을 사용할 수 있으며, 배경은 원본 홈페이지 화면이 아닙니다. 원본은 상단의 '원본 홈페이지'에서 확인하세요."
+                : "실제 홈페이지가 외부 표시를 차단하는 경우 이 화면에서 같은 챗봇을 사용할 수 있습니다. 이 배경은 원본 홈페이지 화면이 아닙니다."}
             </p>
           </div>
         </section>
