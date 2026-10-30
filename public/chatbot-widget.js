@@ -527,8 +527,9 @@
         if (!response.ok) return;
         requestSettings = await response.json();
         requestBar.replaceChildren();
-        // 견적 폼은 관리자에서 활성화하고 고객이 견적 의사를 말했을 때만 엽니다.
-        for (const [kind,label] of [["consultation","상담 신청"]]) {
+        // 관리자에서 켠 신청 폼은 입력칸 위 칩으로 늘 보여줍니다.
+        // 견적은 고객이 채팅에서 견적 의사를 말해도 자동으로 열립니다(offerQuoteFromMessage).
+        for (const [kind,label] of [["quote","견적 요청"],["consultation","상담 신청"]]) {
           if (!requestSettings[kind]) continue;
           const button = document.createElement("button"); button.type="button"; button.className="cb-choice"; button.textContent=label;
           button.addEventListener("click",()=>openRequestForm(kind,label));requestBar.appendChild(button);
@@ -551,7 +552,13 @@
       }
       fields.message.value = initialMessage.slice(0, 5000);
       if(requestSettings.contact==="either"){const hint=document.createElement("small");hint.textContent="이메일 또는 전화번호 중 하나를 입력해주세요.";form.appendChild(hint)}
-      const policy=document.createElement("p");policy.textContent=requestSettings.consentText;policy.style.cssText="white-space:pre-wrap;font-size:12px;background:#f9fafb;padding:10px";form.appendChild(policy);
+      // 개인정보 수집·이용 안내는 기본으로 접어 두고, 펼쳐서 읽을 수 있게 합니다. 동의 체크는 항상 보입니다.
+      if(requestSettings.consentText){
+        const policyBox=document.createElement("details");policyBox.style.cssText="font-size:12px;background:#f9fafb;border-radius:8px;padding:8px 10px";
+        const summary=document.createElement("summary");summary.textContent="개인정보 수집·이용 안내 보기";summary.style.cssText="cursor:pointer;color:#374151;font-weight:600";
+        const policy=document.createElement("p");policy.textContent=requestSettings.consentText;policy.style.cssText="white-space:pre-wrap;margin:8px 0 0;color:#4b5563";
+        policyBox.append(summary,policy);form.appendChild(policyBox);
+      }
       const agreement=document.createElement("label"),consent=document.createElement("input");consent.type="checkbox";consent.required=true;agreement.append(consent,document.createTextNode(" 개인정보 수집·이용에 동의합니다."));agreement.style.fontSize="12px";form.appendChild(agreement);
       const notice=document.createElement("p");notice.setAttribute("role","status");notice.style.cssText="font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere";form.appendChild(notice);
       const submit=document.createElement("button");submit.type="submit";submit.className="cb-choice";submit.textContent="신청 접수";form.appendChild(submit);
