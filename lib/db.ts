@@ -1,6 +1,7 @@
 import sql from "./neon";
 import { initOperationsSchema } from "./operations/schema";
 import type { SupportHours } from "./supportHours";
+import type { WidgetTheme } from "./widget-presentation";
 
 let _initialized = false;
 let _initPromise: Promise<void> | null = null;
@@ -62,6 +63,8 @@ async function _runInit() {
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS greeting_message TEXT`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS proactive_settings JSONB`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS logo_url TEXT`;
+  // 위젯 디자인(위치·모서리·런처 등). lib/widget-presentation.ts의 widgetTheme으로 거른 값만 저장합니다.
+  await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS widget_theme JSONB`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS support_mode TEXT NOT NULL DEFAULT 'unattended'`;
   await sql`ALTER TABLE bots ADD COLUMN IF NOT EXISTS public_token TEXT`;
   // Q&A 마지막 단계(답변 표시)에서 항상 상담원 연결 버튼을 보여줄지 여부
@@ -267,6 +270,7 @@ export type Bot = {
   model: string;
   widget_title: string | null;
   widget_color: string | null;
+  widget_theme: WidgetTheme | null;
   greeting_message: string | null;
   proactive_settings?: { enabled: boolean; message: string; delaySeconds: number } | null;
   logo_url: string | null;

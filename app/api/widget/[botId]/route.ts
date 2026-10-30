@@ -3,6 +3,8 @@ import {
   widgetTitle,
   widgetColor,
   widgetLogo,
+  widgetTheme,
+  widgetTextColor,
   DEFAULT_WIDGET_COLOR,
 } from "@/lib/widget-presentation";
 import { normalizeProactive } from "@/lib/proactive";
@@ -18,7 +20,7 @@ async function GETHandler(
   const { botId } = await params;
   await initSchema();
   const rows = await sql`
-    SELECT proactive_settings, widget_title, widget_color, greeting_message, logo_url, name, type, support_mode, qa_handoff_always, support_hours, force_unattended
+    SELECT proactive_settings, widget_title, widget_color, widget_theme, greeting_message, logo_url, name, type, support_mode, qa_handoff_always, support_hours, force_unattended
     FROM bots WHERE id = ${botId}
   `;
   if (!rows[0])
@@ -28,6 +30,7 @@ async function GETHandler(
     proactive_settings: unknown;
     widget_title: string | null;
     widget_color: string | null;
+    widget_theme: unknown;
     greeting_message: string | null;
     logo_url: string | null;
     name: string;
@@ -93,6 +96,9 @@ async function GETHandler(
         };
       })(),
       color: widgetColor(bot.widget_color) || DEFAULT_WIDGET_COLOR,
+      textColor: widgetTextColor(bot.widget_color),
+      // 저장값도 다시 걸러 허용된 디자인 항목만 내보냅니다. 없으면 위젯 기본 모양을 씁니다.
+      theme: widgetTheme(bot.widget_theme),
       greeting: bot.greeting_message || null,
       logo: widgetLogo(bot.logo_url),
       qaFolders,

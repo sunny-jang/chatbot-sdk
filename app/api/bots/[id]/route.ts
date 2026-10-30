@@ -1,4 +1,8 @@
-import { widgetTitle, widgetColor } from "@/lib/widget-presentation";
+import {
+  widgetTitle,
+  widgetColor,
+  widgetTheme,
+} from "@/lib/widget-presentation";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { Bot, initSchema } from "@/lib/db";
@@ -49,6 +53,7 @@ export async function PUT(
     model,
     widget_title,
     widget_color,
+    widget_theme,
     greeting_message,
     support_mode,
     qa_handoff_always,
@@ -60,12 +65,15 @@ export async function PUT(
       widget_title !== null &&
       widget_title !== "" &&
       !widgetTitle(widget_title)) ||
-    (widget_color !== undefined && !widgetColor(widget_color))
+    (widget_color !== undefined && !widgetColor(widget_color)) ||
+    (widget_theme !== undefined &&
+      widget_theme !== null &&
+      (typeof widget_theme !== "object" || Array.isArray(widget_theme)))
   ) {
     return NextResponse.json(
       {
         error:
-          "위젯 제목은 100자 이내 일반 텍스트, 색상은 #RGB 또는 #RRGGBB로 입력해주세요.",
+          "위젯 제목은 100자 이내 일반 텍스트, 색상은 #RGB 또는 #RRGGBB, 위젯 디자인은 정해진 항목으로 입력해주세요.",
       },
       { status: 400 },
     );
@@ -86,15 +94,21 @@ export async function PUT(
     WHERE id = ${id}
     RETURNING *
   `;
+  let bot = rows[0];
+  if (widget_theme !== undefined) {
+    // 허용 목록 밖의 값(임의 CSS·폰트 주소·범위 밖 숫자)은 버리고 저장합니다.
+    const theme = widgetTheme(widget_theme);
+    [bot] =
+      await sql`UPDATE bots SET widget_theme = ${theme ? sql.json(theme) : null} WHERE id = ${id} RETURNING *`;
+  }
   if (support_hours !== undefined) {
     // 잘못된 값은 기본값으로 보정해 저장합니다. null을 보내면 운영 시간 설정을 지웁니다.
     const hours =
       support_hours === null ? null : normalizeSupportHours(support_hours);
-    const updated =
+    [bot] =
       await sql`UPDATE bots SET support_hours = ${hours ? sql.json(hours) : null} WHERE id = ${id} RETURNING *`;
-    return NextResponse.json(updated[0] as unknown as Bot);
   }
-  return NextResponse.json(rows[0] as unknown as Bot);
+  return NextResponse.json(bot as unknown as Bot);
 }
 
 export async function DELETE(

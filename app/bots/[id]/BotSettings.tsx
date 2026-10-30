@@ -7,6 +7,8 @@ import { normalizeProactive } from "@/lib/proactive";
 import { useRouter } from "next/navigation";
 import { Bot } from "@/lib/db";
 import HelpButton, { type HelpContent } from "@/app/HelpButton";
+import WidgetPreview from "@/app/components/WidgetPreview";
+import WidgetDesignFields, { widgetThemeDraft } from "@/app/components/WidgetDesignFields";
 import { DEFAULT_SUPPORT_HOURS, formatSupportHours, getSupportStatus, normalizeSupportHours, type SupportHours } from "@/lib/supportHours";
 
 // Telegram 상담원 연결 설정 가이드. 실제 설정 중 자주 막히는 지점(주제 기능, 봇 권한, Chat ID 형식)을 함께 안내합니다.
@@ -84,6 +86,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
   const model = bot.model || "gpt-4o-mini";
   const [widgetTitle, setWidgetTitle] = useState(bot.widget_title ?? "");
   const [widgetColor, setWidgetColor] = useState(bot.widget_color ?? "#2563eb");
+  const [widgetDesign, setWidgetDesign] = useState(() => widgetThemeDraft(bot.widget_theme));
   const [proactive, setProactive] = useState(() => normalizeProactive(bot.proactive_settings));
   const [greeting, setGreeting] = useState(bot.greeting_message ?? "");
   const [supportMode, setSupportMode] = useState<"unattended" | "hybrid">(bot.support_mode ?? "unattended");
@@ -180,6 +183,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
         model,
         widget_title: widgetTitle || null,
         widget_color: widgetColor,
+        widget_theme: widgetDesign,
         greeting_message: greeting || null,
         proactive_settings: proactive,
         support_mode: supportMode,
@@ -511,7 +515,7 @@ export default function BotSettings({ bot }: { bot: Bot }) {
             <div className="w-14 h-14 shrink-0 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
               <img src={logoUrl || "/chatbot-default.svg"} alt={logoUrl ? "챗봇 로고" : "기본 챗봇 로고"} className="w-full h-full object-contain" />
             </div>
-            <label className="px-3 py-2 rounded-lg bg-purple-50 text-purple-700 text-xs font-medium cursor-pointer hover:bg-purple-100">
+            <label className="px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium cursor-pointer hover:bg-blue-100">
               {logoUploading ? "업로드 중..." : "이미지 선택"}
               <input type="file" accept="image/*" className="hidden" disabled={logoUploading} onChange={handleLogoUpload} />
             </label>
@@ -561,6 +565,28 @@ export default function BotSettings({ bot }: { bot: Bot }) {
           />
           <p className="text-xs text-gray-400 mt-1">위젯을 열면 처음 표시되는 메시지</p>
         </div>
+
+        <div className="border-t border-gray-100 pt-4">
+          <h4 className="text-sm font-semibold text-gray-900">위젯 디자인</h4>
+          <p className="text-xs text-gray-500 mt-1 mb-3">고객 홈페이지에 보이는 위치·모양을 정합니다. 정해진 선택지만 저장되며, 바꾸지 않으면 지금 모양 그대로입니다.</p>
+          <WidgetDesignFields
+            value={widgetDesign}
+            color={widgetColor}
+            onChange={setWidgetDesign}
+            classes={{
+              grid: "grid grid-cols-2 sm:grid-cols-3 gap-4",
+              label: "flex flex-col gap-1.5 text-sm font-medium text-gray-700",
+              input: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-normal focus:outline-none focus:ring-2 focus:ring-blue-500",
+              hint: "text-xs font-normal text-gray-500",
+            }}
+          />
+        </div>
+        <WidgetPreview
+          botId={bot.id}
+          botToken={bot.public_token || ""}
+          heading="디자인 미리보기"
+          presentation={{ title: widgetTitle || null, color: widgetColor, greeting: greeting || null, theme: widgetDesign }}
+        />
       </div>
 
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">

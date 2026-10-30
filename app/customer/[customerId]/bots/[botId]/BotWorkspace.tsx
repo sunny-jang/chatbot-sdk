@@ -9,6 +9,9 @@ import {
   normalizeSupportHours,
 } from "@/lib/supportHours";
 import WidgetPreview from "@/app/components/WidgetPreview";
+import WidgetDesignFields, {
+  widgetThemeDraft,
+} from "@/app/components/WidgetDesignFields";
 import { DEFAULT_WIDGET_COLOR } from "@/lib/widget-presentation";
 type Bot = {
   id: string;
@@ -17,6 +20,7 @@ type Bot = {
   system_prompt: string | null;
   widget_title: string | null;
   widget_color: string | null;
+  widget_theme: unknown;
   greeting_message: string | null;
   logo_url: string | null;
   support_mode: string;
@@ -57,6 +61,7 @@ export default function BotWorkspace({
   const base = `/api/customer/${customerId}/bots/${bot.id}`;
   const [tab, setTab] = useState("settings"),
     [draft, setDraft] = useState({ ...bot }),
+    [design, setDesign] = useState(() => widgetThemeDraft(bot.widget_theme)),
     [hours, setHours] = useState(
       normalizeSupportHours(bot.support_hours) || DEFAULT_SUPPORT_HOURS,
     ),
@@ -206,6 +211,7 @@ export default function BotWorkspace({
                   name: draft.name,
                   widget_title: draft.widget_title,
                   widget_color: draft.widget_color || DEFAULT_WIDGET_COLOR,
+                  widget_theme: design,
                   greeting_message: draft.greeting_message || "",
                   system_prompt: draft.system_prompt || "",
                   support_mode: draft.support_mode,
@@ -257,6 +263,25 @@ export default function BotWorkspace({
                 }
               />
             </label>
+            <fieldset>
+              <legend>위젯 디자인</legend>
+              <p className="cp-note">
+                고객 홈페이지에 보이는 위치·모양을 정합니다. 정해진 선택지만
+                저장되며, 바꾸지 않으면 지금 모양 그대로입니다. 아래
+                미리보기에 바로 반영됩니다.
+              </p>
+              <WidgetDesignFields
+                value={design}
+                color={draft.widget_color || DEFAULT_WIDGET_COLOR}
+                onChange={setDesign}
+                classes={{
+                  grid: "cp-design-grid",
+                  label: "cp-design-field",
+                  input: "cp-input",
+                  hint: "cp-note",
+                }}
+              />
+            </fieldset>
             <label>
               응대 지침
               <textarea
@@ -404,6 +429,17 @@ export default function BotWorkspace({
               기본 아이콘 사용
             </button>
           </div>
+          <WidgetPreview
+            botId={bot.id}
+            botToken={bot.public_token}
+            heading="디자인 미리보기"
+            presentation={{
+              title: draft.widget_title,
+              color: draft.widget_color || DEFAULT_WIDGET_COLOR,
+              greeting: draft.greeting_message,
+              theme: design,
+            }}
+          />
         </section>
       )}
       {["docs", "qa"].includes(tab) && (
