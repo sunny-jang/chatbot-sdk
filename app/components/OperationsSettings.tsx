@@ -1,34 +1,51 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonPanel } from "@/app/components/Skeleton";
 import {
   defaultRequestSettings,
   type RequestSettings,
 } from "@/lib/operations/settings";
+type OperationsData = { summaryEnabled: boolean; requests: RequestSettings };
 export default function OperationsSettings({ botId }: { botId: string }) {
-  const [summary, setSummary] = useState(false),
-    [settings, setSettings] = useState<RequestSettings>(defaultRequestSettings),
+  const query = useApiQuery<OperationsData>(
+    ["bot", botId, "operations"],
+    `/api/bots/${botId}/operations`,
+  );
+  if (query.isPending)
+    return (
+      <section className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+        <h2 className="text-lg font-bold mb-3">상담 요약·신청 설정</h2>
+        <SkeletonPanel lines={5} label="상담 요약·신청 설정을 불러오는 중입니다." />
+      </section>
+    );
+  // 처음 받은 값으로 편집 초안을 만든다. 뒤에서 새로 고쳐져도 저장 전 입력은 그대로 둔다.
+  return (
+    <OperationsForm
+      key={`${botId}:${query.data ? "ready" : "error"}`}
+      botId={botId}
+      initial={query.data}
+      loadError={query.data ? "" : (query.error?.message ?? "")}
+    />
+  );
+}
+function OperationsForm({
+  botId,
+  initial,
+  loadError,
+}: {
+  botId: string;
+  initial: OperationsData | undefined;
+  loadError: string;
+}) {
+  const [summary, setSummary] = useState(initial?.summaryEnabled ?? false),
+    [settings, setSettings] = useState<RequestSettings>(
+      initial?.requests ?? defaultRequestSettings,
+    ),
     [busy, setBusy] = useState(false),
-    [ready, setReady] = useState(false),
     [notice, setNotice] = useState("");
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/bots/${botId}/operations`)
-      .then(async (r) => {
-        const d = await r.json();
-        if (!r.ok) throw Error(d.error);
-        if (active) {
-          setSummary(d.summaryEnabled);
-          setSettings(d.requests);
-          setReady(true);
-        }
-      })
-      .catch((e) => {
-        if (active) setNotice(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [botId]);
+  const ready = Boolean(initial);
+  const invalidate = useInvalidate();
   function field<K extends keyof RequestSettings>(
     key: K,
     value: RequestSettings[K],
@@ -48,6 +65,7 @@ export default function OperationsSettings({ botId }: { botId: string }) {
       if (!r.ok) throw Error(d.error);
       setSettings(d.requests);
       setNotice("설정을 저장했습니다.");
+      await invalidate(["bot", botId, "operations"]);
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "저장 실패");
     } finally {
@@ -149,7 +167,7 @@ export default function OperationsSettings({ botId }: { botId: string }) {
           {busy ? "저장 중" : "설정 저장"}
         </button>
         <p role="status" className="text-sm">
-          {notice}
+          {notice || loadError}
         </p>
       </div>
     </section>

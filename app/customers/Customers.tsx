@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonList } from "@/app/components/Skeleton";
 type Customer = {
   id: string;
   name: string;
@@ -10,34 +12,14 @@ type Customer = {
   members: number;
 };
 export default function Customers({ portalOrigin }: { portalOrigin: string }) {
-  const [items, setItems] = useState<Customer[]>([]),
-    [name, setName] = useState(""),
+  const [name, setName] = useState(""),
     [site, setSite] = useState(""),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [revision, setRevision] = useState(0);
-  useEffect(() => {
-    const c = new AbortController();
-    async function load() {
-      try {
-        const r = await fetch("/api/customers", {
-          signal: c.signal,
-          cache: "no-store",
-        });
-        const d = await r.json();
-        if (!r.ok) throw Error(d.error);
-        setItems(d.items);
-        setError("");
-      } catch (e) {
-        if (!c.signal.aborted)
-          setError(
-            e instanceof Error ? e.message : "목록을 불러오지 못했습니다.",
-          );
-      }
-    }
-    void load();
-    return () => c.abort();
-  }, [revision]);
+    [busy, setBusy] = useState(false);
+  const query = useApiQuery<{ items: Customer[] }>(["customers"], "/api/customers");
+  const invalidate = useInvalidate();
+  const items = query.data?.items ?? [];
+  const shownError = error || query.error?.message || "";
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -51,7 +33,8 @@ export default function Customers({ portalOrigin }: { portalOrigin: string }) {
       if (!r.ok) throw Error(d.error);
       setName("");
       setSite("");
-      setRevision((v) => v + 1);
+      setError("");
+      await invalidate(["customers"]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "추가하지 못했습니다.");
     } finally {
@@ -66,9 +49,9 @@ export default function Customers({ portalOrigin }: { portalOrigin: string }) {
           <p>에이전시가 관리하는 사업장과 고객사 전용 상담함을 연결하세요.</p>
         </div>
       </header>
-      {error && (
+      {shownError && (
         <p role="alert" className="cp-error">
-          {error}
+          {shownError}
         </p>
       )}
       <section className="cp-panel">
@@ -99,6 +82,9 @@ export default function Customers({ portalOrigin }: { portalOrigin: string }) {
           </button>
         </form>
       </section>
+      {query.isPending ? (
+        <SkeletonList rows={3} label="고객사 목록을 불러오는 중입니다." />
+      ) : (
       <div className="cp-customer-list">
         {items.map((c) => (
           <section className="cp-customer" key={c.id}>
@@ -124,7 +110,8 @@ export default function Customers({ portalOrigin }: { portalOrigin: string }) {
           </section>
         ))}
       </div>
-      {!items.length && !error && (
+      )}
+      {!query.isPending && !items.length && !shownError && (
         <p>고객사를 추가하면 전용 상담함을 준비할 수 있습니다.</p>
       )}
     </div>

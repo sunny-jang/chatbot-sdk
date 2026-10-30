@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import LogoutButton from "./LogoutButton";
 import GuidePanel from "./GuidePanel";
 import NavIcon from "./components/NavIcon";
+import NavPending from "./components/NavPending";
 
 type Bot = { id: string; name: string; type: string };
 export default function Sidebar({
@@ -34,6 +35,7 @@ export default function Sidebar({
         <NavIcon name={mark} />
       </span>
       {label}
+      <NavPending />
     </Link>
   );
   return (

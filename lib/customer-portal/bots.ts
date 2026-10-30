@@ -4,7 +4,7 @@ import type { Permission } from "../access/policy";
 import { resolveBotAccess } from "../access/queries";
 import { lockAccess } from "./auth";
 import { PortalError, text } from "./input";
-import { widgetColor, widgetTitle } from "../widget-presentation";
+import { widgetColor, widgetTheme, widgetTitle } from "../widget-presentation";
 import { normalizeSupportHours } from "../supportHours";
 export async function customerBot(
   db: AccessDatabase,
@@ -22,7 +22,7 @@ export async function customerBot(
   if (!grant || grant.customer_id !== customerId)
     throw new PortalError("챗봇을 찾을 수 없습니다.", 404);
   const [bot] =
-    await db`SELECT id,name,type,model,system_prompt,widget_title,widget_color,greeting_message,logo_url,support_mode,support_hours,force_unattended,qa_handoff_always,public_token FROM bots WHERE id=${botId} AND customer_id=${customerId} AND tenant_id=${grant.tenant_id}`;
+    await db`SELECT id,name,type,model,system_prompt,widget_title,widget_color,widget_theme,greeting_message,logo_url,support_mode,support_hours,force_unattended,qa_handoff_always,public_token FROM bots WHERE id=${botId} AND customer_id=${customerId} AND tenant_id=${grant.tenant_id}`;
   if (!bot) throw new PortalError("챗봇을 찾을 수 없습니다.", 404);
   return { bot, grant };
 }
@@ -75,6 +75,17 @@ export async function configureCustomerBot(
   if (input.widget_color !== undefined && !color)
     throw new PortalError("색상은 #RGB 또는 #RRGGBB로 입력해주세요.");
   if (
+    input.widget_theme !== undefined &&
+    input.widget_theme !== null &&
+    (typeof input.widget_theme !== "object" || Array.isArray(input.widget_theme))
+  )
+    throw new PortalError("위젯 디자인 설정을 확인해주세요.");
+  // 허용 목록 밖의 값(임의 CSS·폰트 주소·범위 밖 숫자)은 버리고 저장합니다.
+  const theme =
+    input.widget_theme === undefined
+      ? widgetTheme(bot.widget_theme)
+      : widgetTheme(input.widget_theme);
+  if (
     input.support_mode !== undefined &&
     !["hybrid", "unattended"].includes(String(input.support_mode))
   )
@@ -100,7 +111,7 @@ export async function configureCustomerBot(
     input.support_hours === undefined
       ? bot.support_hours
       : normalizeSupportHours(input.support_hours);
-  await db`UPDATE bots SET name=${name},widget_title=${title},widget_color=${color},system_prompt=${prompt},greeting_message=${greeting},support_mode=${input.support_mode === undefined ? bot.support_mode : String(input.support_mode)},support_hours=${hours ? db.json(hours) : null},force_unattended=${input.force_unattended === undefined ? Boolean(bot.force_unattended) : Boolean(input.force_unattended)} WHERE id=${botId} AND customer_id=${customerId}`;
+  await db`UPDATE bots SET name=${name},widget_title=${title},widget_color=${color},widget_theme=${theme ? db.json(theme) : null},system_prompt=${prompt},greeting_message=${greeting},support_mode=${input.support_mode === undefined ? bot.support_mode : String(input.support_mode)},support_hours=${hours ? db.json(hours) : null},force_unattended=${input.force_unattended === undefined ? Boolean(bot.force_unattended) : Boolean(input.force_unattended)} WHERE id=${botId} AND customer_id=${customerId}`;
   await audit(db, userId, customerId, grant.tenant_id, "bot.configure", botId);
 }
 export type KnowledgeKind = "docs" | "qa" | "folders" | "qa-folders";

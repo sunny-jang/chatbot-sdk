@@ -1444,3 +1444,34 @@ form.cp-row {
     grid-template-columns: 1fr;
   }
 }
+/* 위젯 디자인 입력 묶음 (app/components/WidgetDesignFields.tsx) */
+.cp-design-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0 16px;
+}
+.cp-details .cp-design-field {
+  margin: 10px 0;
+}
+.cp-design-grid select {
+  width: 100%;
+  min-width: 0;
+}
+.cp-design-grid input[type="range"] {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  accent-color: var(--cp-primary);
+}
+.cp-design-field > .cp-note {
+  display: block;
+  margin-top: 12px;
+  font-weight: 400;
+}
+.cp-demo-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  white-space: nowrap;
+}

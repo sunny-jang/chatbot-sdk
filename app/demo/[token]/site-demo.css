@@ -159,3 +159,22 @@
     height: calc(100svh - 215px);
   }
 }
+/* 에이전시가 올린 홈페이지 캡처 배경 */
+.site-demo-shot {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 clamp(16px, 3vw, 28px) 120px;
+}
+.site-demo-shot > p {
+  font-size: 12px;
+  color: #59677d;
+  margin-bottom: 10px;
+}
+.site-demo-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: #fff;
+}

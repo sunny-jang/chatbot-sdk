@@ -26,7 +26,7 @@
 </head>
 <body>
   <h1>챗봇 위젯 테스트 페이지</h1>
-  <p>우측 하단의 💬 버튼을 눌러 챗봇을 테스트해보세요.</p>
+  <p>화면 아래 채팅 버튼을 눌러 챗봇을 테스트해보세요. 위치와 모양은 봇의 위젯 디자인 설정을 따릅니다.</p>
 
   <div class="card">
     <h2>샘플 콘텐츠</h2>
@@ -36,13 +36,28 @@
 
   <div class="card">
     <h2>두 번째 섹션</h2>
-    <p>위젯은 페이지 스크롤과 무관하게 항상 우측 하단에 고정됩니다.</p>
+    <p>위젯은 페이지 스크롤과 무관하게 설정한 아래 모서리에 고정됩니다.</p>
   </div>
 
-  <script
-    src="http://localhost:3000/chatbot-widget.js"
-    data-bot-id="e2633f88-1945-4a78-8704-7d31f42dbc8a"
-    data-endpoint="http://localhost:3000">
+  <!-- 사용법: /test-widget.html?bot=<봇 ID>&token=<공개 위젯 토큰>[&open=1]
+       위젯 디자인은 해당 봇의 저장값(/api/widget/[botId])을 그대로 씁니다. -->
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const script = document.createElement("script");
+      script.src = location.origin + "/chatbot-widget.js";
+      script.setAttribute("data-bot-id", params.get("bot") || "e2633f88-1945-4a78-8704-7d31f42dbc8a");
+      script.setAttribute("data-bot-token", params.get("token") || "");
+      script.setAttribute("data-endpoint", location.origin);
+      document.body.appendChild(script);
+      // open=1: 캡처·점검용으로 위젯이 뜨면 바로 엽니다.
+      if (params.get("open") === "1") {
+        const timer = setInterval(() => {
+          const fab = document.getElementById("__chatbot-fab");
+          if (fab) { clearInterval(timer); fab.click(); }
+        }, 100);
+      }
+    })();
   </script>
 </body>
 </html>
