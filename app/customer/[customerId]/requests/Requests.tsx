@@ -1,6 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useInvalidate } from "@/lib/query/api";
+import { SkeletonList, SkeletonPanel } from "@/app/components/Skeleton";
 type Item = {
   id: string;
   name: string;
@@ -46,6 +49,20 @@ function historyEntry(content: string) {
     system: true,
   };
 }
+/** 고객사 권한이 바뀌어 401·403·404가 오면 재시도하지 않고 권한 안내 화면으로 바꾼다. */
+class DeniedError extends Error {}
+async function fetchRequests<T>(
+  url: string,
+  signal: AbortSignal,
+  failMessage: string,
+): Promise<T> {
+  const r = await fetch(url, { signal, cache: "no-store" });
+  if ([401, 403, 404].includes(r.status)) throw new DeniedError(failMessage);
+  if (!r.ok) throw Error(failMessage);
+  return (await r.json()) as T;
+}
+const retryUnlessDenied = (count: number, error: Error) =>
+  !(error instanceof DeniedError) && count < 1;
 function DocIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -59,70 +76,58 @@ export default function CustomerRequests({
 }: {
   customerId: string;
 }) {
-  const [items, setItems] = useState<Item[]>([]),
-    [status, setStatus] = useState(""),
+  const [status, setStatus] = useState(""),
     [q, setQ] = useState(""),
     [selected, setSelected] = useState(""),
-    [detail, setDetail] = useState<Detail | null>(null),
     [note, setNote] = useState(""),
-    [error, setError] = useState(""),
+    [actionError, setActionError] = useState(""),
     [denied, setDenied] = useState(false),
-    [busy, setBusy] = useState(false),
-    [revision, setRevision] = useState(0);
+    [busy, setBusy] = useState(false);
   const endpoint = `/api/customer/${customerId}/requests`;
-  useEffect(() => {
-    if (denied) return;
-    const c = new AbortController();
-    async function load() {
+  const requestsKey = ["customer", customerId, "requests"] as const;
+  const invalidate = useInvalidate();
+  const listQuery = useQuery<{ items: Item[] }, Error>({
+    queryKey: [...requestsKey, "list", { status, q }],
+    queryFn: async ({ signal }) => {
       try {
-        const r = await fetch(
+        return await fetchRequests<{ items: Item[] }>(
           endpoint + "?" + new URLSearchParams({ status, q }),
-          { signal: c.signal, cache: "no-store" },
+          signal,
+          "접수 목록을 불러오지 못했습니다.",
         );
-        if ([401, 403, 404].includes(r.status)) {
-          setDenied(true);
-          setItems([]);
-          setDetail(null);
-          setNote("");
-          return;
-        }
-        if (!r.ok) throw Error("접수 목록을 불러오지 못했습니다.");
-        setItems((await r.json()).items);
-        setError("");
       } catch (e) {
-        if (!c.signal.aborted)
-          setError(
-            e instanceof Error ? e.message : "목록을 불러오지 못했습니다.",
-          );
+        if (e instanceof DeniedError) setDenied(true);
+        throw e;
       }
-    }
-    void load();
-    return () => c.abort();
-  }, [endpoint, status, q, revision, denied]);
-  useEffect(() => {
-    if (!selected || denied) return;
-    const c = new AbortController();
-    async function load() {
+    },
+    enabled: !denied,
+    placeholderData: keepPreviousData,
+    retry: retryUnlessDenied,
+  });
+  const detailQuery = useQuery<Detail, Error>({
+    queryKey: [...requestsKey, "detail", selected],
+    queryFn: async ({ signal }) => {
       try {
-        const r = await fetch(
+        return await fetchRequests<Detail>(
           endpoint + "?requestId=" + encodeURIComponent(selected),
-          { signal: c.signal, cache: "no-store" },
+          signal,
+          "신청 내용을 불러오지 못했습니다.",
         );
-        if ([401, 403, 404].includes(r.status)) {
-          setDenied(true);
-          setDetail(null);
-          setNote("");
-          return;
-        }
-        if (!r.ok) throw Error();
-        setDetail(await r.json());
-      } catch {
-        if (!c.signal.aborted) setError("신청 내용을 불러오지 못했습니다.");
+      } catch (e) {
+        if (e instanceof DeniedError) setDenied(true);
+        throw e;
       }
-    }
-    void load();
-    return () => c.abort();
-  }, [endpoint, selected, revision, denied]);
+    },
+    enabled: Boolean(selected) && !denied,
+    retry: retryUnlessDenied,
+  });
+  const items = listQuery.data?.items ?? [];
+  const detail = selected ? (detailQuery.data ?? null) : null;
+  const error =
+    actionError ||
+    listQuery.error?.message ||
+    (selected ? detailQuery.error?.message : "") ||
+    "";
   async function update(input: Record<string, string>) {
     if (!selected || busy) return;
     setBusy(true);
@@ -134,17 +139,15 @@ export default function CustomerRequests({
       });
       if ([401, 403, 404].includes(r.status)) {
         setDenied(true);
-        setItems([]);
-        setDetail(null);
         setNote("");
         return;
       }
       if (!r.ok) throw Error((await r.json()).error || "저장하지 못했습니다.");
       setNote("");
-      setRevision((v) => v + 1);
-      setError("");
+      setActionError("");
+      await invalidate(requestsKey);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "저장하지 못했습니다.");
+      setActionError(e instanceof Error ? e.message : "저장하지 못했습니다.");
     } finally {
       setBusy(false);
     }
@@ -177,7 +180,10 @@ export default function CustomerRequests({
           <select
             className="cp-input"
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setActionError("");
+            }}
           >
             <option value="">전체</option>
             {Object.entries(labels).map(([v, t]) => (
@@ -197,7 +203,10 @@ export default function CustomerRequests({
             <input
               className="cp-input"
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setActionError("");
+              }}
               placeholder="이름·문의 내용·접수번호로 검색하세요."
             />
           </span>
@@ -215,7 +224,10 @@ export default function CustomerRequests({
           <span>상태</span>
           <span />
         </div>
-        {items.map((r) => (
+        {listQuery.isPending ? (
+          <SkeletonList rows={5} label="접수 목록을 불러오는 중입니다." />
+        ) : (
+          items.map((r) => (
           <button
             key={r.id}
             type="button"
@@ -223,7 +235,6 @@ export default function CustomerRequests({
             aria-pressed={r.id === selected}
             onClick={() => {
               setSelected(r.id);
-              setDetail(null);
               setNote("");
             }}
           >
@@ -260,14 +271,22 @@ export default function CustomerRequests({
               ›
             </span>
           </button>
-        ))}
-        {!items.length && (
+          ))
+        )}
+        {!listQuery.isPending && !items.length && (
           <p className="cp-note cp-request-empty">
             이 조건에 맞는 신청이 없습니다.
           </p>
         )}
       </div>
 
+      {selected && detailQuery.isPending && (
+        <SkeletonPanel
+          className="cp-panel"
+          lines={5}
+          label="신청 내용을 불러오는 중입니다."
+        />
+      )}
       {detail && detail.id === selected && (
         <div className="cp-request-detail">
           <section className="cp-panel">

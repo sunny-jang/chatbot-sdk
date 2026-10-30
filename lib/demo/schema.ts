@@ -1,4 +1,5 @@
 import type { AccessDatabase } from "../access/schema";
+import { createDemoBackgroundSchema } from "./background-schema";
 export async function createDemoSchema(db: AccessDatabase) {
   await db`CREATE TABLE IF NOT EXISTS customer_demos(
  id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),customer_id TEXT NOT NULL REFERENCES customers(id),bot_id TEXT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
@@ -22,4 +23,5 @@ export async function createDemoSchema(db: AccessDatabase) {
  created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,UNIQUE(demo_id,request_key)
  )`;
   await db`CREATE INDEX IF NOT EXISTS demo_turns_session_idx ON demo_turns(demo_id,session_id,sequence)`;
+  await createDemoBackgroundSchema(db);
 }

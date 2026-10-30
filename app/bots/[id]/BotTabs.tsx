@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import NavIcon from "@/app/components/NavIcon";
+import NavPending from "@/app/components/NavPending";
 
 /** 챗봇 안에서 쓰는 상단 탭. 고객사 데스크의 챗봇 워크스페이스처럼 관리 메뉴를 한 줄로 보여줍니다. */
 export default function BotTabs({ botId, qa }: { botId: string; qa: boolean }) {
@@ -31,6 +32,7 @@ export default function BotTabs({ botId, qa }: { botId: string; qa: boolean }) {
           >
             <NavIcon name={item.icon} />
             {item.label}
+            <NavPending />
           </Link>
         );
       })}

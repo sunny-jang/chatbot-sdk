@@ -1,10 +1,10 @@
 "use client";
-import { useCallback, useEffect, useState, useRef } from "react";
-import {
-  filterInbox,
-  draftAfterSend,
-  createRequestSequence,
-} from "@/lib/workspace-inbox";
+import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { filterInbox, draftAfterSend } from "@/lib/workspace-inbox";
+import { useInvalidate } from "@/lib/query/api";
+import { SkeletonList, SkeletonPanel } from "@/app/components/Skeleton";
 type Handoff = {
   id: string;
   session_id: string;
@@ -31,6 +31,22 @@ const labels: Record<string, string> = {
   active: "상담 중",
   closed: "종료",
 };
+/** 고객사 권한이 바뀌어 401·403·404가 오면 재시도하지 않고 권한 안내 화면으로 바꾼다. */
+class DeniedError extends Error {}
+async function fetchInbox<T>(
+  url: string,
+  signal: AbortSignal,
+  checkDenied: boolean,
+  failMessage: string,
+): Promise<T> {
+  const r = await fetch(url, { cache: "no-store", signal });
+  if (checkDenied && [401, 403, 404].includes(r.status))
+    throw new DeniedError(failMessage);
+  if (!r.ok) throw new Error(failMessage);
+  return (await r.json()) as T;
+}
+const retryUnlessDenied = (count: number, error: Error) =>
+  !(error instanceof DeniedError) && count < 1;
 export default function SupportInbox({
   initialSession,
   initialStatus,
@@ -44,127 +60,98 @@ export default function SupportInbox({
   portalUserId?: string;
   canReassign?: boolean;
 }) {
-  const [items, setItems] = useState<Handoff[]>([]),
-    [selectedId, setSelectedId] = useState(initialSession),
+  const [selectedId, setSelectedId] = useState(initialSession),
     [filter, setFilter] = useState(initialStatus),
-    [query, setQuery] = useState("");
-  const [messages, setMessages] = useState<{
-    session: string;
-    rows: Message[];
-  }>({ session: "", rows: [] });
+    [query, setQuery] = useState(""),
+    // 서버 검색어는 입력이 250ms 멈춘 뒤에만 바꿔 요청 수를 줄인다(화면 목록은 바로 거른다).
+    [searchKey, setSearchKey] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({}),
-    [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
-    [listError, setListError] = useState(""),
-    [messageError, setMessageError] = useState("");
+    [error, setError] = useState("");
   const [acting, setActing] = useState(false),
-    [sending, setSending] = useState(false),
-    [revision, setRevision] = useState(0);
+    [sending, setSending] = useState(false);
   const [denied, setDenied] = useState(false);
   const sendKeys = useRef<Record<string, { message: string; key: string }>>({});
-  const listSequence = useRef(createRequestSequence());
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const messagesBox = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
-  const load = useCallback(
-    async (signal?: AbortSignal) => {
-      const latest = listSequence.current.start();
+  const invalidate = useInvalidate();
+  const inboxKey = ["support-inbox", endpoint] as const;
+  const checkDenied = Boolean(portalUserId);
+  const listQuery = useQuery<Handoff[], Error>({
+    queryKey: [
+      ...inboxKey,
+      "list",
+      { status: filter, q: searchKey, selectedSession: selectedId },
+    ],
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({
+        status: filter,
+        q: searchKey,
+        selectedSession: selectedId,
+      });
       try {
-        const params = new URLSearchParams({
-          status: filter,
-          q: query.trim().slice(0, 100),
-          selectedSession: selectedId,
-        });
-        const r = await fetch(`${endpoint}?${params}`, {
-          cache: "no-store",
+        return await fetchInbox<Handoff[]>(
+          `${endpoint}?${params}`,
           signal,
-        });
-        if (portalUserId && [401, 403, 404].includes(r.status)) {
-          setDenied(true);
-          setItems([]);
-          setMessages({ session: "", rows: [] });
-          setDrafts({});
-          return;
-        }
-        if (!r.ok)
-          throw new Error("상담 목록을 불러오지 못했어요. 다시 시도해 주세요.");
-        const rows: Handoff[] = await r.json();
-        if (!signal?.aborted && latest()) {
-          setItems(rows);
-          setListError("");
-        }
+          checkDenied,
+          "상담 목록을 불러오지 못했어요. 다시 시도해 주세요.",
+        );
       } catch (e) {
-        if (!signal?.aborted && latest())
-          setListError(
-            e instanceof Error ? e.message : "상담 목록을 불러오지 못했어요.",
-          );
-      } finally {
-        if (!signal?.aborted && latest()) setLoading(false);
+        if (e instanceof DeniedError) setDenied(true);
+        throw e;
       }
     },
-    [filter, query, selectedId, endpoint, portalUserId],
-  );
-  useEffect(() => {
-    if (denied) return;
-    const controller = new AbortController();
-    const sequence = listSequence.current;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      await load(controller.signal);
-      if (!controller.signal.aborted) timer = setTimeout(poll, 5000);
-    }
-    timer = setTimeout(poll, 250);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-      sequence.invalidate();
-    };
-  }, [load, revision, denied]);
-  useEffect(() => {
-    if (!selectedId || denied) return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    async function refresh() {
+    enabled: !denied,
+    placeholderData: keepPreviousData,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+    retry: retryUnlessDenied,
+  });
+  const messagesQuery = useQuery<Message[], Error>({
+    queryKey: [...inboxKey, "messages", selectedId],
+    queryFn: async ({ signal }) => {
       try {
-        const r = await fetch(
+        return await fetchInbox<Message[]>(
           `${endpoint}?sessionId=${encodeURIComponent(selectedId)}`,
-          { cache: "no-store", signal: controller.signal },
+          signal,
+          checkDenied,
+          "대화를 불러오지 못했어요. 잠시 후 다시 시도합니다.",
         );
-        if (portalUserId && [401, 403, 404].includes(r.status)) {
-          setDenied(true);
-          setItems([]);
-          setDrafts({});
-          setMessages({ session: "", rows: [] });
-          return;
-        }
-        if (!r.ok) throw new Error();
-        const rows: Message[] = await r.json();
-        if (!controller.signal.aborted) {
-          setMessages({ session: selectedId, rows });
-          setMessageError("");
-        }
-      } catch {
-        if (!controller.signal.aborted)
-          setMessageError("대화를 불러오지 못했어요. 잠시 후 다시 시도합니다.");
-      } finally {
-        if (!controller.signal.aborted) timer = setTimeout(refresh, 2500);
+      } catch (e) {
+        if (e instanceof DeniedError) setDenied(true);
+        throw e;
       }
-    }
-    const first = setTimeout(() => {
-      setMessageError("");
-      followLatest.current = true;
-      void refresh();
-    }, 0);
-    return () => {
-      controller.abort();
-      clearTimeout(first);
-      clearTimeout(timer);
-    };
-  }, [selectedId, revision, endpoint, portalUserId, denied]);
+    },
+    enabled: Boolean(selectedId) && !denied,
+    refetchInterval: 2500,
+    refetchIntervalInBackground: false,
+    retry: retryUnlessDenied,
+  });
+  const items = listQuery.data ?? [];
+  const messages = messagesQuery.data;
+  const listError =
+    listQuery.error && !(listQuery.error instanceof DeniedError)
+      ? listQuery.error.message
+      : "";
+  const messageError =
+    messagesQuery.error && !(messagesQuery.error instanceof DeniedError)
+      ? messagesQuery.error.message
+      : "";
   useEffect(() => {
     const box = messagesBox.current;
-    if (box && messages.session === selectedId && followLatest.current)
+    if (box && messages && followLatest.current)
       box.scrollTop = box.scrollHeight;
   }, [messages, selectedId]);
+  function select(sessionId: string) {
+    followLatest.current = true;
+    setSelectedId(sessionId);
+  }
+  function deny() {
+    setDenied(true);
+    setDrafts({});
+  }
   const current = items.find((i) => i.session_id === selectedId);
   const text = drafts[selectedId] || "";
   const visible = filterInbox(items, filter, query);
@@ -183,15 +170,12 @@ export default function SupportInbox({
         }),
       });
       if (portalUserId && [401, 403, 404].includes(r.status)) {
-        setDenied(true);
-        setItems([]);
-        setMessages({ session: "", rows: [] });
-        setDrafts({});
+        deny();
         return;
       }
       if (!r.ok)
         throw new Error("상담 상태를 변경하지 못했어요. 다시 시도해 주세요.");
-      setRevision((v) => v + 1);
+      await invalidate(inboxKey);
     } catch (e) {
       setError(e instanceof Error ? e.message : "상태를 변경하지 못했어요.");
     } finally {
@@ -223,10 +207,7 @@ export default function SupportInbox({
         body: JSON.stringify({ sessionId: session, message, idempotencyKey }),
       });
       if (portalUserId && [401, 403, 404].includes(r.status)) {
-        setDenied(true);
-        setItems([]);
-        setMessages({ session: "", rows: [] });
-        setDrafts({});
+        deny();
         return;
       }
       if (!r.ok)
@@ -235,7 +216,7 @@ export default function SupportInbox({
         ...d,
         [session]: draftAfterSend(d[session], message),
       }));
-      setRevision((v) => v + 1);
+      await invalidate(inboxKey);
     } catch (e) {
       setError(e instanceof Error ? e.message : "전송하지 못했어요.");
     } finally {
@@ -247,7 +228,7 @@ export default function SupportInbox({
       <div className="workspace-page">
         <h1>상담 접근 권한이 변경되었습니다</h1>
         <p>현재 고객사에 다시 접근하려면 담당 관리자에게 확인해주세요.</p>
-        <a href="/customer">고객사 다시 선택</a>
+        <Link href="/customer">고객사 다시 선택</Link>
       </div>
     );
   return (
@@ -262,7 +243,7 @@ export default function SupportInbox({
       {listError && (
         <div className="inbox-error" role="alert">
           {listError}
-          <button onClick={() => void load()}>다시 불러오기</button>
+          <button onClick={() => void listQuery.refetch()}>다시 불러오기</button>
         </div>
       )}
       {error && (
@@ -296,21 +277,27 @@ export default function SupportInbox({
               placeholder="고객 또는 챗봇 검색"
               maxLength={100}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setQuery(value);
+                clearTimeout(searchTimer.current);
+                searchTimer.current = setTimeout(
+                  () => setSearchKey(value.trim().slice(0, 100)),
+                  250,
+                );
+              }}
             />
             <p>목록 {visible.length}건 · 조건에 맞는 상담 최대 200건</p>
           </div>
-          {loading ? (
-            <div className="workspace-empty" role="status">
-              상담을 불러오는 중이에요.
-            </div>
+          {listQuery.isPending ? (
+            <SkeletonList rows={5} label="상담을 불러오는 중이에요." />
           ) : visible.length ? (
             visible.map((item) => (
               <button
                 key={item.id}
                 className={`inbox-item ${selectedId === item.session_id ? "selected" : ""}`}
                 aria-pressed={selectedId === item.session_id}
-                onClick={() => setSelectedId(item.session_id)}
+                onClick={() => select(item.session_id)}
               >
                 <div>
                   <strong>{item.customer_name || "방문 고객"}</strong>
@@ -428,10 +415,10 @@ export default function SupportInbox({
                     box.scrollHeight - box.scrollTop - box.clientHeight < 80;
                 }}
               >
-                {messages.session !== selectedId ? (
-                  <p role="status">대화를 불러오는 중이에요.</p>
+                {messagesQuery.isPending ? (
+                  <SkeletonPanel lines={4} label="대화를 불러오는 중이에요." />
                 ) : (
-                  messages.rows.map((m) =>
+                  (messages ?? []).map((m) =>
                     m.sender_type === "system" ? (
                       <p className="inbox-system" key={m.id}>
                         {m.content}
