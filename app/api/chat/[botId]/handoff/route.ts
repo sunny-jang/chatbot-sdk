@@ -120,7 +120,7 @@ async function POSTHandler(req: Request, { params }: { params: Promise<{ botId: 
     try {
       const posted = await slackCall(slack.token, "chat.postMessage", {
         channel: slack.channel_id,
-        text: `🆕 상담 요청\n챗봇: ${bot.name}\n고객: ${customerName || "고객"}\n세션: ${sessionId}\n사유: ${reason || "고객 요청"}\n\n${transcript || "이전 대화 없음"}\n\n이 스레드에 답변하면 고객 웹챗으로 전달됩니다. 상담 종료: /close`.slice(0, 40000),
+        text: `🆕 상담 요청\n챗봇: ${bot.name}\n고객: ${customerName || "고객"}\n세션: ${sessionId}\n사유: ${reason || "고객 요청"}\n\n${transcript || "이전 대화 없음"}\n\n이 스레드에 답변하면 고객 웹챗으로 전달됩니다. 상담 종료: 이 스레드에 "종료" 입력`.slice(0, 40000),
       }) as { channel?: string; ts?: string };
       if (posted.ts) {
         slackChannelId = posted.channel || slack.channel_id;

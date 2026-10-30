@@ -8,6 +8,37 @@ import HelpButton, { type HelpContent } from "@/app/HelpButton";
 import { DEFAULT_SUPPORT_HOURS, formatSupportHours, getSupportStatus, normalizeSupportHours, type SupportHours } from "@/lib/supportHours";
 
 // Telegram 상담원 연결 설정 가이드. 실제 설정 중 자주 막히는 지점(주제 기능, 봇 권한, Chat ID 형식)을 함께 안내합니다.
+const SLACK_GUIDE: HelpContent = {
+  title: "Slack 연결 가이드",
+  sections: [
+    {
+      heading: "1. Slack 앱 만들기",
+      items: [
+        "api.slack.com/apps → Create New App → From scratch를 고르고, 앱 이름(예: 상담 연결)과 워크스페이스를 정합니다.",
+        "OAuth & Permissions → Bot Token Scopes에 chat:write, channels:join, channels:history, users:read를 추가합니다. 비공개 채널을 쓰면 groups:history도 추가합니다.",
+        "같은 화면 위쪽 Install to Workspace로 설치하면 Bot User OAuth Token(xoxb-로 시작)이 나옵니다.",
+        "Basic Information → App Credentials의 Signing Secret을 복사합니다. 토큰과 Signing Secret은 비밀번호와 같으니 이 설정 화면에만 입력하세요.",
+      ],
+    },
+    {
+      heading: "2. 상담 채널 정하고 저장하기",
+      items: [
+        "상담원들이 볼 채널을 엽니다. 채널 이름 → 채널 세부정보 맨 아래의 채널 ID(C로 시작)를 복사합니다.",
+        "비공개 채널이면 채널에서 /invite @앱이름 으로 앱을 먼저 초대합니다. 공개 채널은 저장할 때 앱이 스스로 들어갑니다.",
+        "토큰·Signing Secret·채널 ID를 넣고 연결 저장·테스트를 누릅니다. 채널에 연결 확인 메시지가 오면 성공입니다.",
+      ],
+    },
+    {
+      heading: "3. 답변 받기(이벤트 구독)",
+      items: [
+        "Slack 앱 설정 → Event Subscriptions를 켜고 Request URL에 아래 주소를 넣습니다. 연결을 먼저 저장해야 주소 확인(Verified)이 됩니다.",
+        "Subscribe to bot events에 message.channels를 추가합니다. 비공개 채널은 message.groups도 추가하고, 저장 후 안내에 따라 앱을 다시 설치합니다.",
+        "상담 요청이 오면 채널에 글이 올라옵니다. 그 글의 스레드에 답하면 고객 대화창으로 바로 전달됩니다. 상담을 끝낼 때는 스레드에 '종료'라고 입력합니다.",
+      ],
+    },
+  ],
+};
+
 const TELEGRAM_GUIDE: HelpContent = {
   title: "Telegram 봇 연결 가이드",
   sections: [
@@ -443,19 +474,15 @@ export default function BotSettings({ bot }: { bot: Bot }) {
           {([
             { value: "inbox", label: "자체 상담함만", desc: "관리자 화면에서 응대" },
             { value: "telegram", label: "Telegram", desc: telegramConnected ? "연결됨" : "연결 필요" },
-            // Slack은 실제 워크스페이스 연동 테스트 전까지 선택할 수 없게 막아둡니다.
-            { value: "slack", label: "Slack", desc: "준비 중", disabled: true },
+            { value: "slack", label: "Slack", desc: slackConnected ? "연결됨" : "연결 필요" },
           ] as const).map((option) => (
             <button
               key={option.value}
               type="button"
               role="radio"
               aria-checked={supportChannel === option.value}
-              aria-disabled={"disabled" in option && option.disabled}
-              disabled={"disabled" in option && option.disabled}
-              title={"disabled" in option && option.disabled ? "Slack 연동은 준비 중입니다." : undefined}
               onClick={() => setSupportChannel(option.value)}
-              className={`p-3 rounded-xl border-2 text-left disabled:cursor-not-allowed disabled:opacity-50 ${supportChannel === option.value ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
+              className={`p-3 rounded-xl border-2 text-left ${supportChannel === option.value ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
             >
               <b className="block text-sm text-gray-900">{option.label}</b>
               <span className="block text-[11px] text-gray-500 mt-0.5">{option.desc}</span>
@@ -475,11 +502,11 @@ export default function BotSettings({ bot }: { bot: Bot }) {
           <div className="flex items-center justify-between gap-3"><span className={`text-xs ${telegramStatus.startsWith("✓") ? "text-green-600" : "text-gray-500"}`}>{telegramStatus}</span><button type="button" onClick={handleTelegramSave} disabled={telegramSaving || !telegramChatId} className="px-3 py-2 rounded-lg bg-sky-500 text-white text-xs font-medium disabled:opacity-40">{telegramSaving ? "연결 중..." : "연결 저장·테스트"}</button></div>
         </div>}
         {supportChannel === "slack" && <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 space-y-3">
-          <div><b className="text-sm text-gray-900">Slack 연결</b><p className="text-xs text-gray-500 mt-1">토큰과 Signing Secret은 암호화되어 저장됩니다. ******** 는 저장된 값을 가린 표시이며, 그대로 두면 기존 값이 유지됩니다.</p></div>
+          <div><div className="flex items-center justify-between gap-3"><b className="text-sm text-gray-900">Slack 연결</b><HelpButton content={SLACK_GUIDE} label="연결 가이드" /></div><p className="text-xs text-gray-500 mt-1">토큰과 Signing Secret은 암호화되어 저장됩니다. ******** 는 저장된 값을 가린 표시이며, 그대로 두면 기존 값이 유지됩니다.</p></div>
           <input type="password" value={slackToken} onFocus={selectMaskOnFocus} onChange={(e) => setSlackToken(e.target.value)} placeholder="Bot User OAuth Token (xoxb-...)" autoComplete="off" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
           <input type="password" value={slackSecret} onFocus={selectMaskOnFocus} onChange={(e) => setSlackSecret(e.target.value)} placeholder="Signing Secret" autoComplete="off" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
           <input type="text" value={slackChannelId} onChange={(e) => setSlackChannelId(e.target.value)} placeholder="Channel ID (예: C01ABCDEFGH)" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-          <p className="text-[11px] text-gray-500 break-all">Slack App의 Event Subscriptions Request URL: <code className="bg-white px-1 py-0.5 rounded border border-gray-200">{origin}/api/integrations/slack/{bot.id}/events</code><br />필요 Bot Scope: chat:write, channels:join, users:read + 이벤트 구독 message.channels(또는 비공개 채널은 message.groups)</p>
+          <p className="text-[11px] text-gray-500 break-all">Slack App의 Event Subscriptions Request URL: <code className="bg-white px-1 py-0.5 rounded border border-gray-200">{origin}/api/integrations/slack/{bot.id}/events</code><br />필요 Bot Scope: chat:write, channels:join, channels:history, users:read(비공개 채널은 groups:history) + 이벤트 구독 message.channels(비공개 채널은 message.groups)</p>
           <div className="flex items-center justify-between gap-3"><span className={`text-xs ${slackStatus.startsWith("✓") ? "text-green-600" : "text-gray-500"}`}>{slackStatus}</span><button type="button" onClick={handleSlackSave} disabled={slackSaving || !slackChannelId} className="px-3 py-2 rounded-lg bg-violet-500 text-white text-xs font-medium disabled:opacity-40">{slackSaving ? "연결 중..." : "연결 저장·테스트"}</button></div>
         </div>}
         </div>}

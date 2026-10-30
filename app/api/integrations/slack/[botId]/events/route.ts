@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { initSchema } from "@/lib/db";
-import { getSlackIntegration, saveChatMessage, sendSlackMessage, slackCall, verifySlackSignature } from "@/lib/support";
+import { getSlackIntegration, isCloseCommand, saveChatMessage, sendSlackMessage, slackCall, verifySlackSignature } from "@/lib/support";
 
 type SlackEvent = {
   type?: string;
@@ -38,7 +38,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
   if (payload.type === "url_verification") return NextResponse.json({ challenge: payload.challenge });
 
   const event = payload.event;
-  if (!event || event.type !== "message" || event.bot_id || event.subtype || !event.text?.trim() || !event.channel || !event.ts) {
+  // "채널에도 보내기"를 체크한 스레드 답변은 subtype이 thread_broadcast로 온다. 그 외 subtype(수정·삭제·입장 등)은 무시한다.
+  if (!event || event.type !== "message" || event.bot_id || (event.subtype && event.subtype !== "thread_broadcast") || !event.text?.trim() || !event.channel || !event.ts) {
     return NextResponse.json({ ok: true });
   }
   const threadTs = event.thread_ts || event.ts;
@@ -60,7 +61,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ botId: 
     agentName = info?.user?.profile?.display_name || info?.user?.profile?.real_name || agentName;
   }
 
-  if (text === "/close") {
+  // Slack은 "/"로 시작하는 메시지를 슬래시 명령으로 처리해 보내지 않으므로 "종료"도 받는다.
+  if (isCloseCommand(text)) {
     const now = Math.floor(Date.now() / 1000);
     await sql`UPDATE support_handoffs SET status = 'closed', closed_at = ${now} WHERE session_id = ${sessionId}`;
     await sql`UPDATE chat_sessions SET status = 'closed', closed_at = ${now}, updated_at = ${now} WHERE id = ${sessionId}`;
