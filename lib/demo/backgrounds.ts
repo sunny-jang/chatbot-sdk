@@ -4,8 +4,8 @@ import { PortalError } from "../customer-portal/input";
 import { customerBot } from "../customer-portal/bots";
 import { logoMime } from "../widget-presentation";
 import { createDemoBackgroundSchema } from "./background-schema";
-
-export const DEMO_BACKGROUND_MAX_BYTES = 3 * 1024 * 1024;
+import { DEMO_BACKGROUND_MAX_BYTES } from "./background-rules";
+export { DEMO_BACKGROUND_MAX_BYTES };
 
 let schemaReady: Promise<void> | null = null;
 /**
@@ -18,6 +18,19 @@ export function ensureDemoBackgroundSchema(db: AccessDatabase) {
     throw error;
   });
   return schemaReady;
+}
+
+/** Whether the background table is usable; the demo list hides background info when it is not. */
+export async function demoBackgroundsAvailable(db: AccessDatabase) {
+  try {
+    await ensureDemoBackgroundSchema(db);
+    const [row] =
+      await db`SELECT to_regclass('demo_backgrounds') IS NOT NULL AS ready`;
+    return Boolean(row?.ready);
+  } catch (error) {
+    console.error("[demo] background table unavailable", error);
+    return false;
+  }
 }
 
 /** Same signature check as widget logos: the declared type must match the file bytes. */
@@ -57,17 +70,28 @@ export async function setDemoBackground(
   if (demo.revoked_at)
     throw new PortalError("해제된 데모는 바꿀 수 없습니다.", 409);
   if (image)
-    await db`INSERT INTO demo_backgrounds(demo_id,mime,bytes) VALUES(${demoId},${image.mime},${Buffer.from(image.bytes)})
- ON CONFLICT(demo_id) DO UPDATE SET mime=EXCLUDED.mime,bytes=EXCLUDED.bytes,updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT`;
+    // version은 이미지 주소의 ?v= 값. 같은 초에 바꿔도 캐시가 새 이미지를 받도록 매번 새로 만듭니다.
+    await db`INSERT INTO demo_backgrounds(demo_id,mime,bytes,version) VALUES(${demoId},${image.mime},${Buffer.from(image.bytes)},${randomUUID()})
+ ON CONFLICT(demo_id) DO UPDATE SET mime=EXCLUDED.mime,bytes=EXCLUDED.bytes,version=EXCLUDED.version,updated_at=EXTRACT(EPOCH FROM NOW())::BIGINT`;
   else await db`DELETE FROM demo_backgrounds WHERE demo_id=${demoId}`;
   await db`INSERT INTO access_audit_logs(id,actor_user_id,tenant_id,customer_id,action,target_id,outcome) VALUES(${randomUUID()},${userId},${tenantId},${String(demo.customer_id)},${image ? "demo.background.set" : "demo.background.remove"},${demoId},'success')`;
 }
 
+/**
+ * Optional decoration on the public demo page: any failure (table not created
+ * yet, no CREATE privilege, a cold-start DDL race) means "no background" rather
+ * than breaking the shared link.
+ */
 export async function demoBackgroundVersion(db: AccessDatabase, demoId: string) {
-  await ensureDemoBackgroundSchema(db);
-  const [row] =
-    await db`SELECT updated_at FROM demo_backgrounds WHERE demo_id=${demoId}`;
-  return row ? Number(row.updated_at) : null;
+  try {
+    await ensureDemoBackgroundSchema(db);
+    const [row] =
+      await db`SELECT version FROM demo_backgrounds WHERE demo_id=${demoId}`;
+    return row ? String(row.version) : null;
+  } catch (error) {
+    console.error("[demo] background lookup failed", error);
+    return null;
+  }
 }
 
 export async function readDemoBackground(db: AccessDatabase, demoId: string) {

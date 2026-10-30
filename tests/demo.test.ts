@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { demoSiteUrl } from "../lib/demo/store";
-import { demoBackgroundBlocked } from "../lib/demo/background";
+import { demoBackgroundBlocked } from "../lib/demo/background-rules";
 import {
   demoBackgroundImage,
   DEMO_BACKGROUND_MAX_BYTES,

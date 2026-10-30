@@ -40,7 +40,7 @@ export default async function Page({
       expiresAt={Number(demo.expires_at)}
       backgroundUrl={
         backgroundVersion
-          ? `/api/demo/${token}/background?v=${backgroundVersion}`
+          ? `/api/demo/${token}/background?v=${encodeURIComponent(backgroundVersion)}`
           : null
       }
     />

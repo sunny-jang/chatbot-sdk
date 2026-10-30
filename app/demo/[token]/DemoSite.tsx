@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { demoBackgroundBlocked } from "@/lib/demo/background";
+import { demoBackgroundBlocked } from "@/lib/demo/background-rules";
 /**
  * 서버(Node)와 브라우저의 ko-KR 날짜 표기가 달라("AM"/"오전") 하이드레이션이 어긋나므로
  * 한국 시간(UTC+9, 서머타임 없음)으로 직접 만듭니다.

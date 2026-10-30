@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { demoBackgroundBlocked } from "@/lib/demo/background";
+import {
+  DEMO_BACKGROUND_MAX_BYTES,
+  demoBackgroundBlocked,
+} from "@/lib/demo/background-rules";
 type Bot = {
   id: string;
   name: string;
@@ -20,7 +23,7 @@ type Demo = {
 };
 const BACKGROUND_ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 async function uploadBackground(id: string, file: File) {
-  if (file.size > 3 * 1024 * 1024)
+  if (file.size > DEMO_BACKGROUND_MAX_BYTES)
     throw Error("배경 이미지는 3MB 이하만 올릴 수 있습니다.");
   const form = new FormData();
   form.set("file", file);
@@ -36,6 +39,8 @@ export default function DemoManager() {
     [botId, setBotId] = useState(""),
     [website, setWebsite] = useState(""),
     [background, setBackground] = useState<File | null>(null),
+    // 파일 입력은 값을 코드로 비울 수 없어 key를 바꿔 새로 그립니다.
+    [backgroundInputKey, setBackgroundInputKey] = useState(0),
     [hours, setHours] = useState(24),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -90,12 +95,15 @@ export default function DemoManager() {
       if (background) {
         try {
           await uploadBackground(d.id, background);
-          setBackground(null);
           setRevision((v) => v + 1);
         } catch (e) {
           throw Error(
             `데모는 만들었지만 배경 이미지를 올리지 못했습니다. 목록에서 다시 올려주세요. (${e instanceof Error ? e.message : "오류"})`,
           );
+        } finally {
+          // 데모를 만든 뒤에는 성공·실패와 상관없이 선택을 비워 다음 데모에 따라가지 않게 합니다.
+          setBackground(null);
+          setBackgroundInputKey((k) => k + 1);
         }
       }
     } catch (e) {
@@ -199,6 +207,7 @@ export default function DemoManager() {
           <label>
             배경 캡처 이미지 (선택)
             <input
+              key={backgroundInputKey}
               className="cp-input"
               type="file"
               accept={BACKGROUND_ACCEPT}

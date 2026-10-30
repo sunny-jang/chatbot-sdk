@@ -24,8 +24,12 @@ async function prepare(req: Request) {
 export async function POST(req: Request, { params }: C) {
   try {
     const { user, tenantId } = await prepare(req);
-    if (Number(req.headers.get("content-length")) > DEMO_BACKGROUND_MAX_BYTES + 64 * 1024)
-      throw new PortalError("배경 이미지는 3MB 이하만 올릴 수 있습니다.");
+    // 본문을 읽기 전에 크기를 확인합니다. 길이를 밝히지 않은(chunked) 요청은 받지 않습니다.
+    const length = Number(req.headers.get("content-length"));
+    if (!Number.isFinite(length) || length <= 0)
+      throw new PortalError("파일 크기를 확인할 수 없습니다.", 411);
+    if (length > DEMO_BACKGROUND_MAX_BYTES + 64 * 1024)
+      throw new PortalError("배경 이미지는 3MB 이하만 올릴 수 있습니다.", 413);
     const file = (await req.formData()).get("file");
     if (!(file instanceof File))
       throw new PortalError("이미지 파일을 선택해주세요.");
