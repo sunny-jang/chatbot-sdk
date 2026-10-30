@@ -30,7 +30,7 @@ function harness(enabled = true, saved: unknown = null, mode = "basic") {
     addEventListener:(name:string,fn:(e:unknown)=>void)=>listeners[name]=fn,
     removeEventListener:(name:string)=>delete listeners[name],
   };
-  const context = {crypto:{randomUUID},proactivePreviewToken:"",observeContentSections:()=>({rescan(){},tick(){},snapshot:()=>({currentId:"",sections:[],version:0}),cleanup(){}}),settings:{proactive:{enabled,mode,siteOrigin:"https://site.example",delaySeconds:5,message:'도와드릴까요?'}}, endpoint:'https://api.example',botId:'test',
+  const context = {crypto:{randomUUID},proactivePreviewToken:"",offerPositionCss:"bottom:88px;right:24px",observeContentSections:()=>({rescan(){},tick(){},snapshot:()=>({currentId:"",sections:[],version:0}),cleanup(){}}),settings:{proactive:{enabled,mode,siteOrigin:"https://site.example",delaySeconds:5,message:'도와드릴까요?'}}, endpoint:'https://api.example',botId:'test',
     sessionStorage:{getItem:()=>stored,setItem:(_key:string,value:string)=>{stored=value;storageWrites++},removeItem:()=>{stored=null}},
     Date:{now:()=>clock},performance:{now:()=>clock},location:{pathname:'/services',origin:'https://site.example'},Element,
     document:doc,window:{scrollY:0,history:{pushState(){},replaceState(){}},addEventListener:(name:string,fn:(e:unknown)=>void)=>listeners[name]=fn,removeEventListener:(name:string)=>delete listeners[name]},

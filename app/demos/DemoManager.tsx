@@ -1,5 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useApiQuery, useInvalidate } from "@/lib/query/api";
+import { SkeletonList } from "@/app/components/Skeleton";
 import {
   DEMO_BACKGROUND_MAX_BYTES,
   demoBackgroundBlocked,
@@ -34,9 +36,7 @@ async function uploadBackground(id: string, file: File) {
   if (!r.ok) throw Error((await r.json()).error);
 }
 export default function DemoManager() {
-  const [bots, setBots] = useState<Bot[]>([]),
-    [items, setItems] = useState<Demo[]>([]),
-    [botId, setBotId] = useState(""),
+  const [botId, setBotId] = useState(""),
     [website, setWebsite] = useState(""),
     [background, setBackground] = useState<File | null>(null),
     // 파일 입력은 값을 코드로 비울 수 없어 key를 바꿔 새로 그립니다.
@@ -45,30 +45,12 @@ export default function DemoManager() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [link, setLink] = useState(""),
-    [copied, setCopied] = useState(false),
-    [revision, setRevision] = useState(0);
-  useEffect(() => {
-    const c = new AbortController();
-    async function load() {
-      try {
-        const r = await fetch("/api/demos", {
-            signal: c.signal,
-            cache: "no-store",
-          }),
-          d = await r.json();
-        if (!r.ok) throw Error(d.error);
-        if (!c.signal.aborted) {
-          setItems(d.items);
-          setBots(d.bots);
-        }
-      } catch (e) {
-        if (!c.signal.aborted)
-          setError(e instanceof Error ? e.message : "불러오지 못했습니다.");
-      }
-    }
-    void load();
-    return () => c.abort();
-  }, [revision]);
+    [copied, setCopied] = useState(false);
+  const query = useApiQuery<{ items: Demo[]; bots: Bot[] }>(["demos"], "/api/demos");
+  const invalidate = useInvalidate();
+  const items = query.data?.items ?? [];
+  const bots = query.data?.bots ?? [];
+  const shownError = error || query.error?.message || "";
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -91,11 +73,11 @@ export default function DemoManager() {
         d = await r.json();
       if (!r.ok) throw Error(d.error);
       setLink(d.url);
-      setRevision((v) => v + 1);
+      await invalidate(["demos"]);
       if (background) {
         try {
           await uploadBackground(d.id, background);
-          setRevision((v) => v + 1);
+          await invalidate(["demos"]);
         } catch (e) {
           throw Error(
             `데모는 만들었지만 배경 이미지를 올리지 못했습니다. 목록에서 다시 올려주세요. (${e instanceof Error ? e.message : "오류"})`,
@@ -124,7 +106,7 @@ export default function DemoManager() {
         );
         if (!r.ok) throw Error((await r.json()).error);
       }
-      setRevision((v) => v + 1);
+      await invalidate(["demos"]);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "배경 이미지를 바꾸지 못했습니다.",
@@ -144,8 +126,8 @@ export default function DemoManager() {
         }),
         d = await r.json();
       if (!r.ok) throw Error(d.error);
-      setRevision((v) => v + 1);
       setLink("");
+      await invalidate(["demos"]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "해제하지 못했습니다.");
     } finally {
@@ -162,9 +144,9 @@ export default function DemoManager() {
           </p>
         </div>
       </header>
-      {error && (
+      {shownError && (
         <p className="cp-error" role="alert">
-          {error}
+          {shownError}
         </p>
       )}
       <section className="cp-panel">
@@ -282,6 +264,9 @@ export default function DemoManager() {
       )}
       <section className="cp-panel">
         <h2>생성한 데모</h2>
+        {query.isPending ? (
+          <SkeletonList rows={3} label="데모 목록을 불러오는 중입니다." />
+        ) : (
         <div className="cp-table-wrap">
           <table className="cp-table">
             <thead>
@@ -364,7 +349,8 @@ export default function DemoManager() {
             </tbody>
           </table>
         </div>
-        {!items.length && <p className="cp-note">아직 만든 데모가 없습니다.</p>}
+        )}
+        {!query.isPending && !items.length && <p className="cp-note">아직 만든 데모가 없습니다.</p>}
       </section>
     </div>
   );
