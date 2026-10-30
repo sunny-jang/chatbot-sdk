@@ -72,6 +72,12 @@
   const endpoint = (script.getAttribute("data-endpoint") || "").replace(/\/$/, "");
   const botToken = script.getAttribute("data-bot-token") || "";
   const proactivePreviewToken = script.getAttribute("data-proactive-preview") || "";
+  // 관리 화면 미리보기가 저장 전 디자인을 보여줄 때만 씁니다. 값은 아래에서 저장값과 같은 규칙으로 다시 거릅니다.
+  let previewSettings = {};
+  try {
+    const parsed = JSON.parse(script.getAttribute("data-preview-settings") || "{}");
+    for (const key of ["title", "color", "greeting", "theme"]) if (parsed && key in parsed) previewSettings[key] = parsed[key];
+  } catch { previewSettings = {}; }
   let proactivePreviewClaims = null;
   try { if(proactivePreviewToken)proactivePreviewClaims=JSON.parse(atob(proactivePreviewToken.split(".")[0].replace(/-/g,"+").replace(/_/g,"/"))); } catch { /* Invalid preview is rejected by server. */ }
 
@@ -83,11 +89,43 @@
   // ── Fetch bot settings then initialize ──────────────────────────────────────
   fetch(`${endpoint}/api/widget/${botId}`, { cache: "no-store" })
     .then((r) => r.ok ? r.json() : {})
-    .then((settings) => init(settings))
-    .catch(() => init({}));
+    .then((settings) => init({ ...settings, ...previewSettings }))
+    .catch(() => init({ ...previewSettings }));
 
   function init(settings) {
     const color = typeof settings.color === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(settings.color) ? settings.color : "#2563eb";
+    // 위젯 디자인: 정해진 선택지·범위의 값만 쓰고, 없거나 잘못된 값은 기본 모양으로 둡니다.
+    // (서버 lib/widget-presentation.ts widgetTheme과 같은 규칙)
+    const theme = { position: "right", offsetX: 24, offsetY: 24, corner: "rounded", launcher: "circle", launcherText: "", launcherSize: 52, bubble: "filled", font: "system" };
+    const rawTheme = settings.theme && typeof settings.theme === "object" ? settings.theme : {};
+    for (const [key, choices] of Object.entries({ position: ["right", "left"], corner: ["sharp", "rounded", "pill"], launcher: ["circle", "rounded-square", "text"], bubble: ["filled", "outline"], font: ["system", "pretendard"] }))
+      if (choices.includes(rawTheme[key])) theme[key] = rawTheme[key];
+    for (const [key, [min, max]] of Object.entries({ offsetX: [0, 120], offsetY: [0, 120], launcherSize: [48, 64] }))
+      if (Number.isInteger(rawTheme[key]) && rawTheme[key] >= min && rawTheme[key] <= max) theme[key] = rawTheme[key];
+    if (typeof rawTheme.launcherText === "string" && /^[^\x00-\x1f\x7f<>{};]{1,20}$/u.test(rawTheme.launcherText.trim())) theme.launcherText = rawTheme.launcherText.trim();
+    // 헤더·런처 글자색은 배경 명도에 따라 흰색/검정 중 대비가 큰 쪽을 씁니다.
+    const textColor = (() => {
+      const full = color.length === 4 ? color.slice(1).replace(/./g, c => c + c) : color.slice(1);
+      const [r, g, b] = [0, 2, 4].map(i => { const c = parseInt(full.slice(i, i + 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.0591 ? "#ffffff" : "#111827";
+    })();
+    // 흰 배경 위 강조 글자색. 밝은 테마 색은 흰 배경에서 읽기 어려우므로 진한 글자로 바꿉니다.
+    const accentText = textColor === "#ffffff" ? color : "#111827";
+    const side = theme.position, launcherSize = theme.launcherSize;
+    const panelBottom = theme.offsetY + launcherSize + 12;
+    const radius = { sharp: { panel: 4, msg: 4, tail: 2, field: 4, round: "4px" }, rounded: { panel: 16, msg: 12, tail: 4, field: 24, round: "999px" }, pill: { panel: 24, msg: 18, tail: 6, field: 24, round: "999px" } }[theme.corner];
+    const launcherRadius = theme.launcher === "circle" ? "50%" : theme.launcher === "rounded-square" ? `${Math.round(launcherSize * 0.3)}px` : { sharp: "6px", rounded: "14px", pill: "999px" }[theme.corner];
+    // 먼저 말 걸기 말풍선은 열린 패널 자리에 띄웁니다.
+    const offerPositionCss = `bottom:${panelBottom}px;${side}:${theme.offsetX}px;max-width:calc(100vw - ${Math.max(16, theme.offsetX * 2)}px);border-radius:${theme.corner === "sharp" ? 4 : 14}px`;
+    const fontFamily = theme.font === "pretendard" ? `"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif` : `-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    if (theme.font === "pretendard" && !document.getElementById("__chatbot-widget-font")) {
+      // 폰트 주소는 위젯에 고정된 값만 씁니다(설정으로 받지 않음).
+      const fontLink = document.createElement("link");
+      fontLink.id = "__chatbot-widget-font"; fontLink.rel = "stylesheet";
+      fontLink.href = "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css";
+      document.head.appendChild(fontLink);
+    }
     const title = settings.title || "💬 Ideal AI";
     const greeting = settings.greeting || null;
     const defaultLogo = `${endpoint}/chatbot-default.svg`;
@@ -112,24 +150,27 @@
 
     // ── Styles ────────────────────────────────────────────────────────────────
     const css = `
-      #__chatbot-widget * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      #__chatbot-widget * { box-sizing: border-box; font-family: ${fontFamily}; }
       #__chatbot-fab {
-        position: fixed; bottom: 24px; right: 24px; z-index: 9998;
-        width: 52px; height: 52px; border-radius: 50%;
-        background: linear-gradient(135deg, #ec4899, ${color}); color: white; border: none; cursor: pointer;
+        position: fixed; bottom: ${theme.offsetY}px; ${side}: ${theme.offsetX}px; z-index: 9998;
+        width: ${launcherSize}px; height: ${launcherSize}px; border-radius: ${launcherRadius}; overflow: hidden;
+        background: ${color}; color: ${textColor}; border: none; cursor: pointer;
         font-size: 22px; box-shadow: 0 4px 16px ${color}66;
         display: flex; align-items: center; justify-content: center;
         transition: transform 0.2s, box-shadow 0.2s;
       }
+      #__chatbot-fab.text { width: auto; min-width: ${launcherSize}px; padding: 0 18px; gap: 8px; font-size: 15px; font-weight: 600; white-space: nowrap; }
+      #__chatbot-fab.text svg { flex: 0 0 18px; }
       #__chatbot-fab .fab-logo {
-        width: 52px; height: 52px; padding: 0; border-radius: 50%;
-        object-fit: contain; display: block; flex: 0 0 52px; min-width: 52px; max-width: 52px; min-height: 52px; max-height: 52px; box-sizing: border-box; background: transparent;
+        width: ${launcherSize}px; height: ${launcherSize}px; padding: 0; border-radius: inherit;
+        object-fit: contain; display: block; flex: 0 0 ${launcherSize}px; min-width: ${launcherSize}px; max-width: ${launcherSize}px; min-height: ${launcherSize}px; max-height: ${launcherSize}px; box-sizing: border-box; background: transparent;
       }
       #__chatbot-fab:hover { transform: scale(1.05); box-shadow: 0 6px 20px ${color}88; }
       #__chatbot-panel {
-        position: fixed; bottom: 88px; right: 24px; z-index: 9999;
-        width: 360px; max-width: calc(100vw - 48px); height: 520px; max-height: calc(100dvh - 112px);
-        background: #fff; border-radius: 16px;
+        position: fixed; bottom: ${panelBottom}px; ${side}: ${theme.offsetX}px; z-index: 9999;
+        transform-origin: bottom ${side};
+        width: 360px; max-width: calc(100vw - ${Math.max(16, theme.offsetX * 2)}px); height: 520px; max-height: calc(100dvh - ${panelBottom + 24}px);
+        background: #fff; border-radius: ${radius.panel}px;
         box-shadow: 0 8px 40px rgba(0,0,0,0.15);
         display: flex; flex-direction: column; overflow: hidden;
         transform: scale(0.9) translateY(10px); opacity: 0;
@@ -137,7 +178,7 @@
       }
       #__chatbot-panel.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: all; }
       #__chatbot-header {
-        background: linear-gradient(135deg, #ec4899, ${color}); color: white; padding: 14px 16px;
+        background: ${color}; color: ${textColor}; padding: 14px 16px;
         display: flex; align-items: center; justify-content: space-between;
         flex-shrink: 0;
       }
@@ -146,7 +187,7 @@
       #__chatbot-header .title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #__chatbot-header .close { flex-shrink: 0; margin-left: 12px; }
       #__chatbot-header .logo { width: 30px; height: 30px; border-radius: 8px; background: transparent; object-fit: contain; flex: 0 0 30px; min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; display: block; }
-      #__chatbot-header .close { background: none; border: none; color: white; cursor: pointer; font-size: 18px; line-height: 1; opacity: 0.8; }
+      #__chatbot-header .close { background: none; border: none; color: ${textColor}; cursor: pointer; font-size: 18px; line-height: 1; opacity: 0.8; }
       #__chatbot-header .close:hover { opacity: 1; }
       #__chatbot-messages {
         flex: 1; overflow-y: auto; padding: 12px;
@@ -155,7 +196,7 @@
       #__chatbot-messages::-webkit-scrollbar { width: 4px; }
       #__chatbot-messages::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
       .cb-msg {
-        max-width: 80%; padding: 9px 13px; border-radius: 12px;
+        max-width: 80%; padding: 9px 13px; border-radius: ${radius.msg}px;
         font-size: 14px; line-height: 1.5; word-break: break-word;
       }
       .cb-msg p { margin: 0 0 8px; }
@@ -166,27 +207,30 @@
       .cb-msg ol, .cb-msg ul { margin: 6px 0 8px 20px; padding: 0; }
       .cb-msg li { margin: 4px 0; padding-left: 2px; }
       .cb-msg li:last-child { margin-bottom: 0; }
-      .cb-msg.user { align-self: flex-end; background: ${color}; color: white; border-bottom-right-radius: 4px; }
-      .cb-msg.bot { align-self: flex-start; background: #f3f4f6; color: #111; border-bottom-left-radius: 4px; }
+      .cb-msg.user { align-self: flex-end; background: ${color}; color: ${textColor}; border-bottom-right-radius: ${radius.tail}px; }
+      .cb-msg.bot { align-self: flex-start; background: #f3f4f6; color: #111; border-bottom-left-radius: ${radius.tail}px; }
+      ${theme.bubble === "outline" ? `
+      .cb-msg.user { background: #fff; color: #111827; border: 1.5px solid ${color}; }
+      .cb-msg.bot { background: #fff; border: 1px solid #e5e7eb; }` : ""}
       .cb-msg.typing { color: #9ca3af; font-style: italic; }
       .cb-choices { display: flex; flex-wrap: wrap; gap: 7px; align-self: stretch; margin: 2px 0 6px; }
-      .cb-choice { padding: 8px 11px; border-radius: 999px; border: 1px solid ${color}55; background: #fff; color: ${color}; font-size: 13px; cursor: pointer; text-align: left; }
+      .cb-choice { padding: 8px 11px; border-radius: ${radius.round}; border: 1px solid ${textColor === "#ffffff" ? `${color}55` : color}; background: #fff; color: ${accentText}; font-size: 13px; cursor: pointer; text-align: left; }
       .cb-choice:hover { background: ${color}0d; border-color: ${color}; }
       #__chatbot-input-area {
         padding: 10px 12px; border-top: 1px solid #f0f0f0;
         display: flex; gap: 8px; flex-shrink: 0;
       }
       #__chatbot-support-bar { padding: 7px 12px; border-top: 1px solid #f0f0f0; background: #fafafa; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: #6b7280; }
-      #__chatbot-support-bar button { border: 0; background: transparent; color: ${color}; font-size: 11px; font-weight: 600; cursor: pointer; }
+      #__chatbot-support-bar button { border: 0; background: transparent; color: ${accentText}; font-size: 11px; font-weight: 600; cursor: pointer; }
       #__chatbot-input {
         flex: 1; padding: 9px 13px; border: 1.5px solid #e5e7eb;
-        border-radius: 24px; font-size: 14px; outline: none;
+        border-radius: ${radius.field}px; font-size: 14px; outline: none;
         transition: border-color 0.15s;
       }
       #__chatbot-input:focus { border-color: ${color}; }
       #__chatbot-send {
-        width: 38px; height: 38px; border-radius: 50%;
-        background: ${color}; color: white; border: none; cursor: pointer;
+        width: 38px; height: 38px; border-radius: ${theme.corner === "sharp" ? "4px" : "50%"};
+        background: ${color}; color: ${textColor}; border: none; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
         flex-shrink: 0; transition: background 0.15s;
       }
@@ -209,15 +253,27 @@
     fab.setAttribute("aria-label", "채팅 열기");
     fab.setAttribute("aria-expanded", "false");
     fab.setAttribute("aria-controls", "__chatbot-panel");
-    const fabLogoEl = document.createElement("img");
-    fabLogoEl.className = "fab-logo";
-    fabLogoEl.src = fabLogo;
-    fabLogoEl.alt = "";
-    fabLogoEl.addEventListener("error", () => {
-      fabLogoEl.remove();
-      fab.appendChild(document.createTextNode("💬"));
-    }, { once: true });
-    fab.appendChild(fabLogoEl);
+    // 닫힌 상태의 런처 내용: 글자 버튼이면 아이콘+문구, 아니면 로고 이미지.
+    function fillLauncher() {
+      if (theme.launcher === "text") {
+        fab.classList.add("text");
+        const label = document.createElement("span");
+        label.textContent = theme.launcherText || "상담하기";
+        fab.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+        fab.appendChild(label);
+        return;
+      }
+      const logoEl = document.createElement("img");
+      logoEl.className = "fab-logo";
+      logoEl.src = fabLogo;
+      logoEl.alt = "";
+      logoEl.addEventListener("error", () => {
+        logoEl.remove();
+        fab.appendChild(document.createTextNode("💬"));
+      }, { once: true });
+      fab.replaceChildren(logoEl);
+    }
+    fillLauncher();
     root.appendChild(fab);
 
     const panel = document.createElement("div");
@@ -428,7 +484,7 @@
         visit.shown = true; save();
         bubble = document.createElement("div");
         bubble.id = "__chatbot-proactive";
-        bubble.style.cssText = "position:fixed;bottom:88px;right:24px;z-index:9998;display:flex;align-items:start;gap:4px;max-width:calc(100vw - 48px);background:white;color:#242134;border:1px solid #dedbe8;border-radius:14px;padding:8px;box-shadow:0 6px 24px #0002";
+        bubble.style.cssText = `position:fixed;${offerPositionCss};z-index:9998;display:flex;align-items:start;gap:4px;background:white;color:#242134;border:1px solid #dedbe8;padding:8px;box-shadow:0 6px 24px #0002`;
         const offer = document.createElement("button");offer.type = "button";
         offer.textContent = String(proposal.message || "제가 좀 도와드릴까요?").slice(0, 120);
         offer.style.cssText = "background:none;border:0;color:inherit;padding:9px 10px;text-align:left;white-space:normal;overflow-wrap:anywhere;font:inherit;font-size:14px;cursor:pointer";
@@ -594,17 +650,10 @@
         void refreshSupportStatus();
         stopProactive();
         root.querySelector("#__chatbot-proactive")?.remove();
+        fab.classList.remove("text");
         fab.replaceChildren(document.createTextNode("✕"));
-      } else if (!fab.querySelector(".fab-logo")) {
-        const restoredLogo = document.createElement("img");
-        restoredLogo.className = "fab-logo";
-        restoredLogo.src = fabLogo;
-        restoredLogo.alt = "";
-        restoredLogo.addEventListener("error", () => {
-          restoredLogo.remove();
-          fab.appendChild(document.createTextNode("💬"));
-        }, { once: true });
-        fab.replaceChildren(restoredLogo);
+      } else if (!fab.querySelector(".fab-logo, span")) {
+        fillLauncher();
       }
       panel.classList.toggle("open", open);
       panel.setAttribute("aria-hidden", String(!open));
