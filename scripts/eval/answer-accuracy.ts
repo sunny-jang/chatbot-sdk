@@ -195,9 +195,15 @@ async function judge() {
     // AI 챗봇(그리고 Q&A 챗봇의 실제 고객 질문): 모델 채점
     const source = r.sourceDocId ? docs.get(r.sourceDocId) : null;
     const used = r.usedDocs.map((u) => u.title);
-    const evidence = source ? `[정답 문서: ${source.title}]\n${source.content.slice(0, 6000)}` : (bot.type === "qa"
+    // AI 챗봇은 챗봇의 자료 전체(설정 문구 + 모든 문서)를 근거로 본다. 정답 문서 하나만 보면 다른 문서에 있는 사실을 지어냄으로 잘못 채점한다.
+    const allDocs = () => [
+      bot.system_prompt ? `[챗봇 설정 문구]\n${bot.system_prompt}` : "",
+      ...(source ? [`[정답 문서: ${source.title}]\n${source.content}`] : []),
+      ...snapshot.docs.filter((d) => d.bot_id === bot.id && d.id !== source?.id).map((d) => `[${d.title}]\n${d.content}`),
+    ].filter(Boolean).join("\n\n").slice(0, 60000);
+    const evidence = bot.type === "ai" ? allDocs() : source ? `[정답 문서: ${source.title}]\n${source.content.slice(0, 6000)}` : (bot.type === "qa"
       ? snapshot.qa.filter((q) => q.bot_id === bot.id).map((q) => `Q: ${q.question}\nA: ${q.answer.slice(0, 300)}`).join("\n\n").slice(0, 12000)
-      : snapshot.docs.filter((d) => d.bot_id === bot.id && (used.includes(d.title) || used.length === 0)).map((d) => `[${d.title}]\n${d.content.slice(0, 2500)}`).join("\n\n").slice(0, 12000));
+      : allDocs());
     const rubric = r.kind === "doc_fact"
       ? `정답 핵심 사실과 비교해 채점하세요. correct=핵심 사실을 정확히 포함, partial=일부만 맞거나 중요한 조건 누락, incorrect=틀림, hallucinated=자료에 없는 구체 정보(수치·약속·이름)를 지어냄, declined_wrong=자료에 답이 있는데 모른다고 함.`
       : r.kind === "out_of_scope"
