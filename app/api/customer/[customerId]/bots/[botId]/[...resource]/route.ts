@@ -20,6 +20,7 @@ import { getEmbedding } from "@/lib/embeddings";
 import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import { enforceRateLimit } from "@/lib/support";
 import { logoMime } from "@/lib/widget-presentation";
+import { warmChunksAfterResponse } from "@/lib/knowledge/chunks";
 type C = {
   params: Promise<{ customerId: string; botId: string; resource: string[] }>;
 };
@@ -115,15 +116,15 @@ async function mutate(req: Request, { params }: C) {
       );
     const input = req.method === "DELETE" ? {} : await body(req, 220000);
     let embedding: number[] | null = null;
+    let warmKey: string | null = null;
     if (req.method !== "DELETE" && ["docs", "qa"].includes(kind)) {
       const content =
         kind === "docs"
           ? text(input.content, "본문", 50000)
           : text(input.question, "질문", 2000);
-      embedding = await getEmbedding(
-        content.slice(0, 8000),
-        await getTenantApiKeyByTenantId(grant.tenant_id),
-      );
+      const apiKey = await getTenantApiKeyByTenantId(grant.tenant_id);
+      embedding = await getEmbedding(content.slice(0, 8000), apiKey);
+      if (kind === "docs") warmKey = apiKey;
     }
     const result = await sql.begin((tx) =>
       mutateKnowledge(
@@ -138,6 +139,7 @@ async function mutate(req: Request, { params }: C) {
         embedding,
       ),
     );
+    warmChunksAfterResponse(p.botId, warmKey);
     return Response.json(result, { status: req.method === "POST" ? 201 : 200 });
   } catch (e) {
     return failure(e);

@@ -5,6 +5,7 @@ import { Document } from "@/lib/db";
 import { getEmbedding } from "@/lib/embeddings";
 import { randomUUID } from "crypto";
 import { readTenantId } from "@/lib/auth";
+import { warmChunksAfterResponse } from "@/lib/knowledge/chunks";
 
 async function getTenantId() {
   return (await readTenantId()) ?? null;
@@ -64,15 +65,14 @@ export async function POST(
     )[0]
   )
     return NextResponse.json({ error: "Folder not found" }, { status: 404 });
-  const embedding = await getEmbedding(
-    content.slice(0, 8000),
-    await getTenantApiKeyByTenantId(tenantId),
-  );
+  const apiKey = await getTenantApiKeyByTenantId(tenantId);
+  const embedding = await getEmbedding(content.slice(0, 8000), apiKey);
   const docId = randomUUID();
   const rows = await sql`
     INSERT INTO documents (id, bot_id, folder_id, title, content, embedding)
     VALUES (${docId}, ${id}, ${folder_id ?? null}, ${title}, ${content}, ${JSON.stringify(embedding)})
     RETURNING id, bot_id, folder_id, title, content, created_at
   `;
+  warmChunksAfterResponse(id, apiKey);
   return NextResponse.json(rows[0] as unknown as Document, { status: 201 });
 }
