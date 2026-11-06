@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { Bot, QaPair, initSchema } from "@/lib/db";
 import { findBestMatch, getEmbedding } from "@/lib/embeddings";
-import { findRelevantChunks, syncBotChunks } from "@/lib/knowledge/chunks";
+import { findRelevantChunks, warmChunksAfterResponse } from "@/lib/knowledge/chunks";
 import { isContactQuestion } from "@/lib/knowledge/contact-intent";
 import { getTenantApiKeys } from "@/lib/tenantKey";
 import OpenAI from "openai";
@@ -274,12 +274,10 @@ async function POSTHandler(
   // AI bot, or a Q&A bot explicitly switched to RAG AI mode.
   let relevantDocs: { title: string; content: string; score: number }[] = [];
   if (tenantApiKeys.openai) {
-    // 새로 올라왔거나 바뀐 문서는 여기서 조각을 만듭니다. 실패한 문서는 문서 임베딩으로 검색됩니다.
-    const [queryEmbedding] = await Promise.all([
-      getEmbedding(message, tenantApiKeys.openai),
-      syncBotChunks(botId, tenantApiKeys.openai).catch(() => null),
-    ]);
-    relevantDocs = await findRelevantChunks(botId, queryEmbedding);
+    const queryEmbedding = await getEmbedding(message, tenantApiKeys.openai);
+    relevantDocs = await findRelevantChunks(botId, queryEmbedding, message);
+    // 조각이 없거나 바뀐 문서는 응답 뒤에 조각을 만듭니다. 그 전까지는 문서 임베딩으로 검색됩니다.
+    warmChunksAfterResponse(botId, tenantApiKeys.openai);
   }
 
   if (ragAiMode && relevantDocs.length === 0 && !proactive?.knowledge.length) {
