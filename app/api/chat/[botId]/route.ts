@@ -2,7 +2,9 @@ import { withWidgetCors } from "@/lib/widget-origin";
 import { NextResponse } from "next/server";
 import sql from "@/lib/neon";
 import { Bot, QaPair, initSchema } from "@/lib/db";
-import { findBestMatch, getEmbedding, cosineSimilarity } from "@/lib/embeddings";
+import { findBestMatch, getEmbedding } from "@/lib/embeddings";
+import { findRelevantChunks, warmChunksAfterResponse } from "@/lib/knowledge/chunks";
+import { isContactQuestion } from "@/lib/knowledge/contact-intent";
 import { getTenantApiKeys } from "@/lib/tenantKey";
 import OpenAI from "openai";
 import { generateGeminiContent } from "@/lib/gemini";
@@ -61,16 +63,11 @@ async function saveLog(
   }
 }
 
-const DOC_THRESHOLD = 0.25;
-const DOC_TOP_K = 5;
-const DOC_CONTEXT_MAX_CHARS = 24_000;
+const DOC_CONTEXT_MAX_CHARS = 16_000;
 const IDEAL_AI_BOT_ID = "8f3656de-94a4-4175-9b7f-2912baeb25c4";
 const IDEAL_AI_CONTACT_REPLY =
   "구체적인 상담이나 프로젝트 문의는 아래 연락처로 바로 문의해주세요.\n\n- 이메일: eunseon@ideal-tech.co.kr\n- 전화·문자: 010-7652-9798";
 
-function isContactQuestion(message: string) {
-  return /연락처|문의처|문의 방법|상담|전화번호|전화|휴대폰|이메일|메일|견적/.test(message);
-}
 
 function buildDocumentContext(docs: { title: string; content: string }[]) {
   let remaining = DOC_CONTEXT_MAX_CHARS;
@@ -84,36 +81,6 @@ function buildDocumentContext(docs: { title: string; content: string }[]) {
     remaining -= header.length + content.length;
   }
   return sections.join("\n\n---\n\n");
-}
-
-async function findRelevantDocs(
-  botId: string,
-  queryEmbedding: number[]
-): Promise<{ title: string; content: string; score: number }[]> {
-  // Step 1: fetch only id + embedding (skip heavy content field)
-  const rows = await sql`
-    SELECT id, title, embedding FROM documents WHERE bot_id = ${botId} AND embedding IS NOT NULL
-  `;
-  const scored = rows
-    .map((r) => ({
-      id: r.id as string,
-      title: r.title as string,
-      score: cosineSimilarity(queryEmbedding, JSON.parse(r.embedding as string)),
-    }))
-    .filter((r) => r.score >= DOC_THRESHOLD)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, DOC_TOP_K);
-
-  if (scored.length === 0) return [];
-
-  // Step 2: fetch content only for matched docs
-  const ids = scored.map((r) => r.id);
-  const contentRows = await sql`
-    SELECT id, content FROM documents WHERE id = ANY(${ids}::text[])
-  `;
-  const contentMap = new Map(contentRows.map((r) => [r.id as string, r.content as string]));
-
-  return scored.map((r) => ({ title: r.title, content: contentMap.get(r.id) ?? "", score: r.score }));
 }
 
 async function POSTHandler(
@@ -308,7 +275,9 @@ async function POSTHandler(
   let relevantDocs: { title: string; content: string; score: number }[] = [];
   if (tenantApiKeys.openai) {
     const queryEmbedding = await getEmbedding(message, tenantApiKeys.openai);
-    relevantDocs = await findRelevantDocs(botId, queryEmbedding);
+    relevantDocs = await findRelevantChunks(botId, queryEmbedding, message);
+    // 조각이 없거나 바뀐 문서는 응답 뒤에 조각을 만듭니다. 그 전까지는 문서 임베딩으로 검색됩니다.
+    warmChunksAfterResponse(botId, tenantApiKeys.openai);
   }
 
   if (ragAiMode && relevantDocs.length === 0 && !proactive?.knowledge.length) {
@@ -336,6 +305,10 @@ async function POSTHandler(
   if (relevantDocs.length > 0) {
     const context = buildDocumentContext(relevantDocs);
     systemContent = `${systemContent ? systemContent + "\n\n" : ""}다음 참고 문서를 바탕으로 답변하세요:\n\n${context}`;
+  }
+  if (!ragAiMode) {
+    // 문서에 없는 수치·사례를 그럴듯하게 지어내지 않도록 AI 챗봇에도 근거 원칙을 붙입니다.
+    systemContent = `${systemContent ? systemContent + "\n\n" : ""}가격·수치·기간·성과·고객사·사례처럼 확인이 필요한 정보는 참고 문서나 위 안내에 있는 내용만 말하세요. 근거가 없으면 지어내지 말고, 확인 후 안내하겠다고 하거나 담당자 문의를 권하세요.`;
   }
 
   if (systemContent) messages.push({ role: "system", content: systemContent });

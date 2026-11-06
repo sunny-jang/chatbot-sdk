@@ -17,6 +17,7 @@ import { uploadForm } from "@/lib/knowledge/upload";
 import { getEmbedding } from "@/lib/embeddings";
 import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import { enforceRateLimit } from "@/lib/support";
+import { warmChunksAfterResponse } from "@/lib/knowledge/chunks";
 export const maxDuration = 120;
 export async function POST(
   req: Request,
@@ -82,10 +83,8 @@ export async function POST(
       ),
     );
     if (skipped) return Response.json(skipped);
-    const vec = await getEmbedding(
-      content.slice(0, 8000),
-      await getTenantApiKeyByTenantId(grant.tenant_id),
-    );
+    const apiKey = await getTenantApiKeyByTenantId(grant.tenant_id);
+    const vec = await getEmbedding(content.slice(0, 8000), apiKey);
     const result = await sql.begin((tx) =>
       uploadCustomerDocument(
         tx as unknown as AccessDatabase,
@@ -96,6 +95,7 @@ export async function POST(
         vec,
       ),
     );
+    warmChunksAfterResponse(p.botId, apiKey);
     return Response.json(result, {
       status: result.updated || result.skipped ? 200 : 201,
     });

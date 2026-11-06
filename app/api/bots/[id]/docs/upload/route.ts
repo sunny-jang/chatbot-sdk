@@ -7,6 +7,7 @@ import { getEmbedding } from "@/lib/embeddings";
 import { getTenantApiKeyByTenantId } from "@/lib/tenantKey";
 import { randomUUID } from "crypto";
 import { readTenantId } from "@/lib/auth";
+import { warmChunksAfterResponse } from "@/lib/knowledge/chunks";
 
 export const maxDuration = 120;
 
@@ -263,6 +264,7 @@ export async function POST(
   }
 
   await processBatch(tasks, id, apiKey, created, updated, failed, skippedCount);
+  warmChunksAfterResponse(id, apiKey);
   return NextResponse.json(
     { created, updated, failed, unsupported, skipped: skippedCount.n },
     { status: 201 },
